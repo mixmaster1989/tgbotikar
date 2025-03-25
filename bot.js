@@ -20,6 +20,29 @@ db.serialize(() => {
         console.log("Таблица materials существует.");
       } else {
         console.log("Таблица materials не найдена.");
+         // Проверяем наличие столбца photo в таблице materials
+        db.get(
+          "PRAGMA table_info(materials)",
+          (err, row) => {
+            if (err) {
+              console.error("Ошибка при проверке столбца:", err);
+            } else {
+              let photoColumnExists = false;
+              for (let i = 0; i < row.length; i++) {
+                if (row[i].name === "photo") {
+                  photoColumnExists = true;
+                  break;
+                }
+              }
+              if (!photoColumnExists) {
+                // Если столбец photo не существует, добавляем его
+                db.run(
+                  "ALTER TABLE materials ADD COLUMN photo TEXT",
+                  (err) => {
+                    if (err) {
+                      console.error("Ошибка при добавлении столбца photo:", err);
+                    } else {
+                      console.log("Столбец photo успешно добавлен.");
       }
     }
   );
