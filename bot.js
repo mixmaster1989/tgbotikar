@@ -44,9 +44,16 @@ db.serialize(() => {
                     } else {
                       console.log("Столбец photo успешно добавлен.");
       }
+                  }
+                );
+              }
+            }
+          }
+        );
+      }
     }
   );
-};
+});
 
 // Создание экземпляра бота с вашим токеном
 const bot = new Telegraf(process.env.BOT_TOKEN);
