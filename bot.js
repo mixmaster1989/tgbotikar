@@ -1,7 +1,6 @@
 require("dotenv").config();
-const { Telegraf } = require("telegraf");
-const { Database } = require("sqlite3").verbose();
 const { Telegraf, session, Scenes } = require("telegraf");
+const { Database } = require("sqlite3").verbose();
 // Инициализация базы данных SQLite
 const db = new Database("database.sqlite");
 db.serialize(() => {
