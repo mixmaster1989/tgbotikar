@@ -80,44 +80,58 @@ bot.action("results", (ctx) => {
   });
 });
 // Обработчик для кнопки "Добавить материал"
-bot.action("add_material", async (ctx) => {
-    const chatId = ctx.chat.id;
-    let material = {};
+// Создаём сцену для добавления материала
+const addMaterialScene = new Scenes.BaseScene("ADD_MATERIAL");
 
-    try {
-        await ctx.reply("Введите название статьи:");
-
-        const titleMsg = await ctx.telegram.waitFor("message");
-        material.title = titleMsg.text;
-
-        await ctx.reply("Введите текст статьи:");
-
-        const contentMsg = await ctx.telegram.waitFor("message");
-        material.content = contentMsg.text;
-
-        await ctx.reply("Отправьте фото для статьи:");
-
-        const photoMsg = await ctx.telegram.waitFor("photo");
-        const photo = photoMsg.photo[photoMsg.photo.length - 1].file_id;
-        material.photo = photo;
-
-        db.run(
-            "INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
-            [material.title, material.content, material.photo],
-            (err) => {
-                if (err) {
-                    console.error("Ошибка при добавлении материала:", err);
-                    ctx.reply("Ошибка при добавлении материала.");
-                } else {
-                    ctx.reply("Материал успешно добавлен!");
-                }
-            }
-        );
-    } catch (error) {
-        console.error("Ошибка:", error);
-        ctx.reply("Произошла ошибка.");
-    }
+addMaterialScene.enter(async (ctx) => {
+    ctx.session.material = {}; // Создаём объект для хранения данных
+    await ctx.reply("Введите название статьи:");
 });
+
+addMaterialScene.on("text", async (ctx) => {
+    if (!ctx.session.material.title) {
+        ctx.session.material.title = ctx.message.text;
+        await ctx.reply("Введите текст статьи:");
+    } else if (!ctx.session.material.content) {
+        ctx.session.material.content = ctx.message.text;
+        await ctx.reply("Отправьте фото для статьи:");
+    } else {
+        ctx.reply("Ожидается фото, а не текст.");
+    }
+});
+
+addMaterialScene.on("photo", async (ctx) => {
+    const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+    ctx.session.material.photo = photo;
+
+    // Сохранение в базу данных
+    db.run(
+        "INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
+        [ctx.session.material.title, ctx.session.material.content, ctx.session.material.photo],
+        (err) => {
+            if (err) {
+                console.error("Ошибка при добавлении материала:", err);
+                ctx.reply("Ошибка при добавлении материала.");
+            } else {
+                ctx.reply("Материал успешно добавлен!");
+            }
+        }
+    );
+
+    await ctx.scene.leave(); // Выход из сцены
+});
+
+// Подключаем сцену к Stage
+const stage = new Scenes.Stage([addMaterialScene]);
+
+bot.use(session());
+bot.use(stage.middleware());
+
+// Обработчик нажатия кнопки "Добавить материал"
+bot.action("add_material", async (ctx) => {
+    await ctx.scene.enter("ADD_MATERIAL");
+});
+
 // Поиск по базе знаний
 bot.on("text", async (ctx) => {
   const query = ctx.message.text;
