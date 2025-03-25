@@ -87,6 +87,7 @@ bot.action("tests", (ctx) => {
 bot.action("materials", (ctx) => {
   ctx.reply("Вы выбрали раздел «Материалы». Выберите действие:", {
     reply_markup: materialsMenuInlineKeyboard,
+    await sendMaterialsList(ctx);
   });
 });
 
