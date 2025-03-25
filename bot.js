@@ -149,6 +149,27 @@ addMaterialScene.on("photo", async (ctx) => {
 
   await ctx.scene.leave(); // Выход из сцены
 });
+// Обработчик для открытия материала по нажатию кнопки
+bot.action(/open_material_(\d+)/, async (ctx) => {
+  const materialId = ctx.match[1];
+  db.get("SELECT * FROM materials WHERE id = ?", [materialId], (err, row) => {
+      if (err) {
+          console.error("Ошибка при получении материала:", err);
+          ctx.reply("Произошла ошибка при получении материала.");
+      } else {
+          ctx.replyWithPhoto(row.photo, {
+              caption: `${row.title}\n\n${row.content}`,
+              reply_markup: {
+                  inline_keyboard: [[{ text: "Назад", callback_data: "back_to_materials" }]],
+              },
+          });
+      }
+  });
+});
+// Обработчик кнопки "Назад" для возврата к списку материалов
+bot.action("back_to_materials", async (ctx) => {
+  await sendMaterialsList(ctx);
+});
 // Функция для отправки списка всех материалов
 async function sendMaterialsList(ctx) {
   db.all("SELECT * FROM materials", (err, rows) => {
