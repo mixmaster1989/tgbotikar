@@ -146,10 +146,49 @@ addMaterialScene.on("photo", async (ctx) => {
             }
         }
     );
-
+// После добавления материала отправляем список всех материалов
+                await sendMaterialsList(ctx);
+            }
+        }
+    );
     await ctx.scene.leave(); // Выход из сцены
 });
+// Функция для отправки списка всех материалов
+async function sendMaterialsList(ctx) {
+    db.all("SELECT * FROM materials", (err, rows) => {
+        if (err) {
+            console.error("Ошибка при получении списка материалов:", err);
+            ctx.reply("Произошла ошибка при получении списка материалов.");
+        } else {
+            const keyboard = rows.map((row) => [
+                {
+                    text: row.title,
+                    callback_data: `open_material_${row.id}`,
+                },
+            ]);
+            ctx.reply("Выберите материал:", {
+                reply_markup: {
+                    inline_keyboard: keyboard,
+                },
+            });
+        }
+    });
+}
 
+// Обработчик для открытия материала по нажатию кнопки
+bot.action(/open_material_(\d+)/, async (ctx) => {
+    const materialId = ctx.match[1];
+    db.get("SELECT * FROM materials WHERE id = ?", [materialId], (err, row) => {
+        if (err) {
+            console.error("Ошибка при получении материала:", err);
+            ctx.reply("Произошла ошибка при получении материала.");
+        } else {
+            ctx.replyWithPhoto(row.photo, {
+                caption: `${row.title}\n\n${row.content}`,
+            });
+        }
+    });
+});
 // Подключаем сцену к Stage
 const stage = new Scenes.Stage([addMaterialScene]);
 
