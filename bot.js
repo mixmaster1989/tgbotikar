@@ -79,7 +79,8 @@ bot.on('callback_query', (query) => {
   if (query.data === 'add_material') {
     handleAddMaterial(query);
   }
-bot.action("back_to_main", (ctx) => {
+});
+  bot.action("back_to_main", (ctx) => {
   ctx.reply("Выберите раздел:", {
     reply_markup: mainMenuInlineKeyboard,
   });
