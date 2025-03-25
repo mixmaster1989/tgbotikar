@@ -46,7 +46,7 @@ db.serialize(() => {
       }
     }
   );
-});
+};
 
 // Создание экземпляра бота с вашим токеном
 const bot = new Telegraf(process.env.BOT_TOKEN);
