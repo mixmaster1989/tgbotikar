@@ -120,7 +120,7 @@ const handleAddMaterial = async (msg) => {
             });
         });
 };
-bot.onText(/\/start|add_material/, handleAddMaterial);
+
 // Поиск по базе знаний
 bot.on("text", async (ctx) => {
   const query = ctx.message.text;
