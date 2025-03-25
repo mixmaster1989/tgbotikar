@@ -148,7 +148,7 @@ addMaterialScene.on("photo", async (ctx) => {
     );
 // После добавления материала отправляем список всех материалов
                 await sendMaterialsList(ctx);
-            }
+            
         }
     );
     await ctx.scene.leave(); // Выход из сцены
