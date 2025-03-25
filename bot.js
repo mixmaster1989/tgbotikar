@@ -86,38 +86,38 @@ bot.action("add_material", async (ctx) => {
 
     try {
         await ctx.reply("Введите название статьи:");
-        ctx.telegram.once("message", async (msg) => {
-            material.title = msg.text;
 
-            await ctx.reply("Введите текст статьи:");
-            ctx.telegram.once("message", async (msg) => {
-                material.content = msg.text;
+        const titleMsg = await ctx.telegram.waitFor("message");
+        material.title = titleMsg.text;
 
-                await ctx.reply("Отправьте фото для статьи:");
-                ctx.telegram.once("photo", async (msg) => {
-                    const photo = msg.photo[msg.photo.length - 1].file_id;
-                    material.photo = photo;
+        await ctx.reply("Введите текст статьи:");
 
-                    db.run(
-                        "INSERT INTO materials (title, content) VALUES (?, ?)",
-                        [material.title, material.content],
-                        (err) => {
-                            if (err) {
-                                console.error("Ошибка при добавлении материала:", err);
-                                ctx.reply("Ошибка при добавлении материала.");
-                            } else {
-                                ctx.reply("Материал успешно добавлен!");
-                            }
-                        }
-                    );
-                });
-            });
-        });
+        const contentMsg = await ctx.telegram.waitFor("message");
+        material.content = contentMsg.text;
+
+        await ctx.reply("Отправьте фото для статьи:");
+
+        const photoMsg = await ctx.telegram.waitFor("photo");
+        const photo = photoMsg.photo[photoMsg.photo.length - 1].file_id;
+        material.photo = photo;
+
+        db.run(
+            "INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
+            [material.title, material.content, material.photo],
+            (err) => {
+                if (err) {
+                    console.error("Ошибка при добавлении материала:", err);
+                    ctx.reply("Ошибка при добавлении материала.");
+                } else {
+                    ctx.reply("Материал успешно добавлен!");
+                }
+            }
+        );
     } catch (error) {
         console.error("Ошибка:", error);
         ctx.reply("Произошла ошибка.");
     }
-});    
+});
 // Поиск по базе знаний
 bot.on("text", async (ctx) => {
   const query = ctx.message.text;
