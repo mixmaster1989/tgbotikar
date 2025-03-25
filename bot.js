@@ -118,7 +118,9 @@ addMaterialScene.on("text", async (ctx) => {
   } else if (!ctx.session.material.content) {
     ctx.session.material.content = ctx.message.text;
     await ctx.reply("Отправьте фото для статьи:");
-   
+  }
+});
+
 addMaterialScene.on("photo", async (ctx) => {
   const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
   ctx.session.material.photo = photo;
@@ -131,8 +133,6 @@ addMaterialScene.on("photo", async (ctx) => {
       ctx.session.material.content,
       ctx.session.material.photo,
     ],
-
-await bot.sendPhoto(chatId, photo, { caption: caption });
     (err) => {
       if (err) {
         console.error("Ошибка при добавлении материала:", err);
@@ -142,6 +142,7 @@ await bot.sendPhoto(chatId, photo, { caption: caption });
       }
     }
   );
+  await bot.sendPhoto(chatId, photo, { caption: caption });
   // После добавления материала отправляем список всех материалов
   await sendMaterialsList(ctx);
 
@@ -151,17 +152,19 @@ await bot.sendPhoto(chatId, photo, { caption: caption });
 bot.action(/open_material_(\d+)/, async (ctx) => {
   const materialId = ctx.match[1];
   db.get("SELECT * FROM materials WHERE id = ?", [materialId], (err, row) => {
-      if (err) {
-          console.error("Ошибка при получении материала:", err);
-          ctx.reply("Произошла ошибка при получении материала.");
-      } else {
-          ctx.replyWithPhoto(row.photo, {
-              caption: `${row.title}\n\n${row.content}`,
-              reply_markup: {
-                  inline_keyboard: [[{ text: "Назад", callback_data: "back_to_materials" }]],
-              },
-          });
-      }
+    if (err) {
+      console.error("Ошибка при получении материала:", err);
+      ctx.reply("Произошла ошибка при получении материала.");
+    } else {
+      ctx.replyWithPhoto(row.photo, {
+        caption: `${row.title}\n\n${row.content}`,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Назад", callback_data: "back_to_materials" }],
+          ],
+        },
+      });
+    }
   });
 });
 // Обработчик кнопки "Назад" для возврата к списку материалов
