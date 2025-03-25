@@ -118,11 +118,7 @@ addMaterialScene.on("text", async (ctx) => {
   } else if (!ctx.session.material.content) {
     ctx.session.material.content = ctx.message.text;
     await ctx.reply("Отправьте фото для статьи:");
-  } else {
-    ctx.reply("Ожидается фото, а не текст.");
-  }
-});
-
+   
 addMaterialScene.on("photo", async (ctx) => {
   const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
   ctx.session.material.photo = photo;
@@ -135,6 +131,8 @@ addMaterialScene.on("photo", async (ctx) => {
       ctx.session.material.content,
       ctx.session.material.photo,
     ],
+
+await bot.sendPhoto(chatId, photo, { caption: caption });
     (err) => {
       if (err) {
         console.error("Ошибка при добавлении материала:", err);
