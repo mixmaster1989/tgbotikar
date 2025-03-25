@@ -82,40 +82,44 @@ bot.action("back_to_main", (ctx) => {
 });
 // Обработчик для кнопки "Добавить материал"
 const handleAddMaterial = async (msg) => {
-  const chatId = msg.chat.id;
-  let title, content, photo;
+    const chatId = msg.chat.id;
+    let material = {};
 
-  // Запросить название статьи
-  await bot.sendMessage(chatId, 'Пожалуйста, введите название статьи:');
-  bot.onText(/[^/]/, (msg) => {
-    title = msg.text;
+    // Запросить название статьи
+    bot.sendMessage(chatId, "Пожалуйста, введите название статьи.")
+        .then(() => {
+            bot.once("message", (msg) => {
+                material.title = msg.text;
 
-    // Запросить текст статьи
-    bot.sendMessage(chatId, 'Пожалуйста, введите текст статьи:').then(() => {
-      bot.onText(/[^/]/, (msg) => {
-        content = msg.text;
+                // Запросить текст статьи
+                bot.sendMessage(chatId, "Пожалуйста, введите текст статьи.")
+                    .then(() => {
+                        bot.once("message", (msg) => {
+                            material.content = msg.text;
 
-        // Запросить фото
-        bot.sendMessage(chatId, 'Пожалуйста, отправьте фото для статьи:').then(() => {
-          bot.on('photo', (msg) => {
-            photo = msg.photo[msg.photo.length - 1].file_id;
+                            // Запросить фото
+                            bot.sendMessage(chatId, "Пожалуйста, отправьте фото для статьи.")
+                                .then(() => {
+                                    bot.once("photo", (msg) => {
+                                        material.photo = msg.photo[msg.photo.length - 1].file_id;
 
-            // Сохранить данные в базу данных
-            db.run(`INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)` , [title, content, photo], (err) => {
-              if (err) {
-                console.error('Ошибка при добавлении материала:', err);
-                bot.sendMessage(chatId, 'Ошибка при добавлении материала.');
-              } else {
-                bot.sendMessage(chatId, 'Материал успешно добавлен!');
-              }
+                                        // Сохранить данные в базу
+                                        db.run("INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
+                                            [material.title, material.content, material.photo], (err) => {
+                                                if (err) {
+                                                    console.error("Ошибка при добавлении материала:", err);
+                                                    bot.sendMessage(chatId, "Ошибка при добавлении материала.");
+                                                } else {
+                                                    bot.sendMessage(chatId, "Материал успешно добавлен!");
+                                                }
+                                            });
+                                    });
+                                });
+                        });
+                    });
             });
-          });
-        });
-      });
-    });
-  });
+        });
 };
-
 bot.onText(/\/start|add_material/, handleAddMaterial);
 // Поиск по базе знаний
 bot.on("text", async (ctx) => {
