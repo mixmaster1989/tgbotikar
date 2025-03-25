@@ -71,61 +71,53 @@ bot.action("results", (ctx) => {
   ctx.reply("Вы выбрали раздел «Мои результаты».");
 });
 
-bot.action("add_material", async (ctx) => {
-  // написать логику add_material
-});
+
 // Привязываем обработчик к кнопке
-bot.on('callback_query', (query) => {
-  if (query.data === 'add_material') {
-    handleAddMaterial(query);
-  }
-});
+
   bot.action("back_to_main", (ctx) => {
   ctx.reply("Выберите раздел:", {
     reply_markup: mainMenuInlineKeyboard,
   });
 });
 // Обработчик для кнопки "Добавить материал"
-const handleAddMaterial = async (msg) => {
-    const chatId = msg.chat.id;
+bot.action("add_material", async (ctx) => {
+    const chatId = ctx.chat.id;
     let material = {};
 
-    // Запросить название статьи
-    bot.sendMessage(chatId, "Пожалуйста, введите название статьи.")
-        .then(() => {
-            bot.once("message", (msg) => {
-                material.title = msg.text;
+    try {
+        await ctx.reply("Введите название статьи:");
+        ctx.telegram.once("message", async (msg) => {
+            material.title = msg.text;
 
-                // Запросить текст статьи
-                bot.sendMessage(chatId, "Пожалуйста, введите текст статьи.")
-                    .then(() => {
-                        bot.once("message", (msg) => {
-                            material.content = msg.text;
+            await ctx.reply("Введите текст статьи:");
+            ctx.telegram.once("message", async (msg) => {
+                material.content = msg.text;
 
-                            // Запросить фото
-                            bot.sendMessage(chatId, "Пожалуйста, отправьте фото для статьи.")
-                                .then(() => {
-                                    bot.once("photo", (msg) => {
-                                        material.photo = msg.photo[msg.photo.length - 1].file_id;
+                await ctx.reply("Отправьте фото для статьи:");
+                ctx.telegram.once("photo", async (msg) => {
+                    const photo = msg.photo[msg.photo.length - 1].file_id;
+                    material.photo = photo;
 
-                                        // Сохранить данные в базу
-                                        db.run("INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
-                                            [material.title, material.content, material.photo], (err) => {
-                                                if (err) {
-                                                    console.error("Ошибка при добавлении материала:", err);
-                                                    bot.sendMessage(chatId, "Ошибка при добавлении материала.");
-                                                } else {
-                                                    bot.sendMessage(chatId, "Материал успешно добавлен!");
-                                                }
-                                            });
-                                    });
-                                });
-                        });
-                    });
+                    db.run(
+                        "INSERT INTO materials (title, content) VALUES (?, ?)",
+                        [material.title, material.content],
+                        (err) => {
+                            if (err) {
+                                console.error("Ошибка при добавлении материала:", err);
+                                ctx.reply("Ошибка при добавлении материала.");
+                            } else {
+                                ctx.reply("Материал успешно добавлен!");
+                            }
+                        }
+                    );
+                });
             });
-        });
-};
-
+        });
+    } catch (error) {
+        console.error("Ошибка:", error);
+        ctx.reply("Произошла ошибка.");
+    }
+});    
 // Поиск по базе знаний
 bot.on("text", async (ctx) => {
   const query = ctx.message.text;
