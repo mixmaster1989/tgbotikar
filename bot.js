@@ -20,36 +20,30 @@ db.serialize(() => {
         console.log("Таблица materials существует.");
       } else {
         console.log("Таблица materials не найдена.");
-         // Проверяем наличие столбца photo в таблице materials
-        db.get(
-          "PRAGMA table_info(materials)",
-          (err, row) => {
-            if (err) {
-              console.error("Ошибка при проверке столбца:", err);
-            } else {
-              let photoColumnExists = false;
-              for (let i = 0; i < row.length; i++) {
-                if (row[i].name === "photo") {
-                  photoColumnExists = true;
-                  break;
-                }
-              }
-              if (!photoColumnExists) {
-                // Если столбец photo не существует, добавляем его
-                db.run(
-                  "ALTER TABLE materials ADD COLUMN photo TEXT",
-                  (err) => {
-                    if (err) {
-                      console.error("Ошибка при добавлении столбца photo:", err);
-                    } else {
-                      console.log("Столбец photo успешно добавлен.");
-      }
-                  }
-                );
+        // Проверяем наличие столбца photo в таблице materials
+        db.get("PRAGMA table_info(materials)", (err, row) => {
+          if (err) {
+            console.error("Ошибка при проверке столбца:", err);
+          } else {
+            let photoColumnExists = false;
+            for (let i = 0; i < row.length; i++) {
+              if (row[i].name === "photo") {
+                photoColumnExists = true;
+                break;
               }
             }
+            if (!photoColumnExists) {
+              // Если столбец photo не существует, добавляем его
+              db.run("ALTER TABLE materials ADD COLUMN photo TEXT", (err) => {
+                if (err) {
+                  console.error("Ошибка при добавлении столбца photo:", err);
+                } else {
+                  console.log("Столбец photo успешно добавлен.");
+                }
+              });
+            }
           }
-        );
+        });
       }
     }
   );
@@ -100,10 +94,9 @@ bot.action("results", (ctx) => {
   ctx.reply("Вы выбрали раздел «Мои результаты».");
 });
 
-
 // Привязываем обработчик к кнопке
 
-  bot.action("back_to_main", (ctx) => {
+bot.action("back_to_main", (ctx) => {
   ctx.reply("Выберите раздел:", {
     reply_markup: mainMenuInlineKeyboard,
   });
@@ -113,81 +106,83 @@ bot.action("results", (ctx) => {
 const addMaterialScene = new Scenes.BaseScene("ADD_MATERIAL");
 
 addMaterialScene.enter(async (ctx) => {
-    ctx.session.material = {}; // Создаём объект для хранения данных
-    await ctx.reply("Введите название статьи:");
+  ctx.session.material = {}; // Создаём объект для хранения данных
+  await ctx.reply("Введите название статьи:");
 });
 
 addMaterialScene.on("text", async (ctx) => {
-    if (!ctx.session.material.title) {
-        ctx.session.material.title = ctx.message.text;
-        await ctx.reply("Введите текст статьи:");
-    } else if (!ctx.session.material.content) {
-        ctx.session.material.content = ctx.message.text;
-        await ctx.reply("Отправьте фото для статьи:");
-    } else {
-        ctx.reply("Ожидается фото, а не текст.");
-    }
+  if (!ctx.session.material.title) {
+    ctx.session.material.title = ctx.message.text;
+    await ctx.reply("Введите текст статьи:");
+  } else if (!ctx.session.material.content) {
+    ctx.session.material.content = ctx.message.text;
+    await ctx.reply("Отправьте фото для статьи:");
+  } else {
+    ctx.reply("Ожидается фото, а не текст.");
+  }
 });
 
 addMaterialScene.on("photo", async (ctx) => {
-    const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-    ctx.session.material.photo = photo;
+  const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+  ctx.session.material.photo = photo;
 
-    // Сохранение в базу данных
-    db.run(
-        "INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
-        [ctx.session.material.title, ctx.session.material.content, ctx.session.material.photo],
-        (err) => {
-            if (err) {
-                console.error("Ошибка при добавлении материала:", err);
-                ctx.reply("Ошибка при добавлении материала.");
-            } else {
-                ctx.reply("Материал успешно добавлен!");
-            }
-        }
-    );
-// После добавления материала отправляем список всех материалов
-                await sendMaterialsList(ctx);
-            
-        }
-    );
-    await ctx.scene.leave(); // Выход из сцены
+  // Сохранение в базу данных
+  db.run(
+    "INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
+    [
+      ctx.session.material.title,
+      ctx.session.material.content,
+      ctx.session.material.photo,
+    ],
+    (err) => {
+      if (err) {
+        console.error("Ошибка при добавлении материала:", err);
+        ctx.reply("Ошибка при добавлении материала.");
+      } else {
+        ctx.reply("Материал успешно добавлен!");
+      }
+    }
+  );
+  // После добавления материала отправляем список всех материалов
+  await sendMaterialsList(ctx);
+
+  await ctx.scene.leave(); // Выход из сцены
 });
 // Функция для отправки списка всех материалов
 async function sendMaterialsList(ctx) {
-    db.all("SELECT * FROM materials", (err, rows) => {
-        if (err) {
-            console.error("Ошибка при получении списка материалов:", err);
-            ctx.reply("Произошла ошибка при получении списка материалов.");
-        } else {
-            const keyboard = rows.map((row) => [
-                {
-                    text: row.title,
-                    callback_data: `open_material_${row.id}`,
-                },
-            ]);
-            ctx.reply("Выберите материал:", {
-                reply_markup: {
-                    inline_keyboard: keyboard,
-                },
-            });
-        }
-    });
+  db.all("SELECT * FROM materials", (err, rows) => {
+    if (err) {
+      console.error("Ошибка при получении списка материалов:", err);
+      ctx.reply("Произошла ошибка при получении списка материалов.");
+    } else {
+      const keyboard = rows.map((row) => [
+        {
+          text: row.title,
+          callback_data: `open_material_${row.id}`,
+        },
+      ]);
+      ctx.reply("Выберите материал:", {
+        reply_markup: {
+          inline_keyboard: keyboard,
+        },
+      });
+    }
+  });
 }
 
 // Обработчик для открытия материала по нажатию кнопки
 bot.action(/open_material_(\d+)/, async (ctx) => {
-    const materialId = ctx.match[1];
-    db.get("SELECT * FROM materials WHERE id = ?", [materialId], (err, row) => {
-        if (err) {
-            console.error("Ошибка при получении материала:", err);
-            ctx.reply("Произошла ошибка при получении материала.");
-        } else {
-            ctx.replyWithPhoto(row.photo, {
-                caption: `${row.title}\n\n${row.content}`,
-            });
-        }
-    });
+  const materialId = ctx.match[1];
+  db.get("SELECT * FROM materials WHERE id = ?", [materialId], (err, row) => {
+    if (err) {
+      console.error("Ошибка при получении материала:", err);
+      ctx.reply("Произошла ошибка при получении материала.");
+    } else {
+      ctx.replyWithPhoto(row.photo, {
+        caption: `${row.title}\n\n${row.content}`,
+      });
+    }
+  });
 });
 // Подключаем сцену к Stage
 const stage = new Scenes.Stage([addMaterialScene]);
@@ -197,7 +192,7 @@ bot.use(stage.middleware());
 
 // Обработчик нажатия кнопки "Добавить материал"
 bot.action("add_material", async (ctx) => {
-    await ctx.scene.enter("ADD_MATERIAL");
+  await ctx.scene.enter("ADD_MATERIAL");
 });
 
 // Поиск по базе знаний
@@ -249,4 +244,3 @@ app.get("/results", (req, res) => {
 });
 
 app.listen(3000, () => console.log("API server started on port 3000"));
-
