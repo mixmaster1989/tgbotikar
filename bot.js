@@ -80,7 +80,37 @@ bot.action("back_to_main", (ctx) => {
     reply_markup: mainMenuInlineKeyboard,
   });
 });
+// Обработчик для кнопки "Добавить материал"
+bot.onText(/\/start|add_material/, (msg) => {
+  const chatId = msg.chat.id;
 
+  // Запросить название статьи
+  bot.sendMessage(chatId, 'Пожалуйста, введите название статьи:').then(() => {
+    bot.onText(/[^\/]*/, (msg) => {
+      const title = msg.text;
+      // Запросить текст статьи
+      bot.sendMessage(chatId, 'Пожалуйста, введите текст статьи:').then(() => {
+        bot.onText(/[^\/]*/, (msg) => {
+          const content = msg.text;
+          // Запросить фото
+          bot.sendMessage(chatId, 'Пожалуйста, отправьте фото для статьи:').then(() => {
+            bot.on('photo', (msg) => {
+              const photo = msg.photo[msg.photo.length - 1].file_id;
+              // Сохранить данные в базу данных
+              db.run(`INSERT INTO materials (title, content) VALUES (?, ?)` , [title, content], (err) => {
+                if (err) {
+                  console.error('Ошибка при добавлении материала:', err);
+                } else {
+                  bot.sendMessage(chatId, 'Материал успешно добавлен!');
+                }
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
 // Поиск по базе знаний
 bot.on("text", async (ctx) => {
   const query = ctx.message.text;
