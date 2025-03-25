@@ -74,7 +74,11 @@ bot.action("results", (ctx) => {
 bot.action("add_material", async (ctx) => {
   // написать логику add_material
 });
-
+// Привязываем обработчик к кнопке
+bot.on('callback_query', (query) => {
+  if (query.data === 'add_material') {
+    handleAddMaterial(query);
+  }
 bot.action("back_to_main", (ctx) => {
   ctx.reply("Выберите раздел:", {
     reply_markup: mainMenuInlineKeyboard,
