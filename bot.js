@@ -112,6 +112,7 @@ addMaterialScene.enter(async (ctx) => {
 });
 
 bot.action("section", async (ctx) => {
+  if (!ctx.session) ctx.session = {}; // Инициализируем ctx.session, если он отсутствует
   if (!ctx.session.material) ctx.session.material = {}; // Проверяем и инициализируем объект
   ctx.session.material.type = "section";
   await ctx.reply("Введите название раздела:");
