@@ -48,7 +48,8 @@ db.serialize(() => {
             }
           }
         });
-      }
+      }      bot.use(session());
+      bot.use(stage.middleware());
     }
   );
 });
@@ -140,7 +141,7 @@ bot.action("back_to_main", (ctx) => {
 const addMaterialScene = new Scenes.BaseScene("ADD_MATERIAL");
 
 addMaterialScene.enter(async (ctx) => {
-  ctx.session.material = {}; // Создаём объект для хранения данных
+  ctx.session.material = {}; // Инициализируем объект для хранения данных
   await ctx.reply("Это раздел или статья?", {
     reply_markup: {
       inline_keyboard: [
@@ -152,11 +153,13 @@ addMaterialScene.enter(async (ctx) => {
 });
 
 bot.action("section", async (ctx) => {
+  if (!ctx.session.material) ctx.session.material = {}; // Проверяем и инициализируем объект
   ctx.session.material.type = "section";
   await ctx.reply("Введите название раздела:");
 });
 
 bot.action("article", async (ctx) => {
+  if (!ctx.session.material) ctx.session.material = {}; // Проверяем и инициализируем объект
   ctx.session.material.type = "article";
   await ctx.reply("Введите название статьи:");
 });
