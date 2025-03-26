@@ -49,7 +49,7 @@ db.serialize(() => {
           }
         });
       } bot.use(session());
-      bot.use(stage.middleware());      db.serialize(() => {
+      bot.use(stage.middleware()); db.serialize(() => {
         db.all("PRAGMA table_info(materials)", (err, rows) => {
           if (err) {
             console.error("Ошибка при проверке столбцов таблицы materials:", err);
@@ -100,6 +100,34 @@ db.serialize(() => {
         );
       } else {
         console.log("Столбец section_id уже существует.");
+      }
+    }
+  });
+});
+
+db.serialize(() => {
+  db.all("PRAGMA table_info(materials)", (err, rows) => {
+    if (err) {
+      console.error("Ошибка при проверке столбцов таблицы materials:", err);
+    } else {
+      if (Array.isArray(rows)) {
+        const columnExists = rows.some((row) => row.name === "section_id");
+        if (!columnExists) {
+          db.run(
+            `ALTER TABLE materials ADD COLUMN section_id INTEGER DEFAULT NULL`,
+            (err) => {
+              if (err) {
+                console.error("Ошибка при добавлении столбца section_id:", err);
+              } else {
+                console.log("Столбец section_id успешно добавлен.");
+              }
+            }
+          );
+        } else {
+          console.log("Столбец section_id уже существует.");
+        }
+      } else {
+        console.error("Ошибка: rows не является массивом.");
       }
     }
   });
