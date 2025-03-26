@@ -37,7 +37,7 @@ module.exports = {
     getFile,
 };
 
-const fs = require("fs");
+
 
 // Пример использования sendPhoto с локальным файлом
 bot.action(/open_material_(\d+)/, async (ctx) => {
