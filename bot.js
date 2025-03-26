@@ -1,12 +1,13 @@
-const { Telegraf, Markup } = require('telegraf');
+const { Telegraf, Markup,session } = require('telegraf');
 const sqlite3 = require('sqlite3').verbose();
+const fetch = require("node-fetch");
 const fs = require('fs-extra');
 const path = require('path');
-const fetch = require('node-fetch');
 require('dotenv').config();
 
 // Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
+bot.use(session());
 const db = new sqlite3.Database('database.sqlite');
 
 // Создание необходимых директорий
@@ -56,6 +57,7 @@ bot.action('materials', async (ctx) => {
         Markup.button.callback(cat.name, `category:${cat.id}`)
     ]);
     buttons.push([Markup.button.callback('Добавить категорию', 'add_category')]);
+    buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
     
     await ctx.editMessageText('Выберите категорию:', 
         Markup.inlineKeyboard(buttons)
@@ -72,7 +74,10 @@ bot.action(/^category:(\d+)$/, async (ctx) => {
         Markup.button.callback(section.name, `section:${section.id}`)
     ]);
     buttons.push([Markup.button.callback('Добавить раздел', `add_section:${categoryId}`)]);
-    buttons.push([Markup.button.callback('« Назад к категориям', 'materials')]);
+    buttons.push([
+        Markup.button.callback('« Назад к категориям', 'materials'),
+        Markup.button.callback('« На главную', 'main_menu')
+    ]);
 
     await ctx.editMessageText('Выберите раздел:', 
         Markup.inlineKeyboard(buttons)
@@ -90,9 +95,13 @@ bot.action(/^section:(\d+)$/, async (ctx) => {
         Markup.button.callback(article.title, `article:${article.id}`)
     ]);
     buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
-    buttons.push([Markup.button.callback('« Назад к разделам', `category:${section.category_id}`)]);
+    buttons.push([
+        Markup.button.callback('« Назад к разделам', `category:${section.category_id}`),
+        Markup.button.callback('« На главную', 'main_menu')
+    ]);
 
-    await ctx.editMessageText('Выберите статью:', 
+    await ctx.deleteMessage();
+    await ctx.reply('Выберите статью:', 
         Markup.inlineKeyboard(buttons)
     );
 });
@@ -105,10 +114,11 @@ bot.action(/^article:(\d+)$/, async (ctx) => {
     const section = await getSectionById(article.section_id);
     
     const caption = `${article.title}\n\n${article.description}`;
-    const buttons = [[
-        Markup.button.callback('« Назад к статьям', `section:${article.section_id}`)
-    ]];
-
+    const buttons = [
+        [Markup.button.callback('« Назад к статьям', `section:${article.section_id}`)],
+        [Markup.button.callback('« На главную', 'main_menu')]
+    ];
+    
     if (article.image_path) {
         await ctx.deleteMessage();
         await ctx.replyWithPhoto(
@@ -123,6 +133,19 @@ bot.action(/^article:(\d+)$/, async (ctx) => {
             Markup.inlineKeyboard(buttons)
         );
     }
+});
+
+// Обработчик кнопки "На главную"
+bot.action('main_menu', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.editMessageText('Выберите действие:', 
+        Markup.inlineKeyboard([
+            [Markup.button.callback('Тесты', 'tests')],
+            [Markup.button.callback('Материалы', 'materials')],
+            [Markup.button.callback('Мои результаты', 'results')],
+            [Markup.button.callback('🗑 Очистить базу', 'clear_db')]
+        ])
+    );
 });
 
 // Очистка базы данных
@@ -185,6 +208,7 @@ bot.on('text', async (ctx) => {
             Markup.button.callback(cat.name, `category:${cat.id}`)
         ]);
         buttons.push([Markup.button.callback('Добавить категорию', 'add_category')]);
+        buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
         
         await ctx.reply('Выберите категорию:', 
             Markup.inlineKeyboard(buttons)
@@ -203,7 +227,10 @@ bot.on('text', async (ctx) => {
             Markup.button.callback(section.name, `section:${section.id}`)
         ]);
         buttons.push([Markup.button.callback('Добавить раздел', `add_section:${categoryId}`)]);
-        buttons.push([Markup.button.callback('« Назад к категориям', 'materials')]);
+        buttons.push([
+            Markup.button.callback('« Назад к категориям', 'materials'),
+            Markup.button.callback('« На главную', 'main_menu')
+        ]);
         
         await ctx.reply('Раздел добавлен!');
         await ctx.reply('Выберите раздел:', 
@@ -242,7 +269,10 @@ bot.on('text', async (ctx) => {
             Markup.button.callback(article.title, `article:${article.id}`)
         ]);
         buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
-        buttons.push([Markup.button.callback('« Назад к разделам', `category:${section.category_id}`)]);
+        buttons.push([
+            Markup.button.callback('« Назад к разделам', `category:${section.category_id}`),
+            Markup.button.callback('« На главную', 'main_menu')
+        ]);
 
         ctx.session = null;
         await ctx.reply('Статья добавлена!');
@@ -256,13 +286,12 @@ bot.on('text', async (ctx) => {
 bot.on('photo', async (ctx) => {
     if (ctx.session?.addingArticle && ctx.session.articleTitle && ctx.session.articleDescription) {
         const sectionId = ctx.session.addingArticle;
-        const photo = ctx.message.photo[ctx.message.photo.length - 1];
-        const file = await ctx.telegram.getFile(photo.file_id);
+        const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
         const fileName = `${Date.now()}.jpg`;
         const filePath = path.join('uploads', fileName);
         
-        const fileUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-        const response = await fetch(fileUrl);
+        const fileLink = await ctx.telegram.getFileLink(photo);
+        const response = await fetch.default(fileLink);
         const buffer = await response.buffer();
         await fs.writeFile(filePath, buffer);
 
@@ -279,7 +308,10 @@ bot.on('photo', async (ctx) => {
             Markup.button.callback(article.title, `article:${article.id}`)
         ]);
         buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
-        buttons.push([Markup.button.callback('« Назад к разделам', `category:${section.category_id}`)]);
+        buttons.push([
+            Markup.button.callback('« Назад к разделам', `category:${section.category_id}`),
+            Markup.button.callback('« На главную', 'main_menu')
+        ]);
 
         ctx.session = null;
         await ctx.reply('Статья добавлена!');
