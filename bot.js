@@ -198,20 +198,40 @@ bot.action(/open_material_(\d+)/, async (ctx) => {
     } else {
       const filePath = `fs-files/photo/${row.photo}`;
       if (fs.existsSync(filePath)) {
-        ctx.replyWithPhoto({ source: filePath }, {
-          caption: `${row.title}\n\n${row.content}`,
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "Назад", callback_data: "back_to_materials" }],
-            ],
-          },
-        });
+        // Разбиваем текст на части, если он слишком длинный
+        const caption = `${row.title}\n\n${row.content}`;
+        if (caption.length > 1024) {
+          const parts = splitText(caption, 1024); // Разбиваем текст на части
+          ctx.replyWithPhoto({ source: filePath }, { caption: parts[0] }); // Отправляем первую часть с фото
+          for (let i = 1; i < parts.length; i++) {
+            ctx.reply(parts[i]); // Отправляем остальные части текста
+          }
+        } else {
+          ctx.replyWithPhoto({ source: filePath }, { caption }); // Отправляем текст, если он не слишком длинный
+        }
       } else {
         ctx.reply("Файл не найден.");
       }
     }
   });
 });
+
+// Функция для разбивки текста на части
+function splitText(text, maxLength) {
+  const parts = [];
+  while (text.length > maxLength) {
+    let part = text.slice(0, maxLength);
+    const lastSpace = part.lastIndexOf(" ");
+    if (lastSpace > -1) {
+      part = part.slice(0, lastSpace); // Разбиваем по последнему пробелу
+    }
+    parts.push(part);
+    text = text.slice(part.length).trim();
+  }
+  parts.push(text); // Добавляем оставшийся текст
+  return parts;
+}
+
 // Обработчик кнопки "Назад" для возврата к списку материалов
 bot.action("back_to_materials", async (ctx) => {
   await sendMaterialsList(ctx);
