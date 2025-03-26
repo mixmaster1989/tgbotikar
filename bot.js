@@ -330,7 +330,7 @@ bot.hears("❌ Очистить материалы", async (ctx) => {
   }
 });
 
-// Поиск по базе знаний
+// Переместите этот обработчик в конец файла
 bot.on("text", async (ctx) => {
   const query = ctx.message.text;
 
@@ -346,22 +346,6 @@ bot.on("text", async (ctx) => {
     console.error(err);
   }
 });
-
-// Функция для поиска в базе данных
-async function searchInDatabase(query) {
-  return new Promise((resolve, reject) => {
-    db.all(
-      `SELECT * FROM materials WHERE content LIKE '%${query}%'`,
-      (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows.map((row) => row.content));
-        }
-      }
-    );
-  });
-}
 
 // Запуск бота
 bot.launch();
