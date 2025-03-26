@@ -21,13 +21,13 @@ db.serialize(() => {
       } else {
         console.log("Таблица materials не найдена.");
         // Проверяем наличие столбца photo в таблице materials
-        db.get("PRAGMA table_info(materials)", (err, row) => {
+        db.get("PRAGMA table_info(materials)", (err, rows) => {
           if (err) {
             console.error("Ошибка при проверке столбца:", err);
           } else {
             let photoColumnExists = false;
-            for (let i = 0; i < row.length; i++) {
-              if (row[i].name === "photo") {
+            for (let i = 0; i < rows.length; i++) {
+              if (rows[i].name === "photo") {
                 photoColumnExists = true;
                 break;
               }
@@ -41,11 +41,12 @@ db.serialize(() => {
                   console.log("Столбец photo успешно добавлен.");
                 }
               });
+            }
           }
-        }
-      });
+        });
+      }
     }
-  }
+  );
 });
 
 // Создание экземпляра бота с вашим токеном
