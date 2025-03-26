@@ -261,6 +261,23 @@ bot.action("add_material", async (ctx) => {
   await ctx.scene.enter("ADD_MATERIAL");
 });
 
+// Обработчик для временной кнопки "Очистить материалы"
+bot.hears("❌ Очистить материалы", async (ctx) => {
+  try {
+    db.run("DELETE FROM materials", (err) => {
+      if (err) {
+        console.error("Ошибка при очистке материалов:", err);
+        ctx.reply("Произошла ошибка при очистке материалов.");
+      } else {
+        ctx.reply("Все материалы успешно удалены!");
+      }
+    });
+  } catch (error) {
+    console.error("Ошибка при обработке команды очистки:", error);
+    ctx.reply("Произошла ошибка при очистке материалов.");
+  }
+});
+
 // Поиск по базе знаний
 bot.on("text", async (ctx) => {
   const query = ctx.message.text;
