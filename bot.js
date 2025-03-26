@@ -50,12 +50,21 @@ db.serialize(() => {
         });
       } bot.use(session());
       bot.use(stage.middleware()); db.serialize(() => {
-        db.all("PRAGMA table_info(materials)", (err, rows) => {
-          if (err) {
-            console.error("Ошибка при проверке столбцов таблицы materials:", err);
-          } else {
-            const columnExists = rows.some((row) => row.name === "section_id");
-            if (!columnExists) {
+        let columnExists = false;
+
+        db.each(
+          "PRAGMA table_info(materials)",
+          (err, row) => {
+            if (err) {
+              console.error("Ошибка при проверке столбцов таблицы materials:", err);
+            } else if (row.name === "section_id") {
+              columnExists = true;
+            }
+          },
+          (err, count) => {
+            if (err) {
+              console.error("Ошибка при выполнении PRAGMA table_info:", err);
+            } else if (!columnExists) {
               db.run(
                 `ALTER TABLE materials ADD COLUMN section_id INTEGER DEFAULT NULL`,
                 (err) => {
@@ -70,7 +79,7 @@ db.serialize(() => {
               console.log("Столбец section_id уже существует.");
             }
           }
-        });
+        );
       });
     }
   );
