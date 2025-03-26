@@ -143,7 +143,7 @@ addMaterialScene.on("text", async (ctx) => {
           ctx.reply("Ошибка при добавлении раздела.");
         } else {
           console.log("Раздел успешно добавлен:", ctx.session.material.name); // Логируем успех
-          ctx.reply("Раздел успешно добавлен!");
+          ctx.reply(`Раздел "${ctx.session.material.name}" успешно добавлен!`);
           ctx.scene.leave(); // Выходим из сцены
         }
       }
