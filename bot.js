@@ -106,10 +106,10 @@ db.serialize(() => {
 });
 
 db.serialize(() => {
-  db.all("PRAGMA table_info(materials)", (err, rows) => {
-    if (err) {
-      console.error("Ошибка при проверке столбцов таблицы materials:", err);
-    } else {
+  try {
+    db.all("PRAGMA table_info(materials)", (err, rows) => {
+      if (err) throw new Error("Ошибка при проверке столбцов таблицы materials: " + err);
+
       if (Array.isArray(rows)) {
         const columnExists = rows.some((row) => row.name === "section_id");
         if (!columnExists) {
@@ -129,8 +129,10 @@ db.serialize(() => {
       } else {
         console.error("Ошибка: rows не является массивом.");
       }
-    }
-  });
+    });
+  } catch (error) {
+    console.error("Произошла ошибка:", error);
+  }
 });
 
 // Создание экземпляра бота с вашим токеном
