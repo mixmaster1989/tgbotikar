@@ -3,6 +3,7 @@ const { Telegraf, session, Scenes } = require("telegraf");
 const { Database } = require("sqlite3").verbose();
 const fetch = require("node-fetch"); // Для загрузки файлов с Telegram API
 const { saveFile } = require("./fsconf"); // Импортируем модуль fsconf
+const fs = require("fs"); // Импортируем модуль fs
 
 // Инициализация базы данных SQLite
 const db = new Database("database.sqlite");
@@ -175,14 +176,19 @@ bot.action(/open_material_(\d+)/, async (ctx) => {
       console.error("Ошибка при получении материала:", err);
       ctx.reply("Произошла ошибка при получении материала.");
     } else {
-      ctx.replyWithPhoto(row.photo, {
-        caption: `${row.title}\n\n${row.content}`,
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Назад", callback_data: "back_to_materials" }],
-          ],
-        },
-      });
+      const filePath = `fs-files/photo/${row.photo}`;
+      if (fs.existsSync(filePath)) {
+        ctx.replyWithPhoto({ source: filePath }, {
+          caption: `${row.title}\n\n${row.content}`,
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "Назад", callback_data: "back_to_materials" }],
+            ],
+          },
+        });
+      } else {
+        ctx.reply("Файл не найден.");
+      }
     }
   });
 });
