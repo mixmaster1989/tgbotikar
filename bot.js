@@ -134,30 +134,17 @@ addMaterialScene.on("text", async (ctx) => {
       [ctx.session.material.name],
       (err) => {
         if (err) {
-          console.error("Ошибка при добавлении раздела:", err);
+          console.error("Ошибка при добавлении раздела:", err); // Логируем ошибку
           ctx.reply("Ошибка при добавлении раздела.");
         } else {
+          console.log("Раздел успешно добавлен:", ctx.session.material.name); // Логируем успех
           ctx.reply("Раздел успешно добавлен!");
-          ctx.scene.leave();
+          ctx.scene.leave(); // Выходим из сцены
         }
       }
     );
-  } else if (ctx.session.material.type === "article") {
-    if (!ctx.session.material.title) {
-      ctx.session.material.title = ctx.message.text;
-
-      // Запрашиваем текст статьи
-      const sections = await getSections();
-      const keyboard = sections.map((section) => [
-        { text: section.name, callback_data: `section_${section.id}` },
-      ]);
-      await ctx.reply("Выберите раздел для статьи:", {
-        reply_markup: { inline_keyboard: keyboard },
-      });
-    } else if (!ctx.session.material.content) {
-      ctx.session.material.content = ctx.message.text;
-      await ctx.reply("Отправьте фото для статьи:");
-    }
+  } else {
+    ctx.reply("Произошла ошибка. Убедитесь, что вы вводите корректные данные.");
   }
 });
 
