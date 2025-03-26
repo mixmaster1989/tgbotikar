@@ -76,6 +76,7 @@ const mainMenuKeyboard = {
   reply_markup: {
     keyboard: [
       [{ text: "🧠 Тесты" }, { text: "📚 Материалы" }, { text: "🏆 Мои результаты" }],
+      [{ text: "❌ Очистить материалы" }], // ВРЕМЕННАЯ КНОПКА
     ],
     resize_keyboard: true,
     one_time_keyboard: false,
