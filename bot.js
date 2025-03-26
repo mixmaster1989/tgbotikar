@@ -200,14 +200,14 @@ bot.action(/open_material_(\d+)/, async (ctx) => {
       if (fs.existsSync(filePath)) {
         // Разбиваем текст на части, если он слишком длинный
         const caption = `${row.title}\n\n${row.content}`;
-        if (caption.length > 1024) {
-          const parts = splitText(caption, 1024); // Разбиваем текст на части
-          ctx.replyWithPhoto({ source: filePath }, { caption: parts[0] }); // Отправляем первую часть с фото
-          for (let i = 1; i < parts.length; i++) {
-            ctx.reply(parts[i]); // Отправляем остальные части текста
-          }
-        } else {
-          ctx.replyWithPhoto({ source: filePath }, { caption }); // Отправляем текст, если он не слишком длинный
+        const parts = splitText(caption, 1024); // Разбиваем текст на части
+
+        // Отправляем фото с первой частью текста
+        await ctx.replyWithPhoto({ source: filePath }, { caption: parts[0] });
+
+        // Отправляем остальные части текста
+        for (let i = 1; i < parts.length; i++) {
+          await ctx.reply(parts[i]);
         }
       } else {
         ctx.reply("Файл не найден.");
@@ -258,20 +258,6 @@ async function sendMaterialsList(ctx) {
   });
 }
 
-// Обработчик для открытия материала по нажатию кнопки
-bot.action(/open_material_(\d+)/, async (ctx) => {
-  const materialId = ctx.match[1];
-  db.get("SELECT * FROM materials WHERE id = ?", [materialId], (err, row) => {
-    if (err) {
-      console.error("Ошибка при получении материала:", err);
-      ctx.reply("Произошла ошибка при получении материала.");
-    } else {
-      ctx.replyWithPhoto(row.photo, {
-        caption: `${row.title}\n\n${row.content}`,
-      });
-    }
-  });
-});
 // Подключаем сцену к Stage
 const stage = new Scenes.Stage([addMaterialScene]);
 
