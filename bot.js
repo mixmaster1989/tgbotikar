@@ -191,10 +191,10 @@ addMaterialScene.on("photo", async (ctx) => {
 // Обработчик для открытия материала по нажатию кнопки
 bot.action(/open_material_(\d+)/, async (ctx) => {
   const materialId = ctx.match[1];
-  db.get("SELECT * FROM materials WHERE id = ?", [materialId], (err, row) => {
+  db.get("SELECT * FROM materials WHERE id = ?", [materialId], async (err, row) => {
     if (err) {
       console.error("Ошибка при получении материала:", err);
-      ctx.reply("Произошла ошибка при получении материала.");
+      await ctx.reply("Произошла ошибка при получении материала.");
     } else {
       const filePath = `fs-files/photo/${row.photo}`;
       if (fs.existsSync(filePath)) {
@@ -210,7 +210,7 @@ bot.action(/open_material_(\d+)/, async (ctx) => {
           await ctx.reply(parts[i]);
         }
       } else {
-        ctx.reply("Файл не найден.");
+        await ctx.reply("Файл не найден.");
       }
     }
   });
