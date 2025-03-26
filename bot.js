@@ -1,6 +1,9 @@
 require("dotenv").config();
 const { Telegraf, session, Scenes } = require("telegraf");
 const { Database } = require("sqlite3").verbose();
+const fetch = require("node-fetch"); // Для загрузки файлов с Telegram API
+const { saveFile } = require("./fsconf"); // Импортируем модуль fsconf
+
 // Инициализация базы данных SQLite
 const db = new Database("database.sqlite");
 db.serialize(() => {
@@ -125,29 +128,44 @@ addMaterialScene.on("photo", async (ctx) => {
   const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
   ctx.session.material.photo = photo;
 
-  // Сохранение в базу данных
-  db.run(
-    "INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
-    [
-      ctx.session.material.title,
-      ctx.session.material.content,
-      ctx.session.material.photo,
-    ],
-  (err) => {
-    if (err) {
-      console.error("Ошибка при добавлении материала:", err);
-      ctx.reply("Ошибка при добавлении материала.");
-    } else {
-      ctx.reply("Материал успешно добавлен!");
-    }
+  try {
+    // Получаем ссылку на файл через Telegram API
+    const fileLink = await ctx.telegram.getFileLink(photo);
+
+    // Загружаем файл
+    const response = await fetch(fileLink.href);
+    const buffer = await response.buffer();
+
+    // Сохраняем файл на диск
+    const fileName = `${photo}.jpg`; // Уникальное имя файла
+    await saveFile(buffer, fileName);
+
+    // Сохраняем запись в базу данных
+    db.run(
+      "INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
+      [
+        ctx.session.material.title,
+        ctx.session.material.content,
+        fileName, // Сохраняем имя файла вместо file_id
+      ],
+      (err) => {
+        if (err) {
+          console.error("Ошибка при добавлении материала:", err);
+          ctx.reply("Ошибка при добавлении материала.");
+        } else {
+          ctx.reply("Материал успешно добавлен!");
+        }
+      }
+    );
+
+    // После добавления материала отправляем список всех материалов
+    await sendMaterialsList(ctx);
+    await ctx.scene.leave(); // Выход из сцены
+  } catch (error) {
+    console.error("Ошибка при обработке фото:", error);
+    ctx.reply("Произошла ошибка при обработке фото.");
   }
-);
-
-// После добавления материала отправляем список всех материалов
-await sendMaterialsList(ctx);
-
-await ctx.scene.leave(); // Выход из сцены
-}); // Закрытие addMaterialScene.on("photo")
+});
 
 // Обработчик для открытия материала по нажатию кнопки
 bot.action(/open_material_(\d+)/, async (ctx) => {
