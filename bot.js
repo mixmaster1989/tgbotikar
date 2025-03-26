@@ -125,6 +125,9 @@ bot.action("article", async (ctx) => {
 });
 
 addMaterialScene.on("text", async (ctx) => {
+  console.log("Получено сообщение:", ctx.message.text); // Логируем текст сообщения
+  console.log("Сессия материала:", ctx.session.material); // Логируем объект ctx.session.material
+
   if (ctx.session.material.type === "section" && !ctx.session.material.name) {
     ctx.session.material.name = ctx.message.text;
 
@@ -144,6 +147,7 @@ addMaterialScene.on("text", async (ctx) => {
       }
     );
   } else {
+    console.log("Условие не выполнено. Состояние ctx.session.material:", ctx.session.material); // Логируем состояние
     ctx.reply("Произошла ошибка. Убедитесь, что вы вводите корректные данные.");
   }
 });
