@@ -31,18 +31,7 @@ async function getFile(fileName) {
     }
 }
 
-// Пример использования
-(async () => {
-    const fileName = 'example.jpg';
-    const file = Buffer.from('...'); // Пример файла в виде буфера (можно заменить на реальный файл)
-
-    // Сохраняем файл
-    await saveFile(file, fileName);
-
-    // Получаем файл
-    const savedFile = await getFile(fileName);
-})();
-
+// Экспорт функций
 module.exports = {
     saveFile,
     getFile,
