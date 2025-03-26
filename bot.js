@@ -127,6 +127,9 @@ bot.action("article", async (ctx) => {
 });
 
 addMaterialScene.on("text", async (ctx) => {
+  if (!ctx.session) ctx.session = {}; // Инициализируем сессию, если она отсутствует
+  if (!ctx.session.material) ctx.session.material = {}; // Инициализируем объект material, если он отсутствует
+
   console.log("Получено сообщение:", ctx.message.text); // Логируем текст сообщения
   console.log("Сессия материала:", ctx.session.material); // Логируем объект ctx.session.material
 
