@@ -2,7 +2,7 @@ require("dotenv").config();
 const { Telegraf, session, Scenes } = require("telegraf");
 const { Database } = require("sqlite3").verbose();
 const fetch = require("node-fetch"); // Для загрузки файлов с Telegram API
-const { saveFile } = require("./fsconf"); // Импортируем модуль fsconf
+const { saveFile, getFile } = require("./fsconf"); // Импортируем модуль fsconf
 const fs = require("fs"); // Импортируем модуль fs
 
 // Инициализация базы данных SQLite
