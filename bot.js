@@ -118,7 +118,9 @@ addMaterialScene.on("text", async (ctx) => {
   } else if (!ctx.session.material.content) {
     ctx.session.material.content = ctx.message.text;
     await ctx.reply("Отправьте фото для статьи:");
-   
+  }
+});
+
 addMaterialScene.on("photo", async (ctx) => {
   const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
   ctx.session.material.photo = photo;
@@ -131,8 +133,21 @@ addMaterialScene.on("photo", async (ctx) => {
       ctx.session.material.content,
       ctx.session.material.photo,
     ],
+    (err) => {
+      if (err) {
+        console.error("Ошибка при добавлении материала:", err);
+        ctx.reply("Ошибка при добавлении материала.");
+      } else {
+        ctx.reply("Материал успешно добавлен!");
+      }
+    }
+  );
 
-await bot.sendPhoto(chatId, photo, { caption: caption });
+  // После добавления материала отправляем список всех материалов
+  await sendMaterialsList(ctx);
+
+  await ctx.scene.leave(); // Выход из сцены
+//await bot.sendPhoto(chatId, photo, { caption: caption });
     (err) => {
       if (err) {
         console.error("Ошибка при добавлении материала:", err);
@@ -146,7 +161,7 @@ await bot.sendPhoto(chatId, photo, { caption: caption });
   await sendMaterialsList(ctx);
 
   await ctx.scene.leave(); // Выход из сцены
-});
+
 // Обработчик для открытия материала по нажатию кнопки
 bot.action(/open_material_(\d+)/, async (ctx) => {
   const materialId = ctx.match[1];
