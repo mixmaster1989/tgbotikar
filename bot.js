@@ -1,385 +1,379 @@
-require("dotenv").config();
-const { Telegraf, session, Scenes } = require("telegraf");
-const { Database } = require("sqlite3").verbose();
-const fetch = require("node-fetch"); // Для загрузки файлов с Telegram API
-const { saveFile, getFile } = require("./fsconf"); // Импортируем модуль fsconf
-const fs = require("fs"); // Импортируем модуль fs
+const { Telegraf, Markup } = require('telegraf');
+const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs-extra');
+const path = require('path');
+const fetch = require('node-fetch');
+require('dotenv').config();
 
-// Инициализация базы данных SQLite
-const db = new Database("database.sqlite");
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT,
-    content TEXT
-  )`);
-});
-
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS sections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT
-  )`);
-});
-
-// Создание экземпляра бота с вашим токеном
+// Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
+const db = new sqlite3.Database('database.sqlite');
 
-// Inline клавиатуры
-const mainMenuInlineKeyboard = {
-  inline_keyboard: [
-    [{ text: "🧠 Тесты", callback_data: "tests" }],
-    [{ text: "📚 Материалы", callback_data: "materials" }],
-    [{ text: "🏆 Мои результаты", callback_data: "results" }],
-  ],
-};
+// Создание необходимых директорий
+fs.ensureDirSync('uploads');
 
-const materialsMenuInlineKeyboard = {
-  inline_keyboard: [
-    [{ text: "Добавить раздел", callback_data: "add_section" }],
-    [{ text: "Добавить материал", callback_data: "add_material" }],
-    [{ text: "Назад", callback_data: "back_to_main" }],
-  ],
-};
+// Инициализация базы данных
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL
+    )`);
 
-const mainMenuKeyboard = {
-  reply_markup: {
-    keyboard: [
-      [{ text: "🧠 Тесты" }, { text: "📚 Материалы" }, { text: "🏆 Мои результаты" }],
-      [{ text: "❌ Очистить материалы" }], // ВРЕМЕННАЯ КНОПКА
-    ],
-    resize_keyboard: true,
-    one_time_keyboard: false,
-  },
-};
+    db.run(`CREATE TABLE IF NOT EXISTS sections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category_id INTEGER,
+        FOREIGN KEY(category_id) REFERENCES categories(id)
+    )`);
 
-// Приветственное сообщение
-bot.start(async (ctx) => {
-  await ctx.reply("Приветствую на обучающем портале ИКАР!", mainMenuKeyboard);
+    db.run(`CREATE TABLE IF NOT EXISTS articles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        image_path TEXT,
+        section_id INTEGER,
+        FOREIGN KEY(section_id) REFERENCES sections(id)
+    )`);
 });
 
-bot.hears("🧠 Тесты", (ctx) => {
-  ctx.reply("Вы выбрали раздел «Тесты».");
-});
-
-bot.hears("📚 Материалы", async (ctx) => {
-  ctx.reply("Вы выбрали раздел «Материалы». Выберите действие:", {
-    reply_markup: materialsMenuInlineKeyboard,
-  });
-  await sendMaterialsList(ctx); // Отправляем список материалов
-});
-
-bot.hears("🏆 Мои результаты", (ctx) => {
-  ctx.reply("Вы выбрали раздел «Мои результаты».");
-});
-
-// Обработчик для inline кнопок
-bot.action("tests", (ctx) => {
-  ctx.reply("Вы выбрали раздел «Тесты».");
-});
-
-bot.action("materials", async (ctx) => {
-  ctx.reply("Вы выбрали раздел «Материалы». Выберите действие:", {
-    reply_markup: materialsMenuInlineKeyboard,
-  });
-  await sendMaterialsList(ctx);
-});
-
-bot.action("results", (ctx) => {
-  ctx.reply("Вы выбрали раздел «Мои результаты».");
-});
-
-// Привязываем обработчик к кнопке
-
-bot.action("back_to_main", (ctx) => {
-  ctx.reply("Выберите раздел:", {
-    reply_markup: mainMenuInlineKeyboard,
-  });
-});
-// Обработчик для кнопки "Добавить материал"
-// Создаём сцену для добавления материала
-const addMaterialScene = new Scenes.BaseScene("ADD_MATERIAL");
-
-addMaterialScene.enter(async (ctx) => {
-  console.log("Вход в сцену 'ADD_MATERIAL'."); // Логируем вход в сцену
-  ctx.session.material = {}; // Инициализируем объект для хранения данных
-  await ctx.reply("Это раздел или статья?", {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "Раздел", callback_data: "section" }],
-        [{ text: "Статья", callback_data: "article" }],
-      ],
-    },
-  });
-});
-
-bot.action("section", async (ctx) => {
-  console.log("Обработчик 'section' вызван."); // Логируем вызов обработчика
-  if (!ctx.session) ctx.session = {}; // Инициализируем ctx.session, если он отсутствует
-  if (!ctx.session.material) ctx.session.material = {}; // Проверяем и инициализируем объект
-  ctx.session.material.type = "section";
-  console.log("Сессия после установки type:", ctx.session.material); // Логируем состояние
-  await ctx.reply("Введите название раздела:");
-});
-
-bot.action("article", async (ctx) => {
-  if (!ctx.session.material) ctx.session.material = {}; // Проверяем и инициализируем объект
-  ctx.session.material.type = "article";
-  await ctx.reply("Введите название статьи:");
-});
-
-addMaterialScene.on("text", async (ctx) => {
-  if (!ctx.session) ctx.session = {}; // Инициализируем сессию, если она отсутствует
-  if (!ctx.session.material) ctx.session.material = {}; // Инициализируем объект material, если он отсутствует
-
-  console.log("Получено сообщение:", ctx.message.text); // Логируем текст сообщения
-  console.log("Сессия материала перед проверкой:", ctx.session.material); // Логируем объект ctx.session.material
-
-  if (ctx.session.material.type === "section" && !ctx.session.material.name) {
-    ctx.session.material.name = ctx.message.text;
-
-    // Сохраняем раздел в базу данных
-    db.run(
-      "INSERT INTO sections (name) VALUES (?)",
-      [ctx.session.material.name],
-      (err) => {
-        if (err) {
-          console.error("Ошибка при добавлении раздела:", err); // Логируем ошибку
-          ctx.reply("Ошибка при добавлении раздела.");
-        } else {
-          console.log("Раздел успешно добавлен:", ctx.session.material.name); // Логируем успех
-          ctx.reply(`Раздел "${ctx.session.material.name}" успешно добавлен!`);
-          ctx.scene.leave(); // Выходим из сцены
-        }
-      }
+// Главное меню
+bot.command('start', async (ctx) => {
+    return await ctx.reply('Выберите действие:', 
+        Markup.inlineKeyboard([
+            [Markup.button.callback('Тесты', 'tests')],
+            [Markup.button.callback('Материалы', 'materials')],
+            [Markup.button.callback('Мои результаты', 'results')],
+            [Markup.button.callback('🗑 Очистить базу', 'clear_db')]
+        ])
     );
-  } else {
-    console.log("Условие не выполнено. Состояние ctx.session.material:", ctx.session.material); // Логируем состояние
-    ctx.reply("Произошла ошибка. Убедитесь, что вы вводите корректные данные.");
-  }
 });
 
-bot.action(/section_(\d+)/, (ctx) => {
-  ctx.session.material.section_id = ctx.match[1];
-  ctx.reply("Раздел выбран. Введите текст статьи.");
-});
-
-addMaterialScene.on("photo", async (ctx) => {
-  const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-  ctx.session.material.photo = photo;
-
-  try {
-    // Получаем ссылку на файл через Telegram API
-    const fileLink = await ctx.telegram.getFileLink(photo);
-
-    // Загружаем файл
-    const response = await fetch(fileLink.href);
-    const buffer = await response.buffer();
-
-    // Сохраняем файл на диск
-    const fileName = `${photo}.jpg`; // Уникальное имя файла
-    await saveFile(buffer, fileName);
-
-    // Сохраняем запись в базу данных
-    db.run(
-      "INSERT INTO materials (title, content, photo, section_id) VALUES (?, ?, ?, ?)",
-      [
-        ctx.session.material.title,
-        ctx.session.material.content,
-        fileName, // Сохраняем имя файла вместо file_id
-        ctx.session.material.section_id,
-      ],
-      (err) => {
-        if (err) {
-          console.error("Ошибка при добавлении материала:", err);
-          ctx.reply("Ошибка при добавлении материала.");
-        } else {
-          ctx.reply("Материал успешно добавлен!");
-        }
-      }
+// Обработка кнопки "Материалы"
+bot.action('materials', async (ctx) => {
+    await ctx.answerCbQuery();
+    const categories = await getCategories();
+    const buttons = categories.map(cat => [
+        Markup.button.callback(cat.name, `category:${cat.id}`)
+    ]);
+    buttons.push([Markup.button.callback('Добавить категорию', 'add_category')]);
+    
+    await ctx.editMessageText('Выберите категорию:', 
+        Markup.inlineKeyboard(buttons)
     );
-
-    // После добавления материала отправляем список всех материалов
-    await sendMaterialsList(ctx);
-    await ctx.scene.leave(); // Выход из сцены
-  } catch (error) {
-    console.error("Ошибка при обработке фото:", error);
-    ctx.reply("Произошла ошибка при обработке фото.");
-  }
 });
 
-// Обработчик для открытия материала по нажатию кнопки
-bot.action(/open_material_(\d+)/, async (ctx) => {
-  const materialId = ctx.match[1];
-  db.get("SELECT * FROM materials WHERE id = ?", [materialId], async (err, row) => {
-    if (err) {
-      console.error("Ошибка при получении материала:", err);
-      await ctx.reply("Произошла ошибка при получении материала.");
+// Обработка выбора категории
+bot.action(/^category:(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const categoryId = parseInt(ctx.match[1]);
+    const sections = await getSections(categoryId);
+    
+    const buttons = sections.map(section => [
+        Markup.button.callback(section.name, `section:${section.id}`)
+    ]);
+    buttons.push([Markup.button.callback('Добавить раздел', `add_section:${categoryId}`)]);
+    buttons.push([Markup.button.callback('« Назад к категориям', 'materials')]);
+
+    await ctx.editMessageText('Выберите раздел:', 
+        Markup.inlineKeyboard(buttons)
+    );
+});
+
+// Обработка выбора раздела
+bot.action(/^section:(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const sectionId = parseInt(ctx.match[1]);
+    const articles = await getArticles(sectionId);
+    const section = await getSectionById(sectionId);
+    
+    const buttons = articles.map(article => [
+        Markup.button.callback(article.title, `article:${article.id}`)
+    ]);
+    buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
+    buttons.push([Markup.button.callback('« Назад к разделам', `category:${section.category_id}`)]);
+
+    await ctx.editMessageText('Выберите статью:', 
+        Markup.inlineKeyboard(buttons)
+    );
+});
+
+// Просмотр статьи
+bot.action(/^article:(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const articleId = parseInt(ctx.match[1]);
+    const article = await getArticleById(articleId);
+    const section = await getSectionById(article.section_id);
+    
+    const caption = `${article.title}\n\n${article.description}`;
+    const buttons = [[
+        Markup.button.callback('« Назад к статьям', `section:${article.section_id}`)
+    ]];
+
+    if (article.image_path) {
+        await ctx.deleteMessage();
+        await ctx.replyWithPhoto(
+            { source: article.image_path },
+            { 
+                caption,
+                ...Markup.inlineKeyboard(buttons)
+            }
+        );
     } else {
-      const filePath = `fs-files/photo/${row.photo}`;
-      if (fs.existsSync(filePath)) {
-        // Разбиваем текст на части, если он слишком длинный
-        const caption = `${row.title}\n\n${row.content}`;
-        const parts = splitText(caption, 1024); // Разбиваем текст на части
-
-        // Отправляем фото с первой частью текста
-        await ctx.replyWithPhoto({ source: filePath }, { caption: parts[0] });
-
-        // Отправляем остальные части текста
-        for (let i = 1; i < parts.length; i++) {
-          await ctx.reply(parts[i]);
-        }
-      } else {
-        await ctx.reply("Файл не найден.");
-      }
+        await ctx.editMessageText(caption, 
+            Markup.inlineKeyboard(buttons)
+        );
     }
-  });
 });
 
-// Функция для разбивки текста на части
-function splitText(text, maxLength) {
-  const parts = [];
-  while (text.length > maxLength) {
-    let part = text.slice(0, maxLength);
-    const lastSpace = part.lastIndexOf(" ");
-    if (lastSpace > -1) {
-      part = part.slice(0, lastSpace); // Разбиваем по последнему пробелу
-    }
-    parts.push(part);
-    text = text.slice(part.length).trim();
-  }
-  parts.push(text); // Добавляем оставшийся текст
-  return parts;
-}
-
-// Обработчик кнопки "Назад" для возврата к списку материалов
-bot.action("back_to_materials", async (ctx) => {
-  await sendMaterialsList(ctx);
-});
-// Функция для отправки списка всех материалов
-async function sendMaterialsList(ctx) {
-  db.all("SELECT * FROM sections", (err, sections) => {
-    if (err) {
-      console.error("Ошибка при получении разделов:", err);
-      ctx.reply("Произошла ошибка при получении разделов.");
-    } else {
-      const keyboard = sections.map((section) => [
-        { text: section.name, callback_data: `open_section_${section.id}` },
-      ]);
-      ctx.reply("Выберите раздел:", {
-        reply_markup: { inline_keyboard: keyboard },
-      });
-    }
-  });
-}
-
-bot.action(/open_section_(\d+)/, (ctx) => {
-  const sectionId = ctx.match[1];
-  db.all(
-    "SELECT * FROM materials WHERE section_id = ?",
-    [sectionId],
-    (err, rows) => {
-      if (err) {
-        console.error("Ошибка при получении материалов:", err);
-        ctx.reply("Произошла ошибка при получении материалов.");
-      } else {
-        const keyboard = rows.map((row) => [
-          { text: row.title, callback_data: `open_material_${row.id}` },
-        ]);
-        ctx.reply("Выберите материал:", {
-          reply_markup: { inline_keyboard: keyboard },
+// Очистка базы данных
+bot.action('clear_db', async (ctx) => {
+    await ctx.answerCbQuery();
+    
+    // Удаляем все данные из таблиц
+    await new Promise((resolve, reject) => {
+        db.run('DELETE FROM articles', (err) => {
+            if (err) reject(err);
+            db.run('DELETE FROM sections', (err) => {
+                if (err) reject(err);
+                db.run('DELETE FROM categories', (err) => {
+                    if (err) reject(err);
+                    resolve();
+                });
+            });
         });
-      }
-    }
-  );
+    });
+
+    // Очищаем папку с загруженными фотографиями
+    await fs.emptyDir('uploads');
+
+    await ctx.editMessageText('База данных очищена! Отправьте /start для начала работы');
 });
 
-// Функция для получения списка разделов
-async function getSections() {
-  return new Promise((resolve, reject) => {
-    db.all("SELECT * FROM sections", (err, rows) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(rows);
-      }
+// Добавление категории
+bot.action('add_category', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.reply('Введите название новой категории:');
+    await ctx.deleteMessage();
+});
+
+// Добавление раздела
+bot.action(/^add_section:(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const categoryId = parseInt(ctx.match[1]);
+    ctx.session = { addingSection: categoryId };
+    await ctx.reply('Введите название нового раздела:');
+    await ctx.deleteMessage();
+});
+
+// Добавление статьи
+bot.action(/^add_article:(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const sectionId = parseInt(ctx.match[1]);
+    ctx.session = { addingArticle: sectionId };
+    await ctx.reply('Введите заголовок статьи:');
+    await ctx.deleteMessage();
+});
+
+// Обработка текстовых сообщений
+bot.on('text', async (ctx) => {
+    // Добавление категории
+    if (ctx.message.text && !ctx.session) {
+        await addCategory(ctx.message.text);
+        await ctx.reply('Категория добавлена!');
+        const categories = await getCategories();
+        const buttons = categories.map(cat => [
+            Markup.button.callback(cat.name, `category:${cat.id}`)
+        ]);
+        buttons.push([Markup.button.callback('Добавить категорию', 'add_category')]);
+        
+        await ctx.reply('Выберите категорию:', 
+            Markup.inlineKeyboard(buttons)
+        );
+        return;
+    }
+
+    // Добавление раздела
+    if (ctx.session?.addingSection) {
+        const categoryId = ctx.session.addingSection;
+        await addSection(ctx.message.text, categoryId);
+        ctx.session = null;
+        
+        const sections = await getSections(categoryId);
+        const buttons = sections.map(section => [
+            Markup.button.callback(section.name, `section:${section.id}`)
+        ]);
+        buttons.push([Markup.button.callback('Добавить раздел', `add_section:${categoryId}`)]);
+        buttons.push([Markup.button.callback('« Назад к категориям', 'materials')]);
+        
+        await ctx.reply('Раздел добавлен!');
+        await ctx.reply('Выберите раздел:', 
+            Markup.inlineKeyboard(buttons)
+        );
+        return;
+    }
+
+    // Добавление статьи - этап 1: заголовок
+    if (ctx.session?.addingArticle && !ctx.session.articleTitle) {
+        ctx.session.articleTitle = ctx.message.text;
+        await ctx.reply('Введите описание статьи:');
+        return;
+    }
+
+    // Добавление статьи - этап 2: описание
+    if (ctx.session?.addingArticle && ctx.session.articleTitle && !ctx.session.articleDescription) {
+        ctx.session.articleDescription = ctx.message.text;
+        await ctx.reply('Отправьте фотографию для статьи (или отправьте любой текст, чтобы пропустить):');
+        return;
+    }
+
+    // Добавление статьи - этап 3: пропуск фото
+    if (ctx.session?.addingArticle && ctx.session.articleTitle && ctx.session.articleDescription) {
+        const sectionId = ctx.session.addingArticle;
+        await addArticle(
+            ctx.session.articleTitle,
+            ctx.session.articleDescription,
+            null,
+            sectionId
+        );
+
+        const section = await getSectionById(sectionId);
+        const articles = await getArticles(sectionId);
+        const buttons = articles.map(article => [
+            Markup.button.callback(article.title, `article:${article.id}`)
+        ]);
+        buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
+        buttons.push([Markup.button.callback('« Назад к разделам', `category:${section.category_id}`)]);
+
+        ctx.session = null;
+        await ctx.reply('Статья добавлена!');
+        await ctx.reply('Выберите статью:', 
+            Markup.inlineKeyboard(buttons)
+        );
+    }
+});
+
+// Обработка фотографий для статей
+bot.on('photo', async (ctx) => {
+    if (ctx.session?.addingArticle && ctx.session.articleTitle && ctx.session.articleDescription) {
+        const sectionId = ctx.session.addingArticle;
+        const photo = ctx.message.photo[ctx.message.photo.length - 1];
+        const file = await ctx.telegram.getFile(photo.file_id);
+        const fileName = `${Date.now()}.jpg`;
+        const filePath = path.join('uploads', fileName);
+        
+        const fileUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+        const response = await fetch(fileUrl);
+        const buffer = await response.buffer();
+        await fs.writeFile(filePath, buffer);
+
+        await addArticle(
+            ctx.session.articleTitle,
+            ctx.session.articleDescription,
+            filePath,
+            sectionId
+        );
+
+        const section = await getSectionById(sectionId);
+        const articles = await getArticles(sectionId);
+        const buttons = articles.map(article => [
+            Markup.button.callback(article.title, `article:${article.id}`)
+        ]);
+        buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
+        buttons.push([Markup.button.callback('« Назад к разделам', `category:${section.category_id}`)]);
+
+        ctx.session = null;
+        await ctx.reply('Статья добавлена!');
+        await ctx.reply('Выберите статью:', 
+            Markup.inlineKeyboard(buttons)
+        );
+    }
+});
+
+// Вспомогательные функции для работы с БД
+function getCategories() {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM categories', (err, rows) => {
+            if (err) reject(err);
+            resolve(rows || []);
+        });
     });
-  });
 }
 
-// Подключаем сцену к Stage
-const stage = new Scenes.Stage([addMaterialScene]);
-
-bot.use(session());
-bot.use(stage.middleware());
-
-// Обработчик нажатия кнопки "Добавить материал"
-bot.action("add_material", async (ctx) => {
-  console.log("Сцена 'ADD_MATERIAL' активирована."); // Логируем активацию сцены
-  await ctx.scene.enter("ADD_MATERIAL");
-});
-
-// Обработчик для временной кнопки "Очистить материалы"
-bot.hears("❌ Очистить материалы", async (ctx) => {
-  try {
-    db.run("DELETE FROM materials", (err) => {
-      if (err) {
-        console.error("Ошибка при очистке материалов:", err);
-        ctx.reply("Произошла ошибка при очистке материалов.");
-      } else {
-        ctx.reply("Все материалы успешно удалены!");
-      }
+function getCategoryById(id) {
+    return new Promise((resolve, reject) => {
+        db.get('SELECT * FROM categories WHERE id = ?', [id], (err, row) => {
+            if (err) reject(err);
+            resolve(row);
+        });
     });
-  } catch (error) {
-    console.error("Ошибка при обработке команды очистки:", error);
-    ctx.reply("Произошла ошибка при очистке материалов.");
-  }
-});
+}
 
-// Обработчик для кнопки "Добавить раздел"
-bot.action("add_section", async (ctx) => {
-  console.log("Обработчик 'add_section' вызван."); // Логируем вызов обработчика
-  await ctx.reply("Введите название раздела:");
-  
-  // Переходим в режим ожидания текста
-  bot.once("text", async (ctx) => {
-    const sectionName = ctx.message.text.trim();
+function addCategory(name) {
+    return new Promise((resolve, reject) => {
+        db.run('INSERT INTO categories (name) VALUES (?)', [name], (err) => {
+            if (err) reject(err);
+            resolve();
+        });
+    });
+}
 
-    if (!sectionName) {
-      await ctx.reply("Название раздела не может быть пустым. Попробуйте снова.");
-      return;
-    }
+function getSections(categoryId) {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM sections WHERE category_id = ?', [categoryId], (err, rows) => {
+            if (err) reject(err);
+            resolve(rows || []);
+        });
+    });
+}
 
-    // Сохраняем раздел в базу данных
-    db.run(
-      "INSERT INTO sections (name) VALUES (?)",
-      [sectionName],
-      (err) => {
-        if (err) {
-          console.error("Ошибка при добавлении раздела:", err); // Логируем ошибку
-          ctx.reply("Ошибка при добавлении раздела.");
-        } else {
-          console.log("Раздел успешно добавлен:", sectionName); // Логируем успех
-          ctx.reply(`Раздел "${sectionName}" успешно добавлен!`);
-        }
-      }
-    );
-  });
-});
+function getSectionById(id) {
+    return new Promise((resolve, reject) => {
+        db.get('SELECT * FROM sections WHERE id = ?', [id], (err, row) => {
+            if (err) reject(err);
+            resolve(row);
+        });
+    });
+}
 
-// Запуск бота
-bot.launch();
+function addSection(name, categoryId) {
+    return new Promise((resolve, reject) => {
+        db.run('INSERT INTO sections (name, category_id) VALUES (?, ?)', 
+            [name, categoryId], (err) => {
+                if (err) reject(err);
+                resolve();
+            });
+    });
+}
 
-// API для составления тестов и дашборда
-const express = require("express");
-const app = express();
+function getArticles(sectionId) {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM articles WHERE section_id = ?', [sectionId], (err, rows) => {
+            if (err) reject(err);
+            resolve(rows || []);
+        });
+    });
+}
 
-app.get("/tests", (req, res) => {
-  res.send("Логика для генерации теста");
-});
+function getArticleById(id) {
+    return new Promise((resolve, reject) => {
+        db.get('SELECT * FROM articles WHERE id = ?', [id], (err, row) => {
+            if (err) reject(err);
+            resolve(row);
+        });
+    });
+}
 
-app.get("/results", (req, res) => {
-  res.send("Логика для получения результатов тестов");
-});
+function addArticle(title, description, imagePath, sectionId) {
+    return new Promise((resolve, reject) => {
+        db.run(
+            'INSERT INTO articles (title, description, image_path, section_id) VALUES (?, ?, ?, ?)',
+            [title, description, imagePath, sectionId],
+            (err) => {
+                if (err) reject(err);
+                resolve();
+            }
+        );
+    });
+}
 
-app.listen(3000, () => console.log("API server started on port 3000"));
+bot.launch(() => console.log('Бот запущен!'));
