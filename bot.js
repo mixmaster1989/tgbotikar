@@ -41,12 +41,11 @@ db.serialize(() => {
                   console.log("Столбец photo успешно добавлен.");
                 }
               });
-            }
           }
-        });
-      }
+        }
+      });
     }
-  );
+  }
 });
 
 // Создание экземпляра бота с вашим токеном
@@ -147,6 +146,7 @@ addMaterialScene.on("photo", async (ctx) => {
 await sendMaterialsList(ctx);
 
 await ctx.scene.leave(); // Выход из сцены
+}); // Закрытие addMaterialScene.on("photo")
 
 // Обработчик для открытия материала по нажатию кнопки
 bot.action(/open_material_(\d+)/, async (ctx) => {
