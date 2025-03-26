@@ -36,6 +36,7 @@ const mainMenuInlineKeyboard = {
 
 const materialsMenuInlineKeyboard = {
   inline_keyboard: [
+    [{ text: "Добавить раздел", callback_data: "add_section" }],
     [{ text: "Добавить материал", callback_data: "add_material" }],
     [{ text: "Назад", callback_data: "back_to_main" }],
   ],
@@ -335,7 +336,36 @@ bot.hears("❌ Очистить материалы", async (ctx) => {
   }
 });
 
+// Обработчик для кнопки "Добавить раздел"
+bot.action("add_section", async (ctx) => {
+  console.log("Обработчик 'add_section' вызван."); // Логируем вызов обработчика
+  await ctx.reply("Введите название раздела:");
+  
+  // Переходим в режим ожидания текста
+  bot.once("text", async (ctx) => {
+    const sectionName = ctx.message.text.trim();
 
+    if (!sectionName) {
+      await ctx.reply("Название раздела не может быть пустым. Попробуйте снова.");
+      return;
+    }
+
+    // Сохраняем раздел в базу данных
+    db.run(
+      "INSERT INTO sections (name) VALUES (?)",
+      [sectionName],
+      (err) => {
+        if (err) {
+          console.error("Ошибка при добавлении раздела:", err); // Логируем ошибку
+          ctx.reply("Ошибка при добавлении раздела.");
+        } else {
+          console.log("Раздел успешно добавлен:", sectionName); // Логируем успех
+          ctx.reply(`Раздел "${sectionName}" успешно добавлен!`);
+        }
+      }
+    );
+  });
+});
 
 // Запуск бота
 bot.launch();
