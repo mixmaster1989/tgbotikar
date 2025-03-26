@@ -133,38 +133,20 @@ addMaterialScene.on("photo", async (ctx) => {
       ctx.session.material.content,
       ctx.session.material.photo,
     ],
-<<<<<<< HEAD
-    (err) => {
-      if (err) {
-        console.error("Ошибка при добавлении материала:", err);
-        ctx.reply("Ошибка при добавлении материала.");
-      } else {
-        ctx.reply("Материал успешно добавлен!");
-      }
+  (err) => {
+    if (err) {
+      console.error("Ошибка при добавлении материала:", err);
+      ctx.reply("Ошибка при добавлении материала.");
+    } else {
+      ctx.reply("Материал успешно добавлен!");
     }
-  );
+  }
+);
 
-  // После добавления материала отправляем список всех материалов
-  await sendMaterialsList(ctx);
+// После добавления материала отправляем список всех материалов
+await sendMaterialsList(ctx);
 
-  await ctx.scene.leave(); // Выход из сцены
-//await bot.sendPhoto(chatId, photo, { caption: caption });
-=======
->>>>>>> 158d72316d96da646b955659d9f17efdc3d91a5d
-    (err) => {
-      if (err) {
-        console.error("Ошибка при добавлении материала:", err);
-        ctx.reply("Ошибка при добавлении материала.");
-      } else {
-        ctx.reply("Материал успешно добавлен!");
-      }
-    }
-  );
-  await bot.sendPhoto(chatId, photo, { caption: caption });
-  // После добавления материала отправляем список всех материалов
-  await sendMaterialsList(ctx);
-
-  await ctx.scene.leave(); // Выход из сцены
+await ctx.scene.leave(); // Выход из сцены
 
 // Обработчик для открытия материала по нажатию кнопки
 bot.action(/open_material_(\d+)/, async (ctx) => {
