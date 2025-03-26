@@ -10,11 +10,10 @@ async function saveFile(file, fileName) {
         const filePath = path.join(mediaPath, fileName);
         await fs.ensureDir(mediaPath); // Создаём папку, если её нет
         await fs.writeFile(filePath, file); // Сохраняем файл
-console.log('Файл сохранён:', filePath);
-} 
-catch (error) {
-    console.error('Ошибка при сохранении файла:', error);
-}
+        console.log('Файл сохранён:', filePath);
+    } catch (error) {
+        console.error('Ошибка при сохранении файла:', error);
+    }
 }
 
 // Получение файла
@@ -29,15 +28,11 @@ async function getFile(fileName) {
         }
     } catch (error) {
         console.error('Ошибка при получении файла:', error);
+    }
+}
 
 // Экспорт функций
 module.exports = {
     saveFile,
     getFile,
 };
-
-
-
-
-            }
-        }
