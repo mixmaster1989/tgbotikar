@@ -2,7 +2,7 @@ const fs = require('fs-extra');
 const path = require('path');
 
 // Путь к папке для фото и видео
-const mediaPath = path.join(/fs-files/, 'photo');
+const mediaPath = path.join('fs-files', 'photo');
 
 // Сохранение файла
 async function saveFile(file, fileName) {
