@@ -330,22 +330,7 @@ bot.hears("❌ Очистить материалы", async (ctx) => {
   }
 });
 
-// Переместите этот обработчик в конец файла
-bot.on("text", async (ctx) => {
-  const query = ctx.message.text;
 
-  try {
-    const results = await searchInDatabase(query);
-    if (results.length > 0) {
-      ctx.reply(results.join("\n"));
-    } else {
-      ctx.reply("По вашему запросу ничего не найдено.");
-    }
-  } catch (err) {
-    ctx.reply("Произошла ошибка при поиске.");
-    console.error(err);
-  }
-});
 
 // Запуск бота
 bot.launch();
