@@ -53,6 +53,15 @@ db.serialize(() => {
   );
 });
 
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS sections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT
+  )`);
+
+  db.run(`ALTER TABLE materials ADD COLUMN section_id INTEGER DEFAULT NULL`);
+});
+
 // Создание экземпляра бота с вашим токеном
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -132,17 +141,66 @@ const addMaterialScene = new Scenes.BaseScene("ADD_MATERIAL");
 
 addMaterialScene.enter(async (ctx) => {
   ctx.session.material = {}; // Создаём объект для хранения данных
+  await ctx.reply("Это раздел или статья?", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "Раздел", callback_data: "section" }],
+        [{ text: "Статья", callback_data: "article" }],
+      ],
+    },
+  });
+});
+
+bot.action("section", async (ctx) => {
+  ctx.session.material.type = "section";
+  await ctx.reply("Введите название раздела:");
+});
+
+bot.action("article", async (ctx) => {
+  ctx.session.material.type = "article";
   await ctx.reply("Введите название статьи:");
 });
 
 addMaterialScene.on("text", async (ctx) => {
-  if (!ctx.session.material.title) {
-    ctx.session.material.title = ctx.message.text;
-    await ctx.reply("Введите текст статьи:");
-  } else if (!ctx.session.material.content) {
-    ctx.session.material.content = ctx.message.text;
-    await ctx.reply("Отправьте фото для статьи:");
+  if (ctx.session.material.type === "section" && !ctx.session.material.name) {
+    ctx.session.material.name = ctx.message.text;
+
+    // Сохраняем раздел в базу данных
+    db.run(
+      "INSERT INTO sections (name) VALUES (?)",
+      [ctx.session.material.name],
+      (err) => {
+        if (err) {
+          console.error("Ошибка при добавлении раздела:", err);
+          ctx.reply("Ошибка при добавлении раздела.");
+        } else {
+          ctx.reply("Раздел успешно добавлен!");
+          ctx.scene.leave();
+        }
+      }
+    );
+  } else if (ctx.session.material.type === "article") {
+    if (!ctx.session.material.title) {
+      ctx.session.material.title = ctx.message.text;
+
+      // Запрашиваем текст статьи
+      const sections = await getSections();
+      const keyboard = sections.map((section) => [
+        { text: section.name, callback_data: `section_${section.id}` },
+      ]);
+      await ctx.reply("Выберите раздел для статьи:", {
+        reply_markup: { inline_keyboard: keyboard },
+      });
+    } else if (!ctx.session.material.content) {
+      ctx.session.material.content = ctx.message.text;
+      await ctx.reply("Отправьте фото для статьи:");
+    }
   }
+});
+
+bot.action(/section_(\d+)/, (ctx) => {
+  ctx.session.material.section_id = ctx.match[1];
+  ctx.reply("Раздел выбран. Введите текст статьи.");
 });
 
 addMaterialScene.on("photo", async (ctx) => {
@@ -163,11 +221,12 @@ addMaterialScene.on("photo", async (ctx) => {
 
     // Сохраняем запись в базу данных
     db.run(
-      "INSERT INTO materials (title, content, photo) VALUES (?, ?, ?)",
+      "INSERT INTO materials (title, content, photo, section_id) VALUES (?, ?, ?, ?)",
       [
         ctx.session.material.title,
         ctx.session.material.content,
         fileName, // Сохраняем имя файла вместо file_id
+        ctx.session.material.section_id,
       ],
       (err) => {
         if (err) {
@@ -238,23 +297,52 @@ bot.action("back_to_materials", async (ctx) => {
 });
 // Функция для отправки списка всех материалов
 async function sendMaterialsList(ctx) {
-  db.all("SELECT * FROM materials", (err, rows) => {
+  db.all("SELECT * FROM sections", (err, sections) => {
     if (err) {
-      console.error("Ошибка при получении списка материалов:", err);
-      ctx.reply("Произошла ошибка при получении списка материалов.");
+      console.error("Ошибка при получении разделов:", err);
+      ctx.reply("Произошла ошибка при получении разделов.");
     } else {
-      const keyboard = rows.map((row) => [
-        {
-          text: row.title,
-          callback_data: `open_material_${row.id}`,
-        },
+      const keyboard = sections.map((section) => [
+        { text: section.name, callback_data: `open_section_${section.id}` },
       ]);
-      ctx.reply("Выберите материал:", {
-        reply_markup: {
-          inline_keyboard: keyboard,
-        },
+      ctx.reply("Выберите раздел:", {
+        reply_markup: { inline_keyboard: keyboard },
       });
     }
+  });
+}
+
+bot.action(/open_section_(\d+)/, (ctx) => {
+  const sectionId = ctx.match[1];
+  db.all(
+    "SELECT * FROM materials WHERE section_id = ?",
+    [sectionId],
+    (err, rows) => {
+      if (err) {
+        console.error("Ошибка при получении материалов:", err);
+        ctx.reply("Произошла ошибка при получении материалов.");
+      } else {
+        const keyboard = rows.map((row) => [
+          { text: row.title, callback_data: `open_material_${row.id}` },
+        ]);
+        ctx.reply("Выберите материал:", {
+          reply_markup: { inline_keyboard: keyboard },
+        });
+      }
+    }
+  );
+});
+
+// Функция для получения списка разделов
+async function getSections() {
+  return new Promise((resolve, reject) => {
+    db.all("SELECT * FROM sections", (err, rows) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(rows);
+      }
+    });
   });
 }
 
