@@ -133,6 +133,7 @@ addMaterialScene.on("photo", async (ctx) => {
       ctx.session.material.content,
       ctx.session.material.photo,
     ],
+<<<<<<< HEAD
     (err) => {
       if (err) {
         console.error("Ошибка при добавлении материала:", err);
@@ -148,6 +149,8 @@ addMaterialScene.on("photo", async (ctx) => {
 
   await ctx.scene.leave(); // Выход из сцены
 //await bot.sendPhoto(chatId, photo, { caption: caption });
+=======
+>>>>>>> 158d72316d96da646b955659d9f17efdc3d91a5d
     (err) => {
       if (err) {
         console.error("Ошибка при добавлении материала:", err);
@@ -157,6 +160,7 @@ addMaterialScene.on("photo", async (ctx) => {
       }
     }
   );
+  await bot.sendPhoto(chatId, photo, { caption: caption });
   // После добавления материала отправляем список всех материалов
   await sendMaterialsList(ctx);
 
@@ -166,17 +170,19 @@ addMaterialScene.on("photo", async (ctx) => {
 bot.action(/open_material_(\d+)/, async (ctx) => {
   const materialId = ctx.match[1];
   db.get("SELECT * FROM materials WHERE id = ?", [materialId], (err, row) => {
-      if (err) {
-          console.error("Ошибка при получении материала:", err);
-          ctx.reply("Произошла ошибка при получении материала.");
-      } else {
-          ctx.replyWithPhoto(row.photo, {
-              caption: `${row.title}\n\n${row.content}`,
-              reply_markup: {
-                  inline_keyboard: [[{ text: "Назад", callback_data: "back_to_materials" }]],
-              },
-          });
-      }
+    if (err) {
+      console.error("Ошибка при получении материала:", err);
+      ctx.reply("Произошла ошибка при получении материала.");
+    } else {
+      ctx.replyWithPhoto(row.photo, {
+        caption: `${row.title}\n\n${row.content}`,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Назад", callback_data: "back_to_materials" }],
+          ],
+        },
+      });
+    }
   });
 });
 // Обработчик кнопки "Назад" для возврата к списку материалов
