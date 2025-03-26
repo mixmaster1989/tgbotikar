@@ -100,6 +100,7 @@ bot.action("back_to_main", (ctx) => {
 const addMaterialScene = new Scenes.BaseScene("ADD_MATERIAL");
 
 addMaterialScene.enter(async (ctx) => {
+  console.log("Вход в сцену 'ADD_MATERIAL'."); // Логируем вход в сцену
   ctx.session.material = {}; // Инициализируем объект для хранения данных
   await ctx.reply("Это раздел или статья?", {
     reply_markup: {
@@ -313,6 +314,7 @@ bot.use(stage.middleware());
 
 // Обработчик нажатия кнопки "Добавить материал"
 bot.action("add_material", async (ctx) => {
+  console.log("Сцена 'ADD_MATERIAL' активирована."); // Логируем активацию сцены
   await ctx.scene.enter("ADD_MATERIAL");
 });
 
