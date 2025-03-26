@@ -112,9 +112,11 @@ addMaterialScene.enter(async (ctx) => {
 });
 
 bot.action("section", async (ctx) => {
+  console.log("Обработчик 'section' вызван."); // Логируем вызов обработчика
   if (!ctx.session) ctx.session = {}; // Инициализируем ctx.session, если он отсутствует
   if (!ctx.session.material) ctx.session.material = {}; // Проверяем и инициализируем объект
   ctx.session.material.type = "section";
+  console.log("Сессия после установки type:", ctx.session.material); // Логируем состояние
   await ctx.reply("Введите название раздела:");
 });
 
