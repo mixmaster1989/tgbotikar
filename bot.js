@@ -72,15 +72,32 @@ const materialsMenuInlineKeyboard = {
   ],
 };
 
+const mainMenuKeyboard = {
+  reply_markup: {
+    keyboard: [
+      [{ text: "🧠 Тесты" }, { text: "📚 Материалы" }, { text: "🏆 Мои результаты" }],
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false,
+  },
+};
+
 // Приветственное сообщение
 bot.start(async (ctx) => {
-  await ctx.telegram.sendPhoto(
-    ctx.chat.id,
-    "https://20.img.avito.st/image/1/Celhwra_pQAXbDcIf54Yl-thowrfoaqS3WGnBtlnpwDVJw"
-  );
-  await ctx.reply("Приветствую на обучающем портале ИКАР!", {
-    reply_markup: mainMenuInlineKeyboard,
-  });
+  await ctx.reply("Приветствую на обучающем портале ИКАР!", mainMenuKeyboard);
+});
+
+bot.hears("🧠 Тесты", (ctx) => {
+  ctx.reply("Вы выбрали раздел «Тесты».");
+});
+
+bot.hears("📚 Материалы", async (ctx) => {
+  ctx.reply("Вы выбрали раздел «Материалы». Выберите действие:");
+  await sendMaterialsList(ctx);
+});
+
+bot.hears("🏆 Мои результаты", (ctx) => {
+  ctx.reply("Вы выбрали раздел «Мои результаты».");
 });
 
 // Обработчик для inline кнопок
