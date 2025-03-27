@@ -113,7 +113,7 @@ bot.action(/^article:(\d+)$/, async (ctx) => {
     const article = await getArticleById(articleId);
     const section = await getSectionById(article.section_id);
     
-    const caption = `${article.title}\n\n${article.description}`;
+    let caption = `${article.title}\n\n${article.description}`;
     const buttons = [
         [Markup.button.callback('« Назад к статьям', `section:${article.section_id}`)],
         [Markup.button.callback('« На главную', 'main_menu')]
@@ -121,6 +121,13 @@ bot.action(/^article:(\d+)$/, async (ctx) => {
     
     if (article.image_path) {
         await ctx.deleteMessage();
+
+        // Отправляем текст отдельно, если он слишком длинный
+        if (caption.length > 1024) {
+            await ctx.reply(`${article.title}\n\n${article.description}`);
+            caption = ""; // Очищаем caption для фотографии
+        }
+
         await ctx.replyWithPhoto(
             { source: article.image_path },
             { 
