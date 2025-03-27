@@ -3,7 +3,41 @@ const sqlite3 = require('sqlite3').verbose();
 const fetch = require("node-fetch");
 const fs = require('fs-extra');
 const path = require('path');
+const mammoth = require('mammoth');
 require('dotenv').config();
+
+// Путь к папке с материалами
+const materialsPath = path.join(__dirname, 'materials');
+
+// Функция для получения структуры папок и файлов
+async function getMaterialsStructure() {
+    const categories = await fs.readdir(materialsPath);
+    const structure = {};
+
+    for (const category of categories) {
+        const categoryPath = path.join(materialsPath, category);
+        if (await fs.stat(categoryPath).then(stat => stat.isDirectory())) {
+            structure[category] = {};
+            const sections = await fs.readdir(categoryPath);
+
+            for (const section of sections) {
+                const sectionPath = path.join(categoryPath, section);
+                if (await fs.stat(sectionPath).then(stat => stat.isDirectory())) {
+                    const files = await fs.readdir(sectionPath);
+                    structure[category][section] = files.filter(file => file.endsWith('.docx'));
+                }
+            }
+        }
+    }
+
+    return structure;
+}
+
+// Функция для парсинга текста из .docx файла
+async function parseDocx(filePath) {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return result.value.trim(); // Возвращаем текст без лишних пробелов
+}
 
 // Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -51,17 +85,63 @@ bot.command('start', async (ctx) => {
 
 // Обработка кнопки "Материалы"
 bot.action('materials', async (ctx) => {
-    await ctx.answerCbQuery();
-    const categories = await getCategories();
-    const buttons = categories.map(cat => [
-        Markup.button.callback(cat.name, `category:${cat.id}`)
+    const structure = await getMaterialsStructure();
+    const buttons = Object.keys(structure).map(category => [
+        Markup.button.callback(category, `category:${category}`)
     ]);
-    buttons.push([Markup.button.callback('Добавить категорию', 'add_category')]);
     buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
-    
+
     await ctx.editMessageText('Выберите категорию:', 
         Markup.inlineKeyboard(buttons)
     );
+});
+
+// Обработка выбора категории
+bot.action(/^category:(.+)$/, async (ctx) => {
+    const category = ctx.match[1];
+    const structure = await getMaterialsStructure();
+    const sections = structure[category];
+
+    const buttons = Object.keys(sections).map(section => [
+        Markup.button.callback(section, `section:${category}:${section}`)
+    ]);
+    buttons.push([Markup.button.callback('« Назад к категориям', 'materials')]);
+    buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
+
+    await ctx.editMessageText(`Категория: ${category}\nВыберите раздел:`, 
+        Markup.inlineKeyboard(buttons)
+    );
+});
+
+// Обработка выбора раздела
+bot.action(/^section:(.+):(.+)$/, async (ctx) => {
+    const [category, section] = ctx.match.slice(1);
+    const structure = await getMaterialsStructure();
+    const materials = structure[category][section];
+
+    const buttons = materials.map(material => [
+        Markup.button.callback(material, `material:${category}:${section}:${material}`)
+    ]);
+    buttons.push([Markup.button.callback('« Назад к разделам', `category:${category}`)]);
+    buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
+
+    await ctx.editMessageText(`Раздел: ${section}\nВыберите материал:`, 
+        Markup.inlineKeyboard(buttons)
+    );
+});
+
+// Обработка выбора материала
+bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
+    const [category, section, material] = ctx.match.slice(1);
+    const filePath = path.join(materialsPath, category, section, material);
+
+    try {
+        const content = await parseDocx(filePath);
+        await ctx.reply(`Материал: ${material}\n\n${content}`);
+    } catch (err) {
+        console.error(`Ошибка при чтении файла ${filePath}:`, err);
+        await ctx.reply('Ошибка при чтении материала.');
+    }
 });
 
 // Обработка выбора категории
