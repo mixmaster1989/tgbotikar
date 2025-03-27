@@ -190,8 +190,10 @@ bot.action(/^add_section:(\d+)$/, async (ctx) => {
 
 // Добавление статьи
 bot.action(/^add_article:(\d+)$/, async (ctx) => {
+    console.log("Обработчик 'add_article' вызван."); // Логируем вызов обработчика
     await ctx.answerCbQuery();
     const sectionId = parseInt(ctx.match[1]);
+    console.log(`Добавление статьи в раздел с ID: ${sectionId}`); // Логируем ID раздела
     ctx.session = { addingArticle: sectionId };
     await ctx.reply('Введите заголовок статьи:');
     await ctx.deleteMessage();
@@ -242,6 +244,7 @@ bot.on('text', async (ctx) => {
     // Добавление статьи - этап 1: заголовок
     if (ctx.session?.addingArticle && !ctx.session.articleTitle) {
         ctx.session.articleTitle = ctx.message.text;
+        console.log(`Заголовок статьи установлен: ${ctx.session.articleTitle}`); // Логируем заголовок
         await ctx.reply('Введите описание статьи:');
         return;
     }
@@ -249,6 +252,7 @@ bot.on('text', async (ctx) => {
     // Добавление статьи - этап 2: описание
     if (ctx.session?.addingArticle && ctx.session.articleTitle && !ctx.session.articleDescription) {
         ctx.session.articleDescription = ctx.message.text;
+        console.log(`Описание статьи установлено: ${ctx.session.articleDescription}`); // Логируем описание
         await ctx.reply('Отправьте фотографию для статьи (или отправьте любой текст, чтобы пропустить):');
         return;
     }
@@ -256,12 +260,15 @@ bot.on('text', async (ctx) => {
     // Добавление статьи - этап 3: пропуск фото
     if (ctx.session?.addingArticle && ctx.session.articleTitle && ctx.session.articleDescription) {
         const sectionId = ctx.session.addingArticle;
+        console.log(`Добавление статьи без фото в раздел с ID: ${sectionId}`); // Логируем ID раздела
         await addArticle(
             ctx.session.articleTitle,
             ctx.session.articleDescription,
             null,
             sectionId
         );
+
+        console.log(`Статья добавлена: { title: ${ctx.session.articleTitle}, description: ${ctx.session.articleDescription}, sectionId: ${sectionId} }`); // Логируем данные статьи
 
         const section = await getSectionById(sectionId);
         const articles = await getArticles(sectionId);
@@ -289,11 +296,15 @@ bot.on('photo', async (ctx) => {
         const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
         const fileName = `${Date.now()}.jpg`;
         const filePath = path.join('uploads', fileName);
-        
+
+        console.log(`Получена фотография для статьи. Сохраняем файл: ${fileName}`); // Логируем имя файла
+
         const fileLink = await ctx.telegram.getFileLink(photo);
         const response = await fetch.default(fileLink);
         const buffer = await response.buffer();
         await fs.writeFile(filePath, buffer);
+
+        console.log(`Фотография сохранена: ${filePath}`); // Логируем путь сохраненного файла
 
         await addArticle(
             ctx.session.articleTitle,
@@ -301,6 +312,8 @@ bot.on('photo', async (ctx) => {
             filePath,
             sectionId
         );
+
+        console.log(`Статья добавлена с фото: { title: ${ctx.session.articleTitle}, description: ${ctx.session.articleDescription}, imagePath: ${filePath}, sectionId: ${sectionId} }`); // Логируем данные статьи
 
         const section = await getSectionById(sectionId);
         const articles = await getArticles(sectionId);
