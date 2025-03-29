@@ -243,26 +243,53 @@ bot.action('main_menu', async (ctx) => {
 
 // Очистка базы данных
 bot.action('clear_db', async (ctx) => {
-    await ctx.answerCbQuery();
+    console.log('Кнопка "Очистить базу" нажата'); // Логируем нажатие кнопки
 
-    // Удаляем все данные из таблиц
-    await new Promise((resolve, reject) => {
-        db.run('DELETE FROM articles', (err) => {
-            if (err) reject(err);
-            db.run('DELETE FROM sections', (err) => {
-                if (err) reject(err);
+    try {
+        await ctx.answerCbQuery();
+        console.log('Ответ на callback query отправлен'); // Логируем отправку ответа
+
+        // Удаляем все данные из таблиц
+        console.log('Начинаем очистку таблиц базы данных...');
+        await new Promise((resolve, reject) => {
+            db.serialize(() => {
+                db.run('DELETE FROM articles', (err) => {
+                    if (err) {
+                        console.error('Ошибка при удалении из таблицы articles:', err);
+                        return reject(err);
+                    }
+                    console.log('Таблица articles очищена');
+                });
+                db.run('DELETE FROM sections', (err) => {
+                    if (err) {
+                        console.error('Ошибка при удалении из таблицы sections:', err);
+                        return reject(err);
+                    }
+                    console.log('Таблица sections очищена');
+                });
                 db.run('DELETE FROM categories', (err) => {
-                    if (err) reject(err);
+                    if (err) {
+                        console.error('Ошибка при удалении из таблицы categories:', err);
+                        return reject(err);
+                    }
+                    console.log('Таблица categories очищена');
                     resolve();
                 });
             });
         });
-    });
 
-    // Очищаем папку с загруженными фотографиями
-    await fs.emptyDir('uploads');
+        // Очищаем папку с загруженными фотографиями
+        console.log('Начинаем очистку папки uploads...');
+        await fs.emptyDir('uploads');
+        console.log('Папка uploads очищена');
 
-    await ctx.editMessageText('База данных очищена! Отправьте /start для начала работы');
+        // Уведомляем пользователя
+        await ctx.editMessageText('База данных очищена! Отправьте /start для начала работы');
+        console.log('Сообщение об успешной очистке базы отправлено');
+    } catch (err) {
+        console.error('Ошибка при очистке базы данных:', err);
+        await ctx.reply('Произошла ошибка при очистке базы данных. Попробуйте еще раз.');
+    }
 });
 
 // Добавление категории
