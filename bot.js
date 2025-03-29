@@ -71,6 +71,43 @@ db.serialize(() => {
     )`);
 });
 
+// Обновляем команду /start
+bot.command('start', async (ctx) => {
+    // Сканируем папку materials
+    const files = await fs.readdir(materialsPath);
+    const docxFiles = files.filter(file => file.endsWith('.docx')); // Оставляем только файлы .docx
+
+    if (docxFiles.length === 0) {
+        // Если файлов нет, уведомляем пользователя
+        return await ctx.reply('В папке materials нет файлов формата .docx.');
+    }
+
+    // Создаем кнопки для файлов
+    const buttons = docxFiles.map(file => [
+        Markup.button.callback(file, `open_docx:${file}`)
+    ]);
+
+    // Отправляем сообщение с кнопками
+    await ctx.reply('Выберите файл для открытия:', Markup.inlineKeyboard(buttons));
+});
+
+// Обработка нажатия на кнопку для открытия файла
+bot.action(/^open_docx:(.+)$/, async (ctx) => {
+    const fileName = ctx.match[1]; // Получаем имя файла из callback data
+    const filePath = path.join(materialsPath, fileName);
+
+    try {
+        // Парсим содержимое файла .docx
+        const content = await parseDocx(filePath);
+
+        // Отправляем содержимое файла пользователю
+        await ctx.reply(`Содержимое файла "${fileName}":\n\n${content}`);
+    } catch (err) {
+        console.error(`Ошибка при чтении файла ${filePath}:`, err);
+        await ctx.reply('Ошибка при открытии файла. Убедитесь, что файл существует и имеет правильный формат.');
+    }
+});
+
 // Главное меню
 bot.command('start', async (ctx) => {
     return await ctx.reply('Выберите действие:',
