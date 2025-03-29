@@ -41,7 +41,6 @@ async function getMaterialsStructure() {
                 }
             }
         } else if (category.endsWith('.docx')) {
-            // Если это файл .docx в корне папки materials
             structure[category] = null; // Указываем, что это файл, а не папка
             console.log(`Файл .docx в корне папки materials: ${category}`);
         }
@@ -55,35 +54,34 @@ async function getMaterialsStructure() {
 async function parseDocx(filePath) {
     const options = {
         styleMap: [
-            "p[style-name='Heading 1'] => h1", // Преобразуем стиль "Heading 1" в заголовок h1
-            "p[style-name='Heading 2'] => h2", // Преобразуем стиль "Heading 2" в заголовок h2
-            "p[style-name='Heading 3'] => h3", // Преобразуем стиль "Heading 3" в заголовок h3
-            "b => strong", // Преобразуем жирный текст в <strong>
-            "i => em", // Преобразуем курсив в <em>
-            "ul => ul", // Преобразуем списки
-            "ol => ol", // Преобразуем нумерованные списки
-            "li => li" // Преобразуем элементы списка
+            "p[style-name='Heading 1'] => h1",
+            "p[style-name='Heading 2'] => h2",
+            "p[style-name='Heading 3'] => h3",
+            "b => strong",
+            "i => em",
+            "ul => ul",
+            "ol => ol",
+            "li => li"
         ]
     };
 
     const result = await mammoth.convertToHtml({ path: filePath }, options);
-    const htmlContent = result.value.trim(); // Получаем HTML-контент
+    const htmlContent = result.value.trim();
 
-    // Преобразуем HTML в текст с форматированием для Telegram
     const formattedContent = htmlContent
-        .replace(/<h1>(.*?)<\/h1>/g, '*$1*') // Заголовок 1 уровня -> жирный текст
-        .replace(/<h2>(.*?)<\/h2>/g, '_$1_') // Заголовок 2 уровня -> курсив
-        .replace(/<h3>(.*?)<\/h3>/g, '`$1`') // Заголовок 3 уровня -> моноширинный текст
-        .replace(/<strong>(.*?)<\/strong>/g, '*$1*') // Жирный текст
-        .replace(/<em>(.*?)<\/em>/g, '_$1_') // Курсив
-        .replace(/<ul>/g, '') // Убираем открывающий тег списка
-        .replace(/<\/ul>/g, '') // Убираем закрывающий тег списка
-        .replace(/<ol>/g, '') // Убираем открывающий тег нумерованного списка
-        .replace(/<\/ol>/g, '') // Убираем закрывающий тег нумерованного списка
-        .replace(/<li>(.*?)<\/li>/g, '• $1') // Элементы списка -> "• текст"
-        .replace(/<p>(.*?)<\/p>/g, '$1\n') // Преобразуем параграфы в переносы строк
-        .replace(/<br\s*\/?>/g, '\n') // Преобразуем переносы строк
-        .replace(/<\/?[^>]+(>|$)/g, ''); // Удаляем все оставшиеся HTML-теги
+        .replace(/<h1>(.*?)<\/h1>/g, '*$1*')
+        .replace(/<h2>(.*?)<\/h2>/g, '_$1_')
+        .replace(/<h3>(.*?)<\/h3>/g, '`$1`')
+        .replace(/<strong>(.*?)<\/strong>/g, '*$1*')
+        .replace(/<em>(.*?)<\/em>/g, '_$1_')
+        .replace(/<ul>/g, '')
+        .replace(/<\/ul>/g, '')
+        .replace(/<ol>/g, '')
+        .replace(/<\/ol>/g, '')
+        .replace(/<li>(.*?)<\/li>/g, '• $1')
+        .replace(/<p>(.*?)<\/p>/g, '$1\n')
+        .replace(/<br\s*\/?>/g, '\n')
+        .replace(/<\/?[^>]+(>|$)/g, '');
 
     return formattedContent;
 }
@@ -96,98 +94,9 @@ const db = new sqlite3.Database('database.sqlite');
 // Создание необходимых директорий
 fs.ensureDirSync('uploads');
 
-// Инициализация базы данных
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL
-    )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS sections (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        category_id INTEGER,
-        FOREIGN KEY(category_id) REFERENCES categories(id)
-    )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS articles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT,
-        image_path TEXT,
-        section_id INTEGER,
-        FOREIGN KEY(section_id) REFERENCES sections(id)
-    )`);
-});
-
-// Обновляем команду /start
-bot.command('start', async (ctx) => {
-    console.log('Команда /start вызвана');
-    console.log('Сканируем папку materials:', materialsPath);
-
-    const files = await fs.readdir(materialsPath);
-    console.log('Найденные элементы в папке materials:', files);
-
-    const docxFiles = files.filter(file => file.endsWith('.docx')); // Оставляем только файлы .docx
-    console.log('Файлы .docx в корне папки materials:', docxFiles);
-
-    if (docxFiles.length === 0) {
-        // Если файлов нет, уведомляем пользователя
-        console.log('В папке materials нет файлов формата .docx.');
-        return await ctx.reply('В папке materials нет файлов формата .docx.');
-    }
-
-    // Создаем кнопки для файлов
-    const buttons = docxFiles.map(file => [
-        Markup.button.callback(file, `open_docx:${file}`)
-    ]);
-    console.log('Сгенерированные кнопки для файлов .docx:', buttons);
-
-    // Отправляем сообщение с кнопками
-    await ctx.reply('Выберите файл для открытия:', Markup.inlineKeyboard(buttons));
-});
-
-// Обработка нажатия на кнопку для открытия файла
-bot.action(/^open_docx:(.+)$/, async (ctx) => {
-    const fileName = ctx.match[1];
-    const filePath = path.join(materialsPath, fileName);
-
-    console.log(`Кнопка открытия файла нажата. Имя файла: ${fileName}, путь: ${filePath}`);
-
-    try {
-        // Парсим содержимое файла .docx с форматированием
-        const content = await parseDocx(filePath);
-        console.log(`Содержимое файла "${fileName}":\n${content}`);
-
-        // Проверяем длину текста
-        if (content.length > 4096) {
-            console.log(`Содержимое файла слишком длинное (${content.length} символов). Разбиваем на части.`);
-
-            // Разбиваем текст на части по 4096 символов
-            const chunks = content.match(/.{1,4096}/g);
-
-            // Отправляем части текста по очереди
-            for (const chunk of chunks) {
-                await ctx.replyWithMarkdown(chunk);
-            }
-        } else {
-            // Если текст не превышает лимит, отправляем его целиком
-            await ctx.replyWithMarkdown(content);
-        }
-    } catch (err) {
-        console.error(`Ошибка при чтении файла ${filePath}:`, err);
-
-        if (err.code === 'EACCES') {
-            await ctx.reply('Ошибка: у бота нет прав доступа к файлу. Проверьте настройки прав доступа.');
-        } else {
-            await ctx.reply('Ошибка при открытии файла. Убедитесь, что файл существует и имеет правильный формат.');
-        }
-    }
-});
-
 // Главное меню
-bot.command('start', async (ctx) => {
-    return await ctx.reply('Выберите действие:',
+function showMainMenu(ctx) {
+    return ctx.reply('Выберите действие:',
         Markup.inlineKeyboard([
             [Markup.button.callback('Тесты', 'tests')],
             [Markup.button.callback('Материалы', 'materials')],
@@ -195,6 +104,12 @@ bot.command('start', async (ctx) => {
             [Markup.button.callback('🗑 Очистить базу', 'clear_db')]
         ])
     );
+}
+
+// Команда /start
+bot.command('start', async (ctx) => {
+    console.log('Команда /start вызвана');
+    await showMainMenu(ctx);
 });
 
 // Обработка кнопки "Материалы"
@@ -202,10 +117,8 @@ bot.action('materials', async (ctx) => {
     const structure = await getMaterialsStructure();
     const buttons = Object.keys(structure).map(category => {
         if (structure[category] === null) {
-            // Это файл .docx
             return [Markup.button.callback(category, `open_docx:${category}`)];
         } else {
-            // Это папка (категория)
             return [Markup.button.callback(category, `category:${category}`)];
         }
     });
@@ -216,483 +129,36 @@ bot.action('materials', async (ctx) => {
     );
 });
 
-// Обработка выбора категории
-bot.action(/^category:(.+)$/, async (ctx) => {
-    const category = ctx.match[1];
-    const structure = await getMaterialsStructure();
-    const sections = structure[category];
+// Обработка открытия .docx файла
+bot.action(/^open_docx:(.+)$/, async (ctx) => {
+    const fileName = ctx.match[1];
+    const filePath = path.join(materialsPath, fileName);
 
-    if (!sections) {
-        console.error(`Ошибка: для категории "${category}" не найдены разделы.`);
-        return await ctx.reply(`Для категории "${category}" не найдены разделы.`);
-    }
-
-    const buttons = Object.keys(sections).map(section => {
-        const callbackData = `section:${Buffer.from(section).toString('base64').slice(0, 50)}`;
-        console.log(`Generated callback data: ${callbackData}`);
-        return [Markup.button.callback(section, callbackData)];
-    });
-    buttons.push([Markup.button.callback('« Назад к категориям', 'materials')]);
-    buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
-
-    await ctx.editMessageText(`Категория: ${category}\nВыберите раздел:`,
-        Markup.inlineKeyboard(buttons)
-    );
-});
-
-// Обработка выбора раздела
-bot.action(/^section:(.+):(.+)$/, async (ctx) => {
-    const [category, section] = ctx.match.slice(1);
-    const structure = await getMaterialsStructure();
-    const materials = structure[category]?.[section];
-
-    if (!materials) {
-        return ctx.reply('Invalid section or category.');
-    }
-
-    const buttons = materials.map(material => [
-        Markup.button.callback(material, `material:${Buffer.from(material).toString('base64').slice(0, 50)}`)
-    ]);
-    buttons.push([Markup.button.callback('« Назад к разделам', `category:${category}`)]);
-    buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
-
-    await ctx.editMessageText(`Раздел: ${section}\nВыберите материал:`,
-        Markup.inlineKeyboard(buttons)
-    );
-});
-
-// Обработка выбора материала
-bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
-    const [category, section, material] = ctx.match.slice(1);
-    const filePath = path.join(materialsPath, category, section, material);
+    console.log(`Кнопка открытия файла нажата. Имя файла: ${fileName}, путь: ${filePath}`);
 
     try {
         const content = await parseDocx(filePath);
-        await ctx.reply(`Материал: ${material}\n\n${content}`);
+        console.log(`Содержимое файла "${fileName}":\n${content}`);
+
+        if (content.length > 4096) {
+            const chunks = content.match(/.{1,4096}/g);
+            for (const chunk of chunks) {
+                await ctx.replyWithMarkdown(chunk);
+            }
+        } else {
+            await ctx.replyWithMarkdown(content);
+        }
     } catch (err) {
         console.error(`Ошибка при чтении файла ${filePath}:`, err);
-        await ctx.reply('Ошибка при чтении материала.');
+        await ctx.reply('Ошибка при открытии файла. Убедитесь, что файл существует и имеет правильный формат.');
     }
 });
 
-// Обработка выбора категории
-bot.action(/^category:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
-    const categoryId = parseInt(ctx.match[1]);
-    const sections = await getSections(categoryId);
-
-    const buttons = sections.map(section => [
-        Markup.button.callback(section.name, `section:${section.id}`)
-    ]);
-    buttons.push([Markup.button.callback('Добавить раздел', `add_section:${categoryId}`)]);
-    buttons.push([
-        Markup.button.callback('« Назад к категориям', 'materials'),
-        Markup.button.callback('« На главную', 'main_menu')
-    ]);
-
-    await ctx.editMessageText('Выберите раздел:',
-        Markup.inlineKeyboard(buttons)
-    );
-});
-
-// Обработка выбора раздела
-bot.action(/^section:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
-    const sectionId = parseInt(ctx.match[1]);
-    const articles = await getArticles(sectionId);
-    const section = await getSectionById(sectionId);
-
-    const buttons = articles.map(article => [
-        Markup.button.callback(article.title, `article:${article.id}`)
-    ]);
-    buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
-    buttons.push([
-        Markup.button.callback('« Назад к разделам', `category:${section.category_id}`),
-        Markup.button.callback('« На главную', 'main_menu')
-    ]);
-
-    await ctx.deleteMessage();
-    await ctx.reply('Выберите статью:',
-        Markup.inlineKeyboard(buttons)
-    );
-});
-
-// Просмотр статьи
-bot.action(/^article:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
-    const articleId = parseInt(ctx.match[1]);
-    const article = await getArticleById(articleId);
-    const section = await getSectionById(article.section_id);
-
-    let caption = `${article.title}\n\n${article.description}`;
-    const buttons = [
-        [Markup.button.callback('« Назад к статьям', `section:${article.section_id}`)],
-        [Markup.button.callback('« На главную', 'main_menu')]
-    ];
-
-    if (article.image_path) {
-        await ctx.deleteMessage();
-
-        // Отправляем текст отдельно, если он слишком длинный
-        if (caption.length > 1024) {
-            await ctx.reply(`${article.title}\n\n${article.description}`);
-            caption = ""; // Очищаем caption для фотографии
-        }
-
-        await ctx.replyWithPhoto(
-            { source: article.image_path },
-            {
-                caption,
-                ...Markup.inlineKeyboard(buttons)
-            }
-        );
-    } else {
-        await ctx.editMessageText(caption,
-            Markup.inlineKeyboard(buttons)
-        );
-    }
-});
-
-// Обработчик кнопки "На главную"
+// Обработка кнопки "На главную"
 bot.action('main_menu', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.editMessageText('Выберите действие:',
-        Markup.inlineKeyboard([
-            [Markup.button.callback('Тесты', 'tests')],
-            [Markup.button.callback('Материалы', 'materials')],
-            [Markup.button.callback('Мои результаты', 'results')],
-            [Markup.button.callback('🗑 Очистить базу', 'clear_db')]
-        ])
-    );
+    await showMainMenu(ctx);
 });
 
-// Очистка базы данных
-bot.action('clear_db', async (ctx) => {
-    console.log('Кнопка "Очистить базу" нажата');
-
-    try {
-        await ctx.answerCbQuery();
-        console.log('Ответ на callback query отправлен');
-
-        // Удаляем все данные из таблиц
-        console.log('Начинаем очистку таблиц базы данных...');
-        await new Promise((resolve, reject) => {
-            db.serialize(() => {
-                db.run('PRAGMA foreign_keys = ON'); // Включаем поддержку внешних ключей
-                db.run('DELETE FROM articles', (err) => {
-                    if (err) {
-                        console.error('Ошибка при удалении из таблицы articles:', err);
-                        return reject(err);
-                    }
-                    console.log('Таблица articles очищена');
-                });
-                db.run('DELETE FROM sections', (err) => {
-                    if (err) {
-                        console.error('Ошибка при удалении из таблицы sections:', err);
-                        return reject(err);
-                    }
-                    console.log('Таблица sections очищена');
-                });
-                db.run('DELETE FROM categories', (err) => {
-                    if (err) {
-                        console.error('Ошибка при удалении из таблицы categories:', err);
-                        return reject(err);
-                    }
-                    console.log('Таблица categories очищена');
-                    resolve();
-                });
-            });
-        });
-
-        // Проверяем, что таблицы очищены
-        db.get('SELECT COUNT(*) AS count FROM articles', (err, row) => {
-            if (err) {
-                console.error('Ошибка при проверке таблицы articles:', err);
-            } else {
-                console.log(`Осталось записей в таблице articles: ${row.count}`);
-            }
-        });
-        db.get('SELECT COUNT(*) AS count FROM sections', (err, row) => {
-            if (err) {
-                console.error('Ошибка при проверке таблицы sections:', err);
-            } else {
-                console.log(`Осталось записей в таблице sections: ${row.count}`);
-            }
-        });
-        db.get('SELECT COUNT(*) AS count FROM categories', (err, row) => {
-            if (err) {
-                console.error('Ошибка при проверке таблицы categories:', err);
-            } else {
-                console.log(`Осталось записей в таблице categories: ${row.count}`);
-            }
-        });
-
-        // Очищаем папку с загруженными фотографиями
-        console.log('Начинаем очистку папки uploads...');
-        await fs.emptyDir('uploads');
-        const files = await fs.readdir('uploads');
-        console.log(`Осталось файлов в папке uploads: ${files.length}`);
-
-        // Обновляем структуру материалов
-        const structure = await getMaterialsStructure();
-        console.log('Обновленная структура материалов:', structure);
-
-        // Уведомляем пользователя
-        await ctx.editMessageText('База данных очищена! Отправьте /start для начала работы');
-        console.log('Сообщение об успешной очистке базы отправлено');
-    } catch (err) {
-        console.error('Ошибка при очистке базы данных:', err);
-        await ctx.reply('Произошла ошибка при очистке базы данных. Попробуйте еще раз.');
-    }
-});
-
-// Добавление категории
-bot.action('add_category', async (ctx) => {
-    await ctx.answerCbQuery();
-    await ctx.reply('Введите название новой категории:');
-    await ctx.deleteMessage();
-});
-
-// Добавление раздела
-bot.action(/^add_section:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
-    const categoryId = parseInt(ctx.match[1]);
-    ctx.session = { addingSection: categoryId };
-    await ctx.reply('Введите название нового раздела:');
-    await ctx.deleteMessage();
-});
-
-// Добавление статьи
-bot.action(/^add_article:(\d+)$/, async (ctx) => {
-    console.log("Обработчик 'add_article' вызван."); // Логируем вызов обработчика
-    await ctx.answerCbQuery();
-    const sectionId = parseInt(ctx.match[1]);
-    console.log(`Добавление статьи в раздел с ID: ${sectionId}`); // Логируем ID раздела
-    ctx.session = { addingArticle: sectionId };
-    await ctx.reply('Введите заголовок статьи:');
-    await ctx.deleteMessage();
-});
-
-// Обработка текстовых сообщений
-bot.on('text', async (ctx) => {
-    // Добавление категории
-    if (ctx.message.text && !ctx.session) {
-        await addCategory(ctx.message.text);
-        await ctx.reply('Категория добавлена!');
-        const categories = await getCategories();
-        const buttons = categories.map(cat => [
-            Markup.button.callback(cat.name, `category:${cat.id}`)
-        ]);
-        buttons.push([Markup.button.callback('Добавить категорию', 'add_category')]);
-        buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
-
-        await ctx.reply('Выберите категорию:',
-            Markup.inlineKeyboard(buttons)
-        );
-        return;
-    }
-
-    // Добавление раздела
-    if (ctx.session?.addingSection) {
-        const categoryId = ctx.session.addingSection;
-        await addSection(ctx.message.text, categoryId);
-        ctx.session = null;
-
-        const sections = await getSections(categoryId);
-        const buttons = sections.map(section => [
-            Markup.button.callback(section.name, `section:${section.id}`)
-        ]);
-        buttons.push([Markup.button.callback('Добавить раздел', `add_section:${categoryId}`)]);
-        buttons.push([
-            Markup.button.callback('« Назад к категориям', 'materials'),
-            Markup.button.callback('« На главную', 'main_menu')
-        ]);
-
-        await ctx.reply('Раздел добавлен!');
-        await ctx.reply('Выберите раздел:',
-            Markup.inlineKeyboard(buttons)
-        );
-        return;
-    }
-
-    // Добавление статьи - этап 1: заголовок
-    if (ctx.session?.addingArticle && !ctx.session.articleTitle) {
-        ctx.session.articleTitle = ctx.message.text;
-        console.log(`Заголовок статьи установлен: ${ctx.session.articleTitle}`); // Логируем заголовок
-        await ctx.reply('Введите описание статьи:');
-        return;
-    }
-
-    // Добавление статьи - этап 2: описание
-    if (ctx.session?.addingArticle && ctx.session.articleTitle && !ctx.session.articleDescription) {
-        ctx.session.articleDescription = ctx.message.text;
-        console.log(`Описание статьи установлено: ${ctx.session.articleDescription}`); // Логируем описание
-        await ctx.reply('Отправьте фотографию для статьи (или отправьте любой текст, чтобы пропустить):');
-        return;
-    }
-
-    // Добавление статьи - этап 3: пропуск фото
-    if (ctx.session?.addingArticle && ctx.session.articleTitle && ctx.session.articleDescription) {
-        const sectionId = ctx.session.addingArticle;
-        console.log(`Добавление статьи без фото в раздел с ID: ${sectionId}`); // Логируем ID раздела
-        await addArticle(
-            ctx.session.articleTitle,
-            ctx.session.articleDescription,
-            null,
-            sectionId
-        );
-
-        console.log(`Статья добавлена: { title: ${ctx.session.articleTitle}, description: ${ctx.session.articleDescription}, sectionId: ${sectionId} }`); // Логируем данные статьи
-
-        const section = await getSectionById(sectionId);
-        const articles = await getArticles(sectionId);
-        const buttons = articles.map(article => [
-            Markup.button.callback(article.title, `article:${article.id}`)
-        ]);
-        buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
-        buttons.push([
-            Markup.button.callback('« Назад к разделам', `category:${section.category_id}`),
-            Markup.button.callback('« На главную', 'main_menu')
-        ]);
-
-        ctx.session = null;
-        await ctx.reply('Статья добавлена!');
-        await ctx.reply('Выберите статью:',
-            Markup.inlineKeyboard(buttons)
-        );
-    }
-});
-
-// Обработка фотографий для статей
-bot.on('photo', async (ctx) => {
-    if (ctx.session?.addingArticle && ctx.session.articleTitle && ctx.session.articleDescription) {
-        const sectionId = ctx.session.addingArticle;
-        const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-        const fileName = `${Date.now()}.jpg`;
-        const filePath = path.join('uploads', fileName);
-
-        console.log(`Получена фотография для статьи. Сохраняем файл: ${fileName}`); // Логируем имя файла
-
-        const fileLink = await ctx.telegram.getFileLink(photo);
-        const response = await fetch.default(fileLink);
-        const buffer = await response.buffer();
-        await fs.writeFile(filePath, buffer);
-
-        console.log(`Фотография сохранена: ${filePath}`); // Логируем путь сохраненного файла
-
-        await addArticle(
-            ctx.session.articleTitle,
-            ctx.session.articleDescription,
-            filePath,
-            sectionId
-        );
-
-        console.log(`Статья добавлена с фото: { title: ${ctx.session.articleTitle}, description: ${ctx.session.articleDescription}, imagePath: ${filePath}, sectionId: ${sectionId}`); // Логируем данные статьи
-
-        const section = await getSectionById(sectionId);
-        const articles = await getArticles(sectionId);
-        const buttons = articles.map(article => [
-            Markup.button.callback(article.title, `article:${article.id}`)
-        ]);
-        buttons.push([Markup.button.callback('Добавить статью', `add_article:${sectionId}`)]);
-        buttons.push([
-            Markup.button.callback('« Назад к разделам', `category:${section.category_id}`),
-            Markup.button.callback('« На главную', 'main_menu')
-        ]);
-
-        ctx.session = null;
-        await ctx.reply('Статья добавлена!');
-        await ctx.reply('Выберите статью:',
-            Markup.inlineKeyboard(buttons)
-        );
-    }
-});
-
-// Вспомогательные функции для работы с БД
-function getCategories() {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM categories', (err, rows) => {
-            if (err) reject(err);
-            resolve(rows || []);
-        });
-    });
-}
-
-function getCategoryById(id) {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT * FROM categories WHERE id = ?', [id], (err, row) => {
-            if (err) reject(err);
-            resolve(row);
-        });
-    });
-}
-
-function addCategory(name) {
-    return new Promise((resolve, reject) => {
-        db.run('INSERT INTO categories (name) VALUES (?)', [name], (err) => {
-            if (err) reject(err);
-            resolve();
-        });
-    });
-}
-
-function getSections(categoryId) {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM sections WHERE category_id = ?', [categoryId], (err, rows) => {
-            if (err) reject(err);
-            resolve(rows || []);
-        });
-    });
-}
-
-function getSectionById(id) {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT * FROM sections WHERE id = ?', [id], (err, row) => {
-            if (err) reject(err);
-            resolve(row);
-        });
-    });
-}
-
-function addSection(name, categoryId) {
-    return new Promise((resolve, reject) => {
-        db.run('INSERT INTO sections (name, category_id) VALUES (?, ?)',
-            [name, categoryId], (err) => {
-                if (err) reject(err);
-                resolve();
-            });
-    });
-}
-
-function getArticles(sectionId) {
-    return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM articles WHERE section_id = ?', [sectionId], (err, rows) => {
-            if (err) reject(err);
-            resolve(rows || []);
-        });
-    });
-}
-
-function getArticleById(id) {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT * FROM articles WHERE id = ?', [id], (err, row) => {
-            if (err) reject(err);
-            resolve(row);
-        });
-    });
-}
-
-function addArticle(title, description, imagePath, sectionId) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'INSERT INTO articles (title, description, image_path, section_id) VALUES (?, ?, ?, ?)',
-            [title, description, imagePath, sectionId],
-            (err) => {
-                if (err) reject(err);
-                resolve();
-            }
-        );
-    });
-}
-
+// Запуск бота
 bot.launch(() => console.log('Бот запущен!'));
