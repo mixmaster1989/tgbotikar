@@ -69,10 +69,12 @@ async function parseDocx(filePath) {
 
     // Считываем содержимое файла с помощью mammoth
     const result = await mammoth.convertToHtml({ path: filePath }, options);
-    console.log(`HTML-контент, возвращенный mammoth:\n${result.value}`);
+    console.log(`HTML-контент, возвращённый mammoth:\n${result.value}`);
 
     // Преобразуем HTML в текст с форматированием для Telegram (MarkdownV2)
     const htmlContent = result.value.trim();
+    console.log(`HTML-контент после trim:\n${htmlContent}`);
+
     const formattedContent = htmlContent
         .replace(/<h1>(.*?)<\/h1>/g, '*$1*') // Заголовок 1 уровня -> жирный текст
         .replace(/<h2>(.*?)<\/h2>/g, '_$1_') // Заголовок 2 уровня -> курсив
@@ -145,7 +147,7 @@ bot.action(/^open_docx:(.+)$/, async (ctx) => {
 
     try {
         const content = await parseDocx(filePath);
-        console.log(`Содержимое файла "${fileName}":\n${content}`);
+        console.log(`Содержимое файла "${fileName}" перед отправкой:\n${content}`);
 
         // Проверяем длину текста
         if (content.length > 4096) {
@@ -156,10 +158,12 @@ bot.action(/^open_docx:(.+)$/, async (ctx) => {
 
             // Отправляем части текста по очереди
             for (const chunk of chunks) {
+                console.log(`Отправка части текста:\n${chunk}`);
                 await ctx.replyWithMarkdownV2(chunk);
             }
         } else {
             // Если текст не превышает лимит, отправляем его целиком
+            console.log(`Отправка текста целиком:\n${content}`);
             await ctx.replyWithMarkdownV2(content);
         }
     } catch (err) {
