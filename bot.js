@@ -167,6 +167,11 @@ bot.action(/^category:(.+)$/, async (ctx) => {
     const structure = await getMaterialsStructure();
     const sections = structure[category];
 
+    if (!sections) {
+        console.error(`Ошибка: для категории "${category}" не найдены разделы.`);
+        return await ctx.reply(`Для категории "${category}" не найдены разделы.`);
+    }
+
     const buttons = Object.keys(sections).map(section => {
         const callbackData = `section:${Buffer.from(section).toString('base64').slice(0, 50)}`;
         console.log(`Generated callback data: ${callbackData}`);
