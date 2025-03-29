@@ -53,8 +53,37 @@ async function getMaterialsStructure() {
 
 // Функция для парсинга текста из .docx файла
 async function parseDocx(filePath) {
-    const result = await mammoth.extractRawText({ path: filePath });
-    return result.value.trim(); // Возвращаем текст без лишних пробелов
+    const options = {
+        styleMap: [
+            "p[style-name='Heading 1'] => h1", // Преобразуем стиль "Heading 1" в заголовок h1
+            "p[style-name='Heading 2'] => h2", // Преобразуем стиль "Heading 2" в заголовок h2
+            "p[style-name='Heading 3'] => h3", // Преобразуем стиль "Heading 3" в заголовок h3
+            "b => strong", // Преобразуем жирный текст в <strong>
+            "i => em", // Преобразуем курсив в <em>
+            "ul => ul", // Преобразуем списки
+            "ol => ol", // Преобразуем нумерованные списки
+            "li => li" // Преобразуем элементы списка
+        ]
+    };
+
+    const result = await mammoth.convertToHtml({ path: filePath }, options);
+    const htmlContent = result.value.trim(); // Получаем HTML-контент
+
+    // Преобразуем HTML в текст с форматированием для Telegram
+    const formattedContent = htmlContent
+        .replace(/<h1>(.*?)<\/h1>/g, '*$1*') // Заголовок 1 уровня -> жирный текст
+        .replace(/<h2>(.*?)<\/h2>/g, '_$1_') // Заголовок 2 уровня -> курсив
+        .replace(/<h3>(.*?)<\/h3>/g, '`$1`') // Заголовок 3 уровня -> моноширинный текст
+        .replace(/<strong>(.*?)<\/strong>/g, '*$1*') // Жирный текст
+        .replace(/<em>(.*?)<\/em>/g, '_$1_') // Курсив
+        .replace(/<ul>/g, '') // Убираем открывающий тег списка
+        .replace(/<\/ul>/g, '') // Убираем закрывающий тег списка
+        .replace(/<ol>/g, '') // Убираем открывающий тег нумерованного списка
+        .replace(/<\/ol>/g, '') // Убираем закрывающий тег нумерованного списка
+        .replace(/<li>(.*?)<\/li>/g, '• $1') // Элементы списка -> "• текст"
+        .replace(/<br\s*\/?>/g, '\n'); // Переносы строк
+
+    return formattedContent;
 }
 
 // Инициализация бота
@@ -124,7 +153,7 @@ bot.action(/^open_docx:(.+)$/, async (ctx) => {
     console.log(`Кнопка открытия файла нажата. Имя файла: ${fileName}, путь: ${filePath}`);
 
     try {
-        // Парсим содержимое файла .docx
+        // Парсим содержимое файла .docx с форматированием
         const content = await parseDocx(filePath);
         console.log(`Содержимое файла "${fileName}":\n${content}`);
 
@@ -137,11 +166,11 @@ bot.action(/^open_docx:(.+)$/, async (ctx) => {
 
             // Отправляем части текста по очереди
             for (const chunk of chunks) {
-                await ctx.reply(chunk);
+                await ctx.replyWithMarkdown(chunk);
             }
         } else {
             // Если текст не превышает лимит, отправляем его целиком
-            await ctx.reply(`Содержимое файла "${fileName}":\n\n${content}`);
+            await ctx.replyWithMarkdown(content);
         }
     } catch (err) {
         console.error(`Ошибка при чтении файла ${filePath}:`, err);
