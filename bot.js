@@ -81,7 +81,9 @@ async function parseDocx(filePath) {
         .replace(/<ol>/g, '') // Убираем открывающий тег нумерованного списка
         .replace(/<\/ol>/g, '') // Убираем закрывающий тег нумерованного списка
         .replace(/<li>(.*?)<\/li>/g, '• $1') // Элементы списка -> "• текст"
-        .replace(/<br\s*\/?>/g, '\n'); // Переносы строк
+        .replace(/<p>(.*?)<\/p>/g, '$1\n') // Преобразуем параграфы в переносы строк
+        .replace(/<br\s*\/?>/g, '\n') // Преобразуем переносы строк
+        .replace(/<\/?[^>]+(>|$)/g, ''); // Удаляем все оставшиеся HTML-теги
 
     return formattedContent;
 }
@@ -585,7 +587,7 @@ bot.on('photo', async (ctx) => {
             sectionId
         );
 
-        console.log(`Статья добавлена с фото: { title: ${ctx.session.articleTitle}, description: ${ctx.session.articleDescription}, imagePath: ${filePath}, sectionId: ${sectionId} }`); // Логируем данные статьи
+        console.log(`Статья добавлена с фото: { title: ${ctx.session.articleTitle}, description: ${ctx.session.articleDescription}, imagePath: ${filePath}, sectionId: ${sectionId}`); // Логируем данные статьи
 
         const section = await getSectionById(sectionId);
         const articles = await getArticles(sectionId);
