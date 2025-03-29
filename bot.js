@@ -1,183 +1,101 @@
 const { Telegraf, Markup, session } = require('telegraf');
-const sqlite3 = require('sqlite3').verbose();
-const fetch = require("node-fetch");
-const fs = require('fs-extra');
+const express = require('express');
 const path = require('path');
+const fs = require('fs-extra');
 const mammoth = require('mammoth');
 require('dotenv').config();
 
 // Путь к папке с материалами
 const materialsPath = path.join(__dirname, 'materials');
 
+// Инициализация бота
+const bot = new Telegraf(process.env.BOT_TOKEN);
+bot.use(session());
+
+// Инициализация Express-сервера
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Статические файлы для фронтенда
+app.use('/static', express.static(path.join(__dirname, 'static')));
+
+// Функция для парсинга .docx в HTML
+async function parseDocxToHtml(filePath) {
+    const result = await mammoth.convertToHtml({ path: filePath });
+    return result.value;
+}
+
+// Маршрут для отображения статьи
+app.get('/article/:fileName', async (req, res) => {
+    const fileName = req.params.fileName;
+    const filePath = path.join(materialsPath, fileName);
+
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).send('Файл не найден');
+    }
+
+    try {
+        const htmlContent = await parseDocxToHtml(filePath);
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${fileName}</title>
+                <link rel="stylesheet" href="/static/styles.css">
+            </head>
+            <body>
+                <div class="container">
+                    <div class="article">
+                        ${htmlContent}
+                    </div>
+                    <button class="close-btn" onclick="Telegram.WebApp.close()">Закрыть</button>
+                </div>
+                <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            </body>
+            </html>
+        `);
+    } catch (err) {
+        console.error(`Ошибка при обработке файла ${filePath}:`, err);
+        res.status(500).send('Ошибка при обработке файла');
+    }
+});
+
+// Команда /article для отправки Web App кнопки
+bot.command('article', async (ctx) => {
+    const structure = await getMaterialsStructure();
+    const buttons = Object.keys(structure)
+        .filter(file => structure[file] === null) // Только файлы .docx
+        .map(file => Markup.button.webApp(file, `${process.env.WEB_APP_URL}/article/${file}`));
+
+    if (buttons.length === 0) {
+        return ctx.reply('Нет доступных статей.');
+    }
+
+    await ctx.reply('Выберите статью:', Markup.inlineKeyboard(buttons, { columns: 1 }));
+});
+
 // Функция для получения структуры папок и файлов
 async function getMaterialsStructure() {
-    console.log('Сканируем папку materials:', materialsPath);
     const categories = await fs.readdir(materialsPath);
-    console.log('Найденные элементы в папке materials:', categories);
-
     const structure = {};
 
     for (const category of categories) {
         const categoryPath = path.join(materialsPath, category);
         const isDirectory = await fs.stat(categoryPath).then(stat => stat.isDirectory());
-        console.log(`Обрабатываем элемент: ${category} (папка: ${isDirectory})`);
 
-        if (isDirectory) {
-            structure[category] = {};
-            const sections = await fs.readdir(categoryPath);
-            console.log(`Найденные элементы в папке ${category}:`, sections);
-
-            for (const section of sections) {
-                const sectionPath = path.join(categoryPath, section);
-                const isSectionDirectory = await fs.stat(sectionPath).then(stat => stat.isDirectory());
-                console.log(`Обрабатываем элемент: ${section} (папка: ${isSectionDirectory})`);
-
-                if (isSectionDirectory) {
-                    const files = await fs.readdir(sectionPath);
-                    console.log(`Найденные файлы в папке ${section}:`, files);
-
-                    structure[category][section] = files.filter(file => file.endsWith('.docx'));
-                    console.log(`Файлы .docx в папке ${section}:`, structure[category][section]);
-                }
-            }
-        } else if (category.endsWith('.docx')) {
-            structure[category] = null; // Указываем, что это файл, а не папка
-            console.log(`Файл .docx в корне папки materials: ${category}`);
+        if (!isDirectory && category.endsWith('.docx')) {
+            structure[category] = null; // Указываем, что это файл
         }
     }
 
-    console.log('Итоговая структура материалов:', structure);
     return structure;
 }
 
-// Функция для парсинга текста из .docx файла
-async function parseDocx(filePath) {
-    const options = {
-        styleMap: [
-            "p[style-name='Heading 1'] => h1",
-            "p[style-name='Heading 2'] => h2",
-            "p[style-name='Heading 3'] => h3",
-            "b => strong",
-            "i => em",
-            "ul => ul",
-            "ol => ol",
-            "li => li"
-        ]
-    };
-
-    console.log(`Начинаем обработку файла: ${filePath}`);
-
-    // Считываем содержимое файла с помощью mammoth
-    const result = await mammoth.convertToHtml({ path: filePath }, options);
-    console.log(`HTML-контент, возвращённый mammoth:\n${result.value}`);
-
-    // Преобразуем HTML в поддерживаемый Telegram формат
-    const htmlContent = result.value
-        .replace(/<h1>(.*?)<\/h1>/g, '<b>$1</b>') // Преобразуем <h1> в <b>
-        .replace(/<h2>(.*?)<\/h2>/g, '<b>$1</b>') // Преобразуем <h2> в <b>
-        .replace(/<h3>(.*?)<\/h3>/g, '<b>$1</b>') // Преобразуем <h3> в <b>
-        .replace(/<strong>(.*?)<\/strong>/g, '<b>$1</b>') // Преобразуем <strong> в <b>
-        .replace(/<em>(.*?)<\/em>/g, '<i>$1</i>') // Преобразуем <em> в <i>
-        .replace(/<ul>/g, '') // Убираем открывающий тег списка
-        .replace(/<\/ul>/g, '') // Убираем закрывающий тег списка
-        .replace(/<ol>/g, '') // Убираем открывающий тег нумерованного списка
-        .replace(/<\/ol>/g, '') // Убираем закрывающий тег нумерованного списка
-        .replace(/<li>(.*?)<\/li>/g, '• $1') // Преобразуем элементы списка в "• текст"
-        .replace(/<p>(.*?)<\/p>/g, '$1\n') // Преобразуем параграфы в переносы строк
-        .replace(/<br\s*\/?>/g, '\n') // Преобразуем переносы строк
-        .replace(/<\/?[^>]+(>|$)/g, ''); // Удаляем все оставшиеся HTML-теги
-
-    console.log(`Преобразованный текст с поддерживаемыми тегами:\n${htmlContent}`);
-
-    return htmlContent;
-}
-
-// Инициализация бота
-const bot = new Telegraf(process.env.BOT_TOKEN);
-bot.use(session());
-const db = new sqlite3.Database('database.sqlite');
-
-// Создание необходимых директорий
-fs.ensureDirSync('uploads');
-
-// Главное меню
-function showMainMenu(ctx) {
-    return ctx.reply('Выберите действие:',
-        Markup.inlineKeyboard([
-            [Markup.button.callback('Тесты', 'tests')],
-            [Markup.button.callback('Материалы', 'materials')],
-            [Markup.button.callback('Мои результаты', 'results')],
-            [Markup.button.callback('🗑 Очистить базу', 'clear_db')]
-        ])
-    );
-}
-
-// Команда /start
-bot.command('start', async (ctx) => {
-    console.log('Команда /start вызвана');
-    await showMainMenu(ctx);
-});
-
-// Обработка кнопки "Материалы"
-bot.action('materials', async (ctx) => {
-    const structure = await getMaterialsStructure();
-    const buttons = Object.keys(structure).map(category => {
-        if (structure[category] === null) {
-            return [Markup.button.callback(category, `open_docx:${category}`)];
-        } else {
-            return [Markup.button.callback(category, `category:${category}`)];
-        }
-    });
-    buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
-
-    await ctx.editMessageText('Выберите категорию или файл:',
-        Markup.inlineKeyboard(buttons)
-    );
-});
-
-// Обработка открытия .docx файла
-bot.action(/^open_docx:(.+)$/, async (ctx) => {
-    const fileName = ctx.match[1];
-    const filePath = path.join(materialsPath, fileName);
-
-    console.log(`Кнопка открытия файла нажата. Имя файла: ${fileName}, путь: ${filePath}`);
-
-    try {
-        const content = await parseDocx(filePath);
-        console.log(`Содержимое файла "${fileName}" перед отправкой:\n${content}`);
-
-        // Проверяем длину текста
-        if (content.length > 4096) {
-            console.log(`Содержимое файла слишком длинное (${content.length} символов). Разбиваем на части.`);
-
-            // Разбиваем текст на части по 4096 символов
-            const chunks = content.match(/.{1,4096}/g);
-
-            // Отправляем части текста по очереди
-            for (const chunk of chunks) {
-                console.log(`Отправка части текста:\n${chunk}`);
-                await ctx.replyWithHTML(chunk);
-            }
-        } else {
-            // Если текст не превышает лимит, отправляем его целиком
-            console.log(`Отправка текста целиком:\n${content}`);
-            await ctx.replyWithHTML(content);
-        }
-    } catch (err) {
-        console.error(`Ошибка при чтении файла ${filePath}:`, err);
-
-        if (err.code === 'EACCES') {
-            await ctx.reply('Ошибка: у бота нет прав доступа к файлу. Проверьте настройки прав доступа.');
-        } else {
-            await ctx.reply('Ошибка при открытии файла. Убедитесь, что файл существует и имеет правильный формат.');
-        }
-    }
-});
-
-// Обработка кнопки "На главную"
-bot.action('main_menu', async (ctx) => {
-    await ctx.answerCbQuery();
-    await showMainMenu(ctx);
+// Запуск Express-сервера
+app.listen(PORT, () => {
+    console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
 
 // Запуск бота
