@@ -102,9 +102,11 @@ bot.action(/^category:(.+)$/, async (ctx) => {
     const structure = await getMaterialsStructure();
     const sections = structure[category];
 
-    const buttons = Object.keys(sections).map(section => [
-        Markup.button.callback(section, `section:${category}:${section}`)
-    ]);
+    const buttons = Object.keys(sections).map(section => {
+        const callbackData = `section:${Buffer.from(section).toString('base64').slice(0, 50)}`;
+        console.log(`Generated callback data: ${callbackData}`);
+        return [Markup.button.callback(section, callbackData)];
+    });
     buttons.push([Markup.button.callback('« Назад к категориям', 'materials')]);
     buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
 
