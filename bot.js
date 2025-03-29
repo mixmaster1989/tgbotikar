@@ -118,21 +118,23 @@ bot.command('start', async (ctx) => {
 
 // Обработка нажатия на кнопку для открытия файла
 bot.action(/^open_docx:(.+)$/, async (ctx) => {
-    const fileName = ctx.match[1]; // Получаем имя файла из callback data
+    const fileName = ctx.match[1];
     const filePath = path.join(materialsPath, fileName);
 
     console.log(`Кнопка открытия файла нажата. Имя файла: ${fileName}, путь: ${filePath}`);
 
     try {
-        // Парсим содержимое файла .docx
         const content = await parseDocx(filePath);
         console.log(`Содержимое файла "${fileName}":\n${content}`);
-
-        // Отправляем содержимое файла пользователю
         await ctx.reply(`Содержимое файла "${fileName}":\n\n${content}`);
     } catch (err) {
         console.error(`Ошибка при чтении файла ${filePath}:`, err);
-        await ctx.reply('Ошибка при открытии файла. Убедитесь, что файл существует и имеет правильный формат.');
+
+        if (err.code === 'EACCES') {
+            await ctx.reply('Ошибка: у бота нет прав доступа к файлу. Проверьте настройки прав доступа.');
+        } else {
+            await ctx.reply('Ошибка при открытии файла. Убедитесь, что файл существует и имеет правильный формат.');
+        }
     }
 });
 
