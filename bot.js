@@ -42,7 +42,7 @@ async function getMaterialsStructure() {
             }
         } else if (category.endsWith('.docx')) {
             // Если это файл .docx в корне папки materials
-            structure[category] = null;
+            structure[category] = null; // Указываем, что это файл, а не папка
             console.log(`Файл .docx в корне папки materials: ${category}`);
         }
     }
