@@ -151,12 +151,18 @@ bot.command('start', async (ctx) => {
 // Обработка кнопки "Материалы"
 bot.action('materials', async (ctx) => {
     const structure = await getMaterialsStructure();
-    const buttons = Object.keys(structure).map(category => [
-        Markup.button.callback(category, `category:${category}`)
-    ]);
+    const buttons = Object.keys(structure).map(category => {
+        if (structure[category] === null) {
+            // Это файл .docx
+            return [Markup.button.callback(category, `open_docx:${category}`)];
+        } else {
+            // Это папка (категория)
+            return [Markup.button.callback(category, `category:${category}`)];
+        }
+    });
     buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
 
-    await ctx.editMessageText('Выберите категорию:',
+    await ctx.editMessageText('Выберите категорию или файл:',
         Markup.inlineKeyboard(buttons)
     );
 });
