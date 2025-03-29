@@ -11,25 +11,43 @@ const materialsPath = path.join(__dirname, 'materials');
 
 // Функция для получения структуры папок и файлов
 async function getMaterialsStructure() {
+    console.log('Сканируем папку materials:', materialsPath);
     const categories = await fs.readdir(materialsPath);
+    console.log('Найденные элементы в папке materials:', categories);
+
     const structure = {};
 
     for (const category of categories) {
         const categoryPath = path.join(materialsPath, category);
-        if (await fs.stat(categoryPath).then(stat => stat.isDirectory())) {
+        const isDirectory = await fs.stat(categoryPath).then(stat => stat.isDirectory());
+        console.log(`Обрабатываем элемент: ${category} (папка: ${isDirectory})`);
+
+        if (isDirectory) {
             structure[category] = {};
             const sections = await fs.readdir(categoryPath);
+            console.log(`Найденные элементы в папке ${category}:`, sections);
 
             for (const section of sections) {
                 const sectionPath = path.join(categoryPath, section);
-                if (await fs.stat(sectionPath).then(stat => stat.isDirectory())) {
+                const isSectionDirectory = await fs.stat(sectionPath).then(stat => stat.isDirectory());
+                console.log(`Обрабатываем элемент: ${section} (папка: ${isSectionDirectory})`);
+
+                if (isSectionDirectory) {
                     const files = await fs.readdir(sectionPath);
+                    console.log(`Найденные файлы в папке ${section}:`, files);
+
                     structure[category][section] = files.filter(file => file.endsWith('.docx'));
+                    console.log(`Файлы .docx в папке ${section}:`, structure[category][section]);
                 }
             }
+        } else if (category.endsWith('.docx')) {
+            // Если это файл .docx в корне папки materials
+            structure[category] = null;
+            console.log(`Файл .docx в корне папки materials: ${category}`);
         }
     }
 
+    console.log('Итоговая структура материалов:', structure);
     return structure;
 }
 
@@ -73,12 +91,18 @@ db.serialize(() => {
 
 // Обновляем команду /start
 bot.command('start', async (ctx) => {
-    // Сканируем папку materials
+    console.log('Команда /start вызвана');
+    console.log('Сканируем папку materials:', materialsPath);
+
     const files = await fs.readdir(materialsPath);
+    console.log('Найденные элементы в папке materials:', files);
+
     const docxFiles = files.filter(file => file.endsWith('.docx')); // Оставляем только файлы .docx
+    console.log('Файлы .docx в корне папки materials:', docxFiles);
 
     if (docxFiles.length === 0) {
         // Если файлов нет, уведомляем пользователя
+        console.log('В папке materials нет файлов формата .docx.');
         return await ctx.reply('В папке materials нет файлов формата .docx.');
     }
 
@@ -86,6 +110,7 @@ bot.command('start', async (ctx) => {
     const buttons = docxFiles.map(file => [
         Markup.button.callback(file, `open_docx:${file}`)
     ]);
+    console.log('Сгенерированные кнопки для файлов .docx:', buttons);
 
     // Отправляем сообщение с кнопками
     await ctx.reply('Выберите файл для открытия:', Markup.inlineKeyboard(buttons));
@@ -96,9 +121,12 @@ bot.action(/^open_docx:(.+)$/, async (ctx) => {
     const fileName = ctx.match[1]; // Получаем имя файла из callback data
     const filePath = path.join(materialsPath, fileName);
 
+    console.log(`Кнопка открытия файла нажата. Имя файла: ${fileName}, путь: ${filePath}`);
+
     try {
         // Парсим содержимое файла .docx
         const content = await parseDocx(filePath);
+        console.log(`Содержимое файла "${fileName}":\n${content}`);
 
         // Отправляем содержимое файла пользователю
         await ctx.reply(`Содержимое файла "${fileName}":\n\n${content}`);
