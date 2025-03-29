@@ -71,28 +71,11 @@ async function parseDocx(filePath) {
     const result = await mammoth.convertToHtml({ path: filePath }, options);
     console.log(`HTML-контент, возвращённый mammoth:\n${result.value}`);
 
-    // Преобразуем HTML в текст с форматированием для Telegram (MarkdownV2)
+    // Преобразуем HTML в текст для Telegram
     const htmlContent = result.value.trim();
     console.log(`HTML-контент после trim:\n${htmlContent}`);
 
-    const formattedContent = htmlContent
-        .replace(/<h1>(.*?)<\/h1>/g, '*$1*') // Заголовок 1 уровня -> жирный текст
-        .replace(/<h2>(.*?)<\/h2>/g, '_$1_') // Заголовок 2 уровня -> курсив
-        .replace(/<h3>(.*?)<\/h3>/g, '`$1`') // Заголовок 3 уровня -> моноширинный текст
-        .replace(/<strong>(.*?)<\/strong>/g, '*$1*') // Жирный текст
-        .replace(/<em>(.*?)<\/em>/g, '_$1_') // Курсив
-        .replace(/<ul>/g, '') // Убираем открывающий тег списка
-        .replace(/<\/ul>/g, '') // Убираем закрывающий тег списка
-        .replace(/<ol>/g, '') // Убираем открывающий тег нумерованного списка
-        .replace(/<\/ol>/g, '') // Убираем закрывающий тег нумерованного списка
-        .replace(/<li>(.*?)<\/li>/g, '• $1') // Элементы списка -> "• текст"
-        .replace(/<p>(.*?)<\/p>/g, '$1\n') // Преобразуем параграфы в переносы строк
-        .replace(/<br\s*\/?>/g, '\n') // Преобразуем переносы строк
-        .replace(/([_*[\]()~`>#+\-=|{}.!])/g, '\\$1'); // Экранируем специальные символы MarkdownV2
-
-    console.log(`Преобразованный текст с форматированием:\n${formattedContent}`);
-
-    return formattedContent;
+    return htmlContent; // Возвращаем HTML-контент
 }
 
 // Инициализация бота
@@ -159,12 +142,12 @@ bot.action(/^open_docx:(.+)$/, async (ctx) => {
             // Отправляем части текста по очереди
             for (const chunk of chunks) {
                 console.log(`Отправка части текста:\n${chunk}`);
-                await ctx.replyWithMarkdownV2(chunk);
+                await ctx.replyWithHTML(chunk);
             }
         } else {
             // Если текст не превышает лимит, отправляем его целиком
             console.log(`Отправка текста целиком:\n${content}`);
-            await ctx.replyWithMarkdownV2(content);
+            await ctx.replyWithHTML(content);
         }
     } catch (err) {
         console.error(`Ошибка при чтении файла ${filePath}:`, err);
