@@ -243,16 +243,17 @@ bot.action('main_menu', async (ctx) => {
 
 // Очистка базы данных
 bot.action('clear_db', async (ctx) => {
-    console.log('Кнопка "Очистить базу" нажата'); // Логируем нажатие кнопки
+    console.log('Кнопка "Очистить базу" нажата');
 
     try {
         await ctx.answerCbQuery();
-        console.log('Ответ на callback query отправлен'); // Логируем отправку ответа
+        console.log('Ответ на callback query отправлен');
 
         // Удаляем все данные из таблиц
         console.log('Начинаем очистку таблиц базы данных...');
         await new Promise((resolve, reject) => {
             db.serialize(() => {
+                db.run('PRAGMA foreign_keys = ON'); // Включаем поддержку внешних ключей
                 db.run('DELETE FROM articles', (err) => {
                     if (err) {
                         console.error('Ошибка при удалении из таблицы articles:', err);
@@ -278,10 +279,38 @@ bot.action('clear_db', async (ctx) => {
             });
         });
 
+        // Проверяем, что таблицы очищены
+        db.get('SELECT COUNT(*) AS count FROM articles', (err, row) => {
+            if (err) {
+                console.error('Ошибка при проверке таблицы articles:', err);
+            } else {
+                console.log(`Осталось записей в таблице articles: ${row.count}`);
+            }
+        });
+        db.get('SELECT COUNT(*) AS count FROM sections', (err, row) => {
+            if (err) {
+                console.error('Ошибка при проверке таблицы sections:', err);
+            } else {
+                console.log(`Осталось записей в таблице sections: ${row.count}`);
+            }
+        });
+        db.get('SELECT COUNT(*) AS count FROM categories', (err, row) => {
+            if (err) {
+                console.error('Ошибка при проверке таблицы categories:', err);
+            } else {
+                console.log(`Осталось записей в таблице categories: ${row.count}`);
+            }
+        });
+
         // Очищаем папку с загруженными фотографиями
         console.log('Начинаем очистку папки uploads...');
         await fs.emptyDir('uploads');
-        console.log('Папка uploads очищена');
+        const files = await fs.readdir('uploads');
+        console.log(`Осталось файлов в папке uploads: ${files.length}`);
+
+        // Обновляем структуру материалов
+        const structure = await getMaterialsStructure();
+        console.log('Обновленная структура материалов:', structure);
 
         // Уведомляем пользователя
         await ctx.editMessageText('База данных очищена! Отправьте /start для начала работы');
