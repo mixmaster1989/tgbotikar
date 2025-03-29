@@ -54,14 +54,14 @@ async function getMaterialsStructure() {
 async function parseDocx(filePath) {
     const options = {
         styleMap: [
-            "p[style-name='Heading 1'] => h1", // Преобразуем стиль "Heading 1" в заголовок h1
-            "p[style-name='Heading 2'] => h2", // Преобразуем стиль "Heading 2" в заголовок h2
-            "p[style-name='Heading 3'] => h3", // Преобразуем стиль "Heading 3" в заголовок h3
-            "b => strong", // Преобразуем жирный текст в <strong>
-            "i => em", // Преобразуем курсив в <em>
-            "ul => ul", // Преобразуем списки
-            "ol => ol", // Преобразуем нумерованные списки
-            "li => li" // Преобразуем элементы списка
+            "p[style-name='Heading 1'] => h1",
+            "p[style-name='Heading 2'] => h2",
+            "p[style-name='Heading 3'] => h3",
+            "b => strong",
+            "i => em",
+            "ul => ul",
+            "ol => ol",
+            "li => li"
         ]
     };
 
@@ -71,7 +71,7 @@ async function parseDocx(filePath) {
     const result = await mammoth.convertToHtml({ path: filePath }, options);
     console.log(`HTML-контент, возвращенный mammoth:\n${result.value}`);
 
-    // Преобразуем HTML в текст с форматированием для Telegram
+    // Преобразуем HTML в текст с форматированием для Telegram (MarkdownV2)
     const htmlContent = result.value.trim();
     const formattedContent = htmlContent
         .replace(/<h1>(.*?)<\/h1>/g, '*$1*') // Заголовок 1 уровня -> жирный текст
@@ -86,7 +86,7 @@ async function parseDocx(filePath) {
         .replace(/<li>(.*?)<\/li>/g, '• $1') // Элементы списка -> "• текст"
         .replace(/<p>(.*?)<\/p>/g, '$1\n') // Преобразуем параграфы в переносы строк
         .replace(/<br\s*\/?>/g, '\n') // Преобразуем переносы строк
-        .replace(/<\/?[^>]+(>|$)/g, ''); // Удаляем все оставшиеся HTML-теги
+        .replace(/([_*[\]()~`>#+\-=|{}.!])/g, '\\$1'); // Экранируем специальные символы MarkdownV2
 
     console.log(`Преобразованный текст с форматированием:\n${formattedContent}`);
 
@@ -147,17 +147,29 @@ bot.action(/^open_docx:(.+)$/, async (ctx) => {
         const content = await parseDocx(filePath);
         console.log(`Содержимое файла "${fileName}":\n${content}`);
 
+        // Проверяем длину текста
         if (content.length > 4096) {
+            console.log(`Содержимое файла слишком длинное (${content.length} символов). Разбиваем на части.`);
+
+            // Разбиваем текст на части по 4096 символов
             const chunks = content.match(/.{1,4096}/g);
+
+            // Отправляем части текста по очереди
             for (const chunk of chunks) {
-                await ctx.replyWithMarkdown(chunk);
+                await ctx.replyWithMarkdownV2(chunk);
             }
         } else {
-            await ctx.replyWithMarkdown(content);
+            // Если текст не превышает лимит, отправляем его целиком
+            await ctx.replyWithMarkdownV2(content);
         }
     } catch (err) {
         console.error(`Ошибка при чтении файла ${filePath}:`, err);
-        await ctx.reply('Ошибка при открытии файла. Убедитесь, что файл существует и имеет правильный формат.');
+
+        if (err.code === 'EACCES') {
+            await ctx.reply('Ошибка: у бота нет прав доступа к файлу. Проверьте настройки прав доступа.');
+        } else {
+            await ctx.reply('Ошибка при открытии файла. Убедитесь, что файл существует и имеет правильный формат.');
+        }
     }
 });
 
