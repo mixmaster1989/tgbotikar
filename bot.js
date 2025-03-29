@@ -71,11 +71,25 @@ async function parseDocx(filePath) {
     const result = await mammoth.convertToHtml({ path: filePath }, options);
     console.log(`HTML-контент, возвращённый mammoth:\n${result.value}`);
 
-    // Преобразуем HTML в текст для Telegram
-    const htmlContent = result.value.trim();
-    console.log(`HTML-контент после trim:\n${htmlContent}`);
+    // Преобразуем HTML в поддерживаемый Telegram формат
+    const htmlContent = result.value
+        .replace(/<h1>(.*?)<\/h1>/g, '<b>$1</b>') // Преобразуем <h1> в <b>
+        .replace(/<h2>(.*?)<\/h2>/g, '<b>$1</b>') // Преобразуем <h2> в <b>
+        .replace(/<h3>(.*?)<\/h3>/g, '<b>$1</b>') // Преобразуем <h3> в <b>
+        .replace(/<strong>(.*?)<\/strong>/g, '<b>$1</b>') // Преобразуем <strong> в <b>
+        .replace(/<em>(.*?)<\/em>/g, '<i>$1</i>') // Преобразуем <em> в <i>
+        .replace(/<ul>/g, '') // Убираем открывающий тег списка
+        .replace(/<\/ul>/g, '') // Убираем закрывающий тег списка
+        .replace(/<ol>/g, '') // Убираем открывающий тег нумерованного списка
+        .replace(/<\/ol>/g, '') // Убираем закрывающий тег нумерованного списка
+        .replace(/<li>(.*?)<\/li>/g, '• $1') // Преобразуем элементы списка в "• текст"
+        .replace(/<p>(.*?)<\/p>/g, '$1\n') // Преобразуем параграфы в переносы строк
+        .replace(/<br\s*\/?>/g, '\n') // Преобразуем переносы строк
+        .replace(/<\/?[^>]+(>|$)/g, ''); // Удаляем все оставшиеся HTML-теги
 
-    return htmlContent; // Возвращаем HTML-контент
+    console.log(`Преобразованный текст с поддерживаемыми тегами:\n${htmlContent}`);
+
+    return htmlContent;
 }
 
 // Инициализация бота
