@@ -54,34 +54,41 @@ async function getMaterialsStructure() {
 async function parseDocx(filePath) {
     const options = {
         styleMap: [
-            "p[style-name='Heading 1'] => h1",
-            "p[style-name='Heading 2'] => h2",
-            "p[style-name='Heading 3'] => h3",
-            "b => strong",
-            "i => em",
-            "ul => ul",
-            "ol => ol",
-            "li => li"
+            "p[style-name='Heading 1'] => h1", // Преобразуем стиль "Heading 1" в заголовок h1
+            "p[style-name='Heading 2'] => h2", // Преобразуем стиль "Heading 2" в заголовок h2
+            "p[style-name='Heading 3'] => h3", // Преобразуем стиль "Heading 3" в заголовок h3
+            "b => strong", // Преобразуем жирный текст в <strong>
+            "i => em", // Преобразуем курсив в <em>
+            "ul => ul", // Преобразуем списки
+            "ol => ol", // Преобразуем нумерованные списки
+            "li => li" // Преобразуем элементы списка
         ]
     };
 
-    const result = await mammoth.convertToHtml({ path: filePath }, options);
-    const htmlContent = result.value.trim();
+    console.log(`Начинаем обработку файла: ${filePath}`);
 
+    // Считываем содержимое файла с помощью mammoth
+    const result = await mammoth.convertToHtml({ path: filePath }, options);
+    console.log(`HTML-контент, возвращенный mammoth:\n${result.value}`);
+
+    // Преобразуем HTML в текст с форматированием для Telegram
+    const htmlContent = result.value.trim();
     const formattedContent = htmlContent
-        .replace(/<h1>(.*?)<\/h1>/g, '*$1*')
-        .replace(/<h2>(.*?)<\/h2>/g, '_$1_')
-        .replace(/<h3>(.*?)<\/h3>/g, '`$1`')
-        .replace(/<strong>(.*?)<\/strong>/g, '*$1*')
-        .replace(/<em>(.*?)<\/em>/g, '_$1_')
-        .replace(/<ul>/g, '')
-        .replace(/<\/ul>/g, '')
-        .replace(/<ol>/g, '')
-        .replace(/<\/ol>/g, '')
-        .replace(/<li>(.*?)<\/li>/g, '• $1')
-        .replace(/<p>(.*?)<\/p>/g, '$1\n')
-        .replace(/<br\s*\/?>/g, '\n')
-        .replace(/<\/?[^>]+(>|$)/g, '');
+        .replace(/<h1>(.*?)<\/h1>/g, '*$1*') // Заголовок 1 уровня -> жирный текст
+        .replace(/<h2>(.*?)<\/h2>/g, '_$1_') // Заголовок 2 уровня -> курсив
+        .replace(/<h3>(.*?)<\/h3>/g, '`$1`') // Заголовок 3 уровня -> моноширинный текст
+        .replace(/<strong>(.*?)<\/strong>/g, '*$1*') // Жирный текст
+        .replace(/<em>(.*?)<\/em>/g, '_$1_') // Курсив
+        .replace(/<ul>/g, '') // Убираем открывающий тег списка
+        .replace(/<\/ul>/g, '') // Убираем закрывающий тег списка
+        .replace(/<ol>/g, '') // Убираем открывающий тег нумерованного списка
+        .replace(/<\/ol>/g, '') // Убираем закрывающий тег нумерованного списка
+        .replace(/<li>(.*?)<\/li>/g, '• $1') // Элементы списка -> "• текст"
+        .replace(/<p>(.*?)<\/p>/g, '$1\n') // Преобразуем параграфы в переносы строк
+        .replace(/<br\s*\/?>/g, '\n') // Преобразуем переносы строк
+        .replace(/<\/?[^>]+(>|$)/g, ''); // Удаляем все оставшиеся HTML-теги
+
+    console.log(`Преобразованный текст с форматированием:\n${formattedContent}`);
 
     return formattedContent;
 }
