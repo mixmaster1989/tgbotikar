@@ -124,7 +124,7 @@ bot.action(/^section:(.+):(.+)$/, async (ctx) => {
     }
 
     const buttons = materials.map(material => [
-        Markup.button.callback(material, `material:${category}:${section}:${material}`.slice(0, 64))
+        Markup.button.callback(material, `material:${Buffer.from(material).toString('base64').slice(0, 50)}`)
     ]);
     buttons.push([Markup.button.callback('« Назад к разделам', `category:${category}`)]);
     buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
