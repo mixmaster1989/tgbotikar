@@ -124,9 +124,25 @@ bot.action(/^open_docx:(.+)$/, async (ctx) => {
     console.log(`Кнопка открытия файла нажата. Имя файла: ${fileName}, путь: ${filePath}`);
 
     try {
+        // Парсим содержимое файла .docx
         const content = await parseDocx(filePath);
         console.log(`Содержимое файла "${fileName}":\n${content}`);
-        await ctx.reply(`Содержимое файла "${fileName}":\n\n${content}`);
+
+        // Проверяем длину текста
+        if (content.length > 4096) {
+            console.log(`Содержимое файла слишком длинное (${content.length} символов). Разбиваем на части.`);
+
+            // Разбиваем текст на части по 4096 символов
+            const chunks = content.match(/.{1,4096}/g);
+
+            // Отправляем части текста по очереди
+            for (const chunk of chunks) {
+                await ctx.reply(chunk);
+            }
+        } else {
+            // Если текст не превышает лимит, отправляем его целиком
+            await ctx.reply(`Содержимое файла "${fileName}":\n\n${content}`);
+        }
     } catch (err) {
         console.error(`Ошибка при чтении файла ${filePath}:`, err);
 
