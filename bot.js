@@ -62,6 +62,7 @@ async function getMaterialsStructure() {
                 }
             }
         }
+        console.log('Структура материалов:', structure); // Логируем структуру
     } catch (err) {
         console.error('Ошибка при получении структуры материалов:', err);
     }
@@ -199,7 +200,7 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
         let url = `http://89.169.131.216:${PORT}/article`;
         if (category) url += `/${encodeURIComponent(category)}`;
         if (section) url += `/${encodeURIComponent(section)}`;
-        url += `/${encodeURIComponent(material)}`;
+        url += `/${encodeURIComponent(material)`;
 
         console.log(`Ссылка на Web App: ${url}`); // Логируем ссылку
 
@@ -235,7 +236,6 @@ bot.start((ctx) => {
 // Обработка кнопки "materials"
 bot.action('materials', async (ctx) => {
     console.log('Обработчик "materials" вызван'); // Логируем вызов обработчика
-
     try {
         const structure = await getMaterialsStructure();
         console.log('Структура материалов:', structure); // Логируем структуру материалов
