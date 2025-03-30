@@ -200,7 +200,7 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
         let url = `http://89.169.131.216:${PORT}/article`;
         if (category) url += `/${encodeURIComponent(category)}`;
         if (section) url += `/${encodeURIComponent(section)}`;
-        url += `/${encodeURIComponent(material)`;
+        url += `/${encodeURIComponent(material)}`;
 
         console.log(`Ссылка на Web App: ${url}`); // Логируем ссылку
 
