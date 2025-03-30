@@ -187,7 +187,7 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
 
     try {
         // Формируем ссылку на Web App
-        let url = `http://localhost:${PORT}/article`;
+        let url = `http://89.169.131.216:${PORT}/article`;
         if (category) url += `/${encodeURIComponent(category)}`;
         if (section) url += `/${encodeURIComponent(section)}`;
         url += `/${encodeURIComponent(material)}`;
