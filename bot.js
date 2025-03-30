@@ -140,14 +140,11 @@ bot.action(/^category:(.+)$/, async (ctx) => {
             return ctx.reply('В этой категории нет материалов.');
         }
 
-        const buttons = materials.map(material => {
-            const callbackData = `material:${category}:Корневые материалы:${material}`
-                .slice(0, 64)
-                .replace(/[^a-zA-Z0-9:._]/g, ''); // Разрешаем точки в callback_data
+        const buttons = materials.map(material => [
+            Markup.button.callback(material, `material:${category}:Корневые материалы:${material}`)
+        ]);
 
-            console.log(`Создан callback_data: ${callbackData}`); // Логируем callback_data
-            return [Markup.button.callback(material, callbackData)];
-        });
+        buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
 
         return ctx.reply(`Категория: ${category}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
     }
@@ -159,6 +156,8 @@ bot.action(/^category:(.+)$/, async (ctx) => {
     const buttons = Object.keys(sections).map(section => [
         Markup.button.callback(section, `section:${category}:${section}`)
     ]);
+
+    buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
 
     await ctx.reply(`Категория: ${category}\nВыберите раздел:`, Markup.inlineKeyboard(buttons));
 });
@@ -176,6 +175,8 @@ bot.action(/^section:(.+):(.+)$/, async (ctx) => {
     const buttons = materials.map(material => [
         Markup.button.callback(material, `material:${category}:${section}:${material}`)
     ]);
+
+    buttons.push([Markup.button.callback('🔙 Назад', `category:${category}`)]);
 
     await ctx.reply(`Раздел: ${section}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
 });
@@ -206,7 +207,8 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
         await ctx.reply(
             `Откройте материал "${material}" через Web App:`,
             Markup.inlineKeyboard([
-                Markup.button.url('Открыть материал', url)
+                Markup.button.url('Открыть материал', url),
+                Markup.button.callback('🔙 Назад', `section:${category}:${section}`)
             ])
         );
     } catch (err) {
@@ -218,6 +220,32 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
 // Обработка callback_query
 bot.on('callback_query', (ctx) => {
     console.log('Получен callback_query:', ctx.callbackQuery.data); // Логируем данные callback_query
+});
+
+// Обработка команды /start
+bot.start((ctx) => {
+    ctx.reply(
+        'Добро пожаловать! Нажмите кнопку ниже, чтобы просмотреть доступные материалы.',
+        Markup.inlineKeyboard([
+            Markup.button.callback('📂 Просмотреть материалы', 'materials')
+        ])
+    );
+});
+
+// Обработка кнопки "materials"
+bot.action('materials', async (ctx) => {
+    const structure = await getMaterialsStructure();
+    const buttons = Object.keys(structure).map(category => [
+        Markup.button.callback(category, `category:${category}`)
+    ]);
+
+    if (buttons.length === 0) {
+        return ctx.reply('Нет доступных категорий.');
+    }
+
+    buttons.push([Markup.button.callback('🔙 На главную', 'start')]);
+
+    await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
 });
 
 // Запуск Express-сервера
