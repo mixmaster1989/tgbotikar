@@ -21,14 +21,50 @@ app.use('/static', express.static(path.join(__dirname, 'static')));
 
 // Функция для парсинга .docx в HTML
 async function parseDocxToHtml(filePath) {
-    const result = await mammoth.convertToHtml({ path: filePath });
-    return result.value;
+    try {
+        const result = await mammoth.convertToHtml({ path: filePath });
+        return result.value.trim();
+    } catch (err) {
+        console.error(`Ошибка при парсинге файла ${filePath}:`, err);
+        throw new Error('Ошибка при парсинге файла');
+    }
+}
+
+// Функция для получения структуры папок и файлов
+async function getMaterialsStructure() {
+    const structure = {};
+    try {
+        const categories = await fs.readdir(materialsPath);
+
+        for (const category of categories) {
+            const categoryPath = path.join(materialsPath, category);
+            const isCategoryDir = await fs.stat(categoryPath).then(stat => stat.isDirectory());
+
+            if (isCategoryDir) {
+                structure[category] = {};
+                const sections = await fs.readdir(categoryPath);
+
+                for (const section of sections) {
+                    const sectionPath = path.join(categoryPath, section);
+                    const isSectionDir = await fs.stat(sectionPath).then(stat => stat.isDirectory());
+
+                    if (isSectionDir) {
+                        const files = await fs.readdir(sectionPath);
+                        structure[category][section] = files.filter(file => file.endsWith('.docx'));
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Ошибка при получении структуры материалов:', err);
+    }
+    return structure;
 }
 
 // Маршрут для отображения статьи
-app.get('/article/:fileName', async (req, res) => {
-    const fileName = req.params.fileName;
-    const filePath = path.join(materialsPath, fileName);
+app.get('/article/:category/:section/:fileName', async (req, res) => {
+    const { category, section, fileName } = req.params;
+    const filePath = path.join(materialsPath, category, section, fileName);
 
     if (!fs.existsSync(filePath)) {
         return res.status(404).send('Файл не найден');
@@ -62,36 +98,67 @@ app.get('/article/:fileName', async (req, res) => {
     }
 });
 
-// Команда /article для отправки Web App кнопки
-bot.command('article', async (ctx) => {
+// Команда /materials для отображения категорий
+bot.command('materials', async (ctx) => {
     const structure = await getMaterialsStructure();
-    const buttons = Object.keys(structure)
-        .filter(file => structure[file] === null) // Только файлы .docx
-        .map(file => Markup.button.webApp(file, `${process.env.WEB_APP_URL}/article/${file}`));
+    const buttons = Object.keys(structure).map(category => [
+        Markup.button.callback(category, `category:${category}`)
+    ]);
 
     if (buttons.length === 0) {
-        return ctx.reply('Нет доступных статей.');
+        return ctx.reply('Нет доступных категорий.');
     }
 
-    await ctx.reply('Выберите статью:', Markup.inlineKeyboard(buttons, { columns: 1 }));
+    await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
 });
 
-// Функция для получения структуры папок и файлов
-async function getMaterialsStructure() {
-    const categories = await fs.readdir(materialsPath);
-    const structure = {};
+// Обработка выбора категории
+bot.action(/^category:(.+)$/, async (ctx) => {
+    const category = ctx.match[1];
+    const structure = await getMaterialsStructure();
+    const sections = structure[category];
 
-    for (const category of categories) {
-        const categoryPath = path.join(materialsPath, category);
-        const isDirectory = await fs.stat(categoryPath).then(stat => stat.isDirectory());
-
-        if (!isDirectory && category.endsWith('.docx')) {
-            structure[category] = null; // Указываем, что это файл
-        }
+    if (!sections || Object.keys(sections).length === 0) {
+        return ctx.reply('В этой категории нет разделов.');
     }
 
-    return structure;
-}
+    const buttons = Object.keys(sections).map(section => [
+        Markup.button.callback(section, `section:${category}:${section}`)
+    ]);
+
+    await ctx.reply(`Категория: ${category}\nВыберите раздел:`, Markup.inlineKeyboard(buttons));
+});
+
+// Обработка выбора раздела
+bot.action(/^section:(.+):(.+)$/, async (ctx) => {
+    const [category, section] = ctx.match.slice(1);
+    const structure = await getMaterialsStructure();
+    const materials = structure[category][section];
+
+    if (!materials || materials.length === 0) {
+        return ctx.reply('В этом разделе нет материалов.');
+    }
+
+    const buttons = materials.map(material => [
+        Markup.button.callback(material, `material:${category}:${section}:${material}`)
+    ]);
+
+    await ctx.reply(`Раздел: ${section}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
+});
+
+// Обработка выбора материала
+bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
+    const [category, section, material] = ctx.match.slice(1);
+    const filePath = path.join(materialsPath, category, section, material);
+
+    try {
+        const content = await parseDocxToHtml(filePath);
+        await ctx.reply(`Материал: ${material}\n\n${content}`);
+    } catch (err) {
+        console.error(`Ошибка при чтении файла ${filePath}:`, err);
+        await ctx.reply('Ошибка при чтении материала.');
+    }
+});
 
 // Запуск Express-сервера
 app.listen(PORT, () => {
