@@ -133,7 +133,6 @@ bot.action(/^category:(.+)$/, async (ctx) => {
         }
 
         const buttons = materials.map(material => {
-            // Обрезаем название файла для callback_data
             const callbackData = `material:${category}:Корневые материалы:${material}`
                 .slice(0, 64)
                 .replace(/[^a-zA-Z0-9:_]/g, ''); // Удаляем недопустимые символы
@@ -174,7 +173,10 @@ bot.action(/^section:(.+):(.+)$/, async (ctx) => {
 
 // Обработка выбора материала
 bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
+    console.log('Обработчик кнопки "material" вызван'); // Логируем вызов обработчика
     const [category, section, material] = ctx.match.slice(1);
+    console.log(`Выбран материал: category=${category}, section=${section}, material=${material}`); // Логируем данные
+
     const filePath = path.join(materialsPath, category, section, material);
 
     try {
