@@ -135,7 +135,7 @@ bot.action(/^category:(.+)$/, async (ctx) => {
         const buttons = materials.map(material => {
             const callbackData = `material:${category}:Корневые материалы:${material}`
                 .slice(0, 64)
-                .replace(/[^a-zA-Z0-9:_]/g, ''); // Удаляем недопустимые символы
+                .replace(/[^a-zA-Z0-9:._]/g, ''); // Разрешаем точки в callback_data
 
             console.log(`Создан callback_data: ${callbackData}`); // Логируем callback_data
             return [Markup.button.callback(material, callbackData)];
