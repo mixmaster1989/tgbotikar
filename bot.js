@@ -137,6 +137,7 @@ bot.action(/^category:(.+)$/, async (ctx) => {
                 .slice(0, 64)
                 .replace(/[^a-zA-Z0-9:_]/g, ''); // Удаляем недопустимые символы
 
+            console.log(`Создан callback_data: ${callbackData}`); // Логируем callback_data
             return [Markup.button.callback(material, callbackData)];
         });
 
@@ -179,13 +180,16 @@ bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
 
     const filePath = path.join(materialsPath, category, section, material);
 
-    try {
-        const content = await parseDocxToHtml(filePath);
-        await ctx.reply(`Материал: ${material}\n\n${content}`);
-    } catch (err) {
-        console.error(`Ошибка при чтении файла ${filePath}:`, err);
-        await ctx.reply('Ошибка при чтении материала.');
+    if (!fs.existsSync(filePath)) {
+        console.error(`Файл не найден: ${filePath}`);
+        return ctx.reply('Файл не найден.');
     }
+    // Остальной код...
+});
+
+// Обработка callback_query
+bot.on('callback_query', (ctx) => {
+    console.log('Получен callback_query:', ctx.callbackQuery.data); // Логируем данные callback_query
 });
 
 // Запуск Express-сервера
