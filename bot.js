@@ -218,11 +218,6 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
     }
 });
 
-// Обработка callback_query
-bot.on('callback_query', (ctx) => {
-    console.log('Получен callback_query:', ctx.callbackQuery.data); // Логируем данные callback_query
-});
-
 // Обработка команды /start
 bot.start((ctx) => {
     ctx.reply(
