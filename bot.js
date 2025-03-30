@@ -69,11 +69,19 @@ async function getMaterialsStructure() {
 }
 
 // Маршрут для отображения статьи
-app.get('/article/:category/:section/:fileName', async (req, res) => {
+app.get('/article/:category?/:section?/:fileName', async (req, res) => {
     const { category, section, fileName } = req.params;
-    const filePath = path.join(materialsPath, category, section, fileName);
+
+    // Формируем путь к файлу
+    const filePath = path.join(
+        materialsPath,
+        category || '', // Если category пустой, используем корень
+        section || '',  // Если section пустой, используем корень
+        fileName
+    );
 
     if (!fs.existsSync(filePath)) {
+        console.error(`Файл не найден: ${filePath}`);
         return res.status(404).send('Файл не найден');
     }
 
