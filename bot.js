@@ -125,6 +125,20 @@ bot.action(/^category:(.+)$/, async (ctx) => {
     const structure = await getMaterialsStructure();
     const sections = structure[category];
 
+    if (category === 'Без категории') {
+        const materials = sections['Корневые материалы'];
+
+        if (!materials || materials.length === 0) {
+            return ctx.reply('В этой категории нет материалов.');
+        }
+
+        const buttons = materials.map(material => [
+            Markup.button.callback(material, `material:${category}:Корневые материалы:${material}`)
+        ]);
+
+        return ctx.reply(`Категория: ${category}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
+    }
+
     if (!sections || Object.keys(sections).length === 0) {
         return ctx.reply('В этой категории нет разделов.');
     }
