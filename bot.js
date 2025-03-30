@@ -187,7 +187,13 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
 
     try {
         const content = await parseDocxToHtml(filePath);
-        await ctx.reply(`Материал: ${material}\n\n${content}`);
+
+        // Разделяем текст на части по 4096 символов
+        const chunks = content.match(/.{1,4096}/g);
+
+        for (const chunk of chunks) {
+            await ctx.reply(chunk);
+        }
     } catch (err) {
         console.error(`Ошибка при чтении файла ${filePath}:`, err);
         await ctx.reply('Ошибка при чтении материала.');
