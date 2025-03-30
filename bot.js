@@ -234,18 +234,27 @@ bot.start((ctx) => {
 
 // Обработка кнопки "materials"
 bot.action('materials', async (ctx) => {
-    const structure = await getMaterialsStructure();
-    const buttons = Object.keys(structure).map(category => [
-        Markup.button.callback(category, `category:${category}`)
-    ]);
+    console.log('Обработчик "materials" вызван'); // Логируем вызов обработчика
 
-    if (buttons.length === 0) {
-        return ctx.reply('Нет доступных категорий.');
+    try {
+        const structure = await getMaterialsStructure();
+        console.log('Структура материалов:', structure); // Логируем структуру материалов
+
+        const buttons = Object.keys(structure).map(category => [
+            Markup.button.callback(category, `category:${category}`)
+        ]);
+
+        if (buttons.length === 0) {
+            return ctx.reply('Нет доступных категорий.');
+        }
+
+        buttons.push([Markup.button.callback('🔙 На главную', 'start')]);
+
+        await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
+    } catch (err) {
+        console.error('Ошибка в обработчике "materials":', err);
+        await ctx.reply('Произошла ошибка при загрузке материалов.');
     }
-
-    buttons.push([Markup.button.callback('🔙 На главную', 'start')]);
-
-    await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
 });
 
 // Запуск Express-сервера
