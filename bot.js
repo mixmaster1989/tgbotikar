@@ -187,7 +187,11 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
 
     try {
         // Формируем ссылку на Web App
-        const url = `http://localhost:${PORT}/article/${encodeURIComponent(category)}/${encodeURIComponent(section)}/${encodeURIComponent(material)}`;
+        let url = `http://localhost:${PORT}/article`;
+        if (category) url += `/${encodeURIComponent(category)}`;
+        if (section) url += `/${encodeURIComponent(section)}`;
+        url += `/${encodeURIComponent(material)}`;
+
         console.log(`Ссылка на Web App: ${url}`); // Логируем ссылку
 
         // Отправляем кнопку с ссылкой на Web App
