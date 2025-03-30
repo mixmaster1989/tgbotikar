@@ -34,23 +34,30 @@ async function parseDocxToHtml(filePath) {
 async function getMaterialsStructure() {
     const structure = {};
     try {
-        const categories = await fs.readdir(materialsPath);
+        const items = await fs.readdir(materialsPath);
 
-        for (const category of categories) {
-            const categoryPath = path.join(materialsPath, category);
-            const isCategoryDir = await fs.stat(categoryPath).then(stat => stat.isDirectory());
+        // Проверяем файлы в корне папки materials
+        const rootFiles = items.filter(item => item.endsWith('.docx'));
+        if (rootFiles.length > 0) {
+            structure['Без категории'] = { 'Корневые материалы': rootFiles };
+        }
 
-            if (isCategoryDir) {
-                structure[category] = {};
-                const sections = await fs.readdir(categoryPath);
+        // Проверяем папки категорий
+        for (const item of items) {
+            const itemPath = path.join(materialsPath, item);
+            const isDirectory = await fs.stat(itemPath).then(stat => stat.isDirectory());
+
+            if (isDirectory) {
+                structure[item] = {};
+                const sections = await fs.readdir(itemPath);
 
                 for (const section of sections) {
-                    const sectionPath = path.join(categoryPath, section);
+                    const sectionPath = path.join(itemPath, section);
                     const isSectionDir = await fs.stat(sectionPath).then(stat => stat.isDirectory());
 
                     if (isSectionDir) {
                         const files = await fs.readdir(sectionPath);
-                        structure[category][section] = files.filter(file => file.endsWith('.docx'));
+                        structure[item][section] = files.filter(file => file.endsWith('.docx'));
                     }
                 }
             }
