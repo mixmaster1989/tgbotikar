@@ -132,9 +132,14 @@ bot.action(/^category:(.+)$/, async (ctx) => {
             return ctx.reply('В этой категории нет материалов.');
         }
 
-        const buttons = materials.map(material => [
-            Markup.button.callback(material, `material:${category}:Корневые материалы:${material}`)
-        ]);
+        const buttons = materials.map(material => {
+            // Обрезаем название файла для callback_data
+            const callbackData = `material:${category}:Корневые материалы:${material}`
+                .slice(0, 64)
+                .replace(/[^a-zA-Z0-9:_]/g, ''); // Удаляем недопустимые символы
+
+            return [Markup.button.callback(material, callbackData)];
+        });
 
         return ctx.reply(`Категория: ${category}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
     }
