@@ -186,17 +186,20 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
     }
 
     try {
-        const content = await parseDocxToHtml(filePath);
+        // Формируем ссылку на Web App
+        const url = `http://localhost:${PORT}/article/${encodeURIComponent(category)}/${encodeURIComponent(section)}/${encodeURIComponent(material)}`;
+        console.log(`Ссылка на Web App: ${url}`); // Логируем ссылку
 
-        // Разделяем текст на части по 4096 символов
-        const chunks = content.match(/.{1,4096}/g);
-
-        for (const chunk of chunks) {
-            await ctx.reply(chunk);
-        }
+        // Отправляем кнопку с ссылкой на Web App
+        await ctx.reply(
+            `Откройте материал "${material}" через Web App:`,
+            Markup.inlineKeyboard([
+                Markup.button.url('Открыть материал', url)
+            ])
+        );
     } catch (err) {
-        console.error(`Ошибка при чтении файла ${filePath}:`, err);
-        await ctx.reply('Ошибка при чтении материала.');
+        console.error(`Ошибка при обработке файла ${filePath}:`, err);
+        await ctx.reply('Ошибка при обработке материала.');
     }
 });
 
