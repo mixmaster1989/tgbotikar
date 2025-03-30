@@ -173,18 +173,25 @@ bot.action(/^section:(.+):(.+)$/, async (ctx) => {
 });
 
 // Обработка выбора материала
-bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
+bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
     console.log('Обработчик кнопки "material" вызван'); // Логируем вызов обработчика
     const [category, section, material] = ctx.match.slice(1);
     console.log(`Выбран материал: category=${category}, section=${section}, material=${material}`); // Логируем данные
 
-    const filePath = path.join(materialsPath, category, section, material);
+    const filePath = path.join(materialsPath, category || '', section || '', material);
 
     if (!fs.existsSync(filePath)) {
         console.error(`Файл не найден: ${filePath}`);
         return ctx.reply('Файл не найден.');
     }
-    // Остальной код...
+
+    try {
+        const content = await parseDocxToHtml(filePath);
+        await ctx.reply(`Материал: ${material}\n\n${content}`);
+    } catch (err) {
+        console.error(`Ошибка при чтении файла ${filePath}:`, err);
+        await ctx.reply('Ошибка при чтении материала.');
+    }
 });
 
 // Обработка callback_query
