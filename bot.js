@@ -44,89 +44,28 @@ async function parseDocxToText(filePath) {
     }
 }
 
-// Функция для генерации тестов через OpenAI API
-async function generateTest(material) {
+// Функция для получения списка файлов из корня
+async function getFilesFromRoot() {
     try {
-        const prompt = `Создай тест на основе следующего материала:\n\n${material}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`;
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4', // Или используйте 'gpt-3.5-turbo', если GPT-4 недоступен
-            messages: [
-                { role: 'system', content: 'Ты помощник, который генерирует тесты.' },
-                { role: 'user', content: prompt },
-            ],
-            max_tokens: 500,
-            temperature: 0.7,
-        });
-        return response.choices[0].message.content.trim();
-    } catch (err) {
-        console.error('Ошибка при генерации теста:', err);
-        throw new Error('Не удалось сгенерировать тест.');
-    }
-}
-
-// Функция для получения структуры материалов
-async function getMaterialsStructure() {
-    const structure = {};
-    try {
-        console.log('Получение структуры материалов...');
+        console.log('Получение списка файлов из корня...');
         const items = await fs.readdir(materialsPath);
-
-        // Проверяем файлы в корне папки materials
-        const rootFiles = items.filter(item => item.endsWith('.docx'));
-        if (rootFiles.length > 0) {
-            structure['Без категории'] = rootFiles;
-        }
-
-        // Проверяем папки категорий
-        for (const item of items) {
-            const itemPath = path.join(materialsPath, item);
-            const isDirectory = await fs.stat(itemPath).then(stat => stat.isDirectory());
-
-            if (isDirectory) {
-                const files = await fs.readdir(itemPath);
-                structure[item] = files.filter(file => file.endsWith('.docx'));
-            }
-        }
-        console.log('Структура материалов:', structure); // Логируем структуру
+        const files = items.filter(item => item.endsWith('.docx'));
+        console.log('Список файлов:', files);
+        return files;
     } catch (err) {
-        console.error('Ошибка при получении структуры материалов:', err);
-    }
-    return structure;
-}
-
-// Функция для получения списка материалов
-async function getMaterialsContent() {
-    try {
-        const items = await fs.readdir(materialsPath);
-        const materials = [];
-
-        for (const item of items) {
-            const filePath = path.join(materialsPath, item);
-            if (item.endsWith('.docx') && (await fs.stat(filePath)).isFile()) {
-                const content = await parseDocxToText(filePath);
-                materials.push(content);
-            }
-        }
-
-        return materials.join('\n\n'); // Объединяем все материалы в один текст
-    } catch (err) {
-        console.error('Ошибка при получении материалов:', err);
-        throw new Error('Не удалось получить материалы.');
+        console.error('Ошибка при получении списка файлов:', err);
+        return [];
     }
 }
 
 // Маршрут для отображения статьи
-app.get('/article/:category?/:fileName', async (req, res) => {
-    const { category, fileName } = req.params;
+app.get('/article/:fileName', async (req, res) => {
+    const { fileName } = req.params;
 
-    console.log(`Запрос на статью: category=${category}, fileName=${fileName}`);
+    console.log(`Запрос на статью: fileName=${fileName}`);
 
     // Формируем путь к файлу
-    const filePath = path.join(
-        materialsPath,
-        category || '', // Если category пустой, используем корень
-        fileName
-    );
+    const filePath = path.join(materialsPath, fileName);
 
     if (!fs.existsSync(filePath)) {
         console.error(`Файл не найден: ${filePath}`);
@@ -172,86 +111,43 @@ bot.start(async (ctx) => {
     );
 });
 
-// Обработка кнопки "Пройти тест"
-bot.action('generate_test', async (ctx) => {
-    try {
-        await ctx.reply('Генерирую тест на основе материалов, пожалуйста, подождите...');
-
-        // Получаем содержимое всех материалов
-        const materialsContent = await getMaterialsContent();
-
-        if (!materialsContent) {
-            return ctx.reply('Материалы отсутствуют или не удалось их загрузить.');
-        }
-
-        // Генерируем тест через OpenAI API
-        const test = await generateTest(materialsContent);
-
-        // Отправляем сгенерированный тест пользователю
-        await ctx.reply(`Сгенерированный тест:\n\n${test}`);
-    } catch (err) {
-        console.error('Ошибка при генерации теста:', err);
-        await ctx.reply('Произошла ошибка при генерации теста. Попробуйте позже.');
-    }
-});
-
 // Обработка кнопки "Просмотреть материалы"
 bot.action('open_materials', async (ctx) => {
     console.log('Обработчик "open_materials" вызван');
-    const structure = await getMaterialsStructure();
-    const buttons = Object.keys(structure).map(category => [
-        Markup.button.callback(category, `category:${category}`)
-    ]);
+    const files = await getFilesFromRoot();
 
-    if (buttons.length === 0) {
-        console.log('Нет доступных категорий');
-        return ctx.reply('Нет доступных категорий.');
+    if (files.length === 0) {
+        console.log('Нет доступных файлов');
+        return ctx.reply('Нет доступных файлов.');
     }
 
-    await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
-});
-
-// Обработка выбора категории
-bot.action(/^category:(.+)$/, async (ctx) => {
-    const category = ctx.match[1];
-    console.log(`Обработчик категории вызван: ${category}`);
-    const structure = await getMaterialsStructure();
-    const materials = structure[category];
-
-    if (!materials || materials.length === 0) {
-        console.log(`В категории "${category}" нет материалов`);
-        return ctx.reply('В этой категории нет материалов.');
-    }
-
-    const buttons = materials.map(material => [
-        Markup.button.callback(material, `material:${category}:${material}`)
+    const buttons = files.map(file => [
+        Markup.button.callback(file, `material:${file}`)
     ]);
 
-    buttons.push([Markup.button.callback('🔙 Назад', 'open_materials')]);
-
-    await ctx.reply(`Категория: ${category}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
+    await ctx.reply('Выберите файл:', Markup.inlineKeyboard(buttons));
 });
 
-// Обработка выбора материала
-bot.action(/^material:(.+):(.+)$/, async (ctx) => {
-    const [category, fileName] = ctx.match.slice(1);
-    console.log(`Обработчик материала вызван: category=${category}, fileName=${fileName}`);
+// Обработка выбора файла
+bot.action(/^material:(.+)$/, async (ctx) => {
+    const fileName = ctx.match[1];
+    console.log(`Обработчик файла вызван: fileName=${fileName}`);
 
-    const filePath = path.join(materialsPath, category, fileName);
+    const filePath = path.join(materialsPath, fileName);
 
     if (!fs.existsSync(filePath)) {
         console.error(`Файл не найден: ${filePath}`);
         return ctx.reply('Файл не найден.');
     }
 
-    const url = `${webAppUrl}/article/${encodeURIComponent(category)}/${encodeURIComponent(fileName)}`;
-    console.log(`Ссылка на материал: ${url}`);
+    const url = `${webAppUrl}/article/${encodeURIComponent(fileName)}`;
+    console.log(`Ссылка на файл: ${url}`);
 
     await ctx.reply(
-        `Откройте материал "${fileName}" через Web App:`,
+        `Откройте файл "${fileName}" через Web App:`,
         Markup.inlineKeyboard([
-            Markup.button.url('Открыть материал', url),
-            Markup.button.callback('🔙 Назад', `category:${category}`)
+            Markup.button.url('Открыть файл', url),
+            Markup.button.callback('🔙 Назад', 'open_materials')
         ])
     );
 });
