@@ -118,6 +118,30 @@ app.get('/article/:id', async (req, res) => {
     }
 });
 
+// Команда /start для приветствия и отображения кнопки
+bot.start(async (ctx) => {
+    await ctx.reply(
+        'Добро пожаловать! Этот бот поможет вам просматривать материалы. Нажмите на кнопку ниже, чтобы начать.',
+        Markup.inlineKeyboard([
+            Markup.button.callback('📂 Просмотреть материалы', 'open_materials')
+        ])
+    );
+});
+
+// Обработка кнопки "Просмотреть материалы"
+bot.action('open_materials', async (ctx) => {
+    const structure = await getMaterialsStructure();
+    const buttons = Object.keys(structure).map(category => [
+        Markup.button.callback(category, `category:${category}`)
+    ]);
+
+    if (buttons.length === 0) {
+        return ctx.reply('Нет доступных категорий.');
+    }
+
+    await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
+});
+
 // Команда /materials для отображения категорий
 bot.command('materials', async (ctx) => {
     const structure = await getMaterialsStructure();
