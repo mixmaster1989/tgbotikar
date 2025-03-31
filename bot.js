@@ -48,6 +48,12 @@ function startLocalTunnel() {
         tunnel.stderr.on('data', (data) => {
             console.error('LocalTunnel stderr:', data);
         });
+
+        setTimeout(() => {
+            if (!webAppUrl) {
+                reject(new Error('LocalTunnel не вернул URL'));
+            }
+        }, 10000); // Таймаут 10 секунд
     });
 }
 
@@ -58,7 +64,7 @@ async function parseDocxToHtml(filePath) {
         return result.value.trim();
     } catch (err) {
         console.error(`Ошибка при парсинге файла ${filePath}:`, err);
-        throw new Error('Ошибка при парсинге файла');
+        return '<p>Ошибка при обработке файла. Проверьте его содержимое.</p>';
     }
 }
 
@@ -114,6 +120,8 @@ app.get('/article/:id', async (req, res) => {
     const { id } = req.params;
     const filePath = fileMap[id]; // Получаем путь из fileMap
 
+    console.log(`Запрос на файл: ${filePath}`);
+
     if (!filePath || !fs.existsSync(filePath)) {
         console.error(`Файл не найден: ${filePath}`);
         return res.status(404).send('Файл не найден');
@@ -121,6 +129,7 @@ app.get('/article/:id', async (req, res) => {
 
     try {
         const htmlContent = await parseDocxToHtml(filePath);
+        console.log(`HTML-контент успешно сгенерирован для файла: ${filePath}`);
         res.send(`
             <!DOCTYPE html>
             <html lang="en">
