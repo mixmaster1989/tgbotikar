@@ -189,12 +189,21 @@ bot.action(/^material:(.+)$/, async (ctx) => {
         const url = `http://89.169.131.216:${PORT}/article/${materialId}`;
         console.log(`Ссылка на Web App: ${url}`);
 
+        // Отправляем сообщение с Web App
         await ctx.reply(
-            `Откройте материал через Web App:`,
-            Markup.inlineKeyboard([
-                Markup.button.url('Открыть материал', url),
-                Markup.button.callback('🔙 Назад', 'materials')
-            ])
+            `Открываю материал "${path.basename(filePath)}" в Web App...`,
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: 'Открыть материал',
+                                web_app: { url }
+                            }
+                        ]
+                    ]
+                }
+            }
         );
     } catch (err) {
         console.error(`Ошибка при обработке файла ${filePath}:`, err);
