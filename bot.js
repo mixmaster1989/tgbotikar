@@ -1,3 +1,4 @@
+const { Configuration, OpenAIApi } = require('openai');
 const { Telegraf, Markup, session } = require('telegraf');
 const express = require('express');
 const path = require('path');
@@ -10,6 +11,13 @@ const materialsPath = path.join(__dirname, 'materials');
 
 // Глобальный объект для хранения путей к файлам
 const fileMap = {};
+
+// Инициализация OpenAI API
+const openai = new OpenAIApi(
+    new Configuration({
+        apiKey: process.env.OPENAI_API_KEY, // Укажите ваш API-ключ
+    })
+);
 
 // Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -25,113 +33,87 @@ app.use('/static', express.static(path.join(__dirname, 'static')));
 // URL Web App (используем публичный IP)
 const webAppUrl = `http://89.169.131.216:${PORT}`;
 
-// Функция для парсинга .docx в HTML
-async function parseDocxToHtml(filePath) {
+// Функция для парсинга .docx в текст
+async function parseDocxToText(filePath) {
     try {
-        const result = await mammoth.convertToHtml({ path: filePath });
+        const result = await mammoth.extractRawText({ path: filePath });
         return result.value.trim();
     } catch (err) {
         console.error(`Ошибка при парсинге файла ${filePath}:`, err);
-        return '<p>Ошибка при обработке файла. Проверьте его содержимое.</p>';
+        return '';
     }
 }
 
-// Функция для получения структуры папок и файлов
-async function getMaterialsStructure() {
-    const structure = {};
+// Функция для генерации тестов через OpenAI API
+async function generateTest(material) {
+    try {
+        const prompt = `Создай тест на основе следующего материала:\n\n${material}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`;
+        const response = await openai.createCompletion({
+            model: 'text-davinci-003', // Или используйте 'gpt-4', если доступно
+            prompt,
+            max_tokens: 500,
+            temperature: 0.7,
+        });
+        return response.data.choices[0].text.trim();
+    } catch (err) {
+        console.error('Ошибка при генерации теста:', err);
+        throw new Error('Не удалось сгенерировать тест.');
+    }
+}
+
+// Функция для получения списка материалов
+async function getMaterialsContent() {
     try {
         const items = await fs.readdir(materialsPath);
+        const materials = [];
 
-        // Проверяем файлы в корне папки materials
-        const rootFiles = items.filter(item => item.endsWith('.docx'));
-        if (rootFiles.length > 0) {
-            structure['Без категории'] = rootFiles.map((file, index) => {
-                const id = `root-${index}`;
-                fileMap[id] = path.join(materialsPath, file); // Сохраняем путь в fileMap
-                return { id, name: file };
-            });
-        }
-
-        // Проверяем папки категорий
         for (const item of items) {
-            const itemPath = path.join(materialsPath, item);
-            const isDirectory = await fs.stat(itemPath).then(stat => stat.isDirectory());
-
-            if (isDirectory) {
-                structure[item] = {};
-                const sections = await fs.readdir(itemPath);
-
-                for (const section of sections) {
-                    const sectionPath = path.join(itemPath, section);
-                    const isSectionDir = await fs.stat(sectionPath).then(stat => stat.isDirectory());
-
-                    if (isSectionDir) {
-                        const files = await fs.readdir(sectionPath);
-                        structure[item][section] = files.filter(file => file.endsWith('.docx')).map((file, index) => {
-                            const id = `${item}-${section}-${index}`;
-                            fileMap[id] = path.join(sectionPath, file); // Сохраняем путь в fileMap
-                            return { id, name: file };
-                        });
-                    }
-                }
+            const filePath = path.join(materialsPath, item);
+            if (item.endsWith('.docx') && (await fs.stat(filePath)).isFile()) {
+                const content = await parseDocxToText(filePath);
+                materials.push(content);
             }
         }
-        console.log('Структура материалов:', structure); // Логируем структуру
+
+        return materials.join('\n\n'); // Объединяем все материалы в один текст
     } catch (err) {
-        console.error('Ошибка при получении структуры материалов:', err);
+        console.error('Ошибка при получении материалов:', err);
+        throw new Error('Не удалось получить материалы.');
     }
-    return structure;
 }
 
-// Маршрут для отображения статьи
-app.get('/article/:id', async (req, res) => {
-    const { id } = req.params;
-    const filePath = fileMap[id]; // Получаем путь из fileMap
-
-    console.log(`Запрос на файл: ${filePath}`);
-
-    if (!filePath || !fs.existsSync(filePath)) {
-        console.error(`Файл не найден: ${filePath}`);
-        return res.status(404).send('Файл не найден');
-    }
-
-    try {
-        const htmlContent = await parseDocxToHtml(filePath);
-        console.log(`HTML-контент успешно сгенерирован для файла: ${filePath}`);
-        res.send(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>${path.basename(filePath)}</title>
-                <link rel="stylesheet" href="/static/styles.css">
-            </head>
-            <body>
-                <div class="container">
-                    <div class="article">
-                        ${htmlContent}
-                    </div>
-                    <button class="close-btn" onclick="Telegram.WebApp.close()">Закрыть</button>
-                </div>
-                <script src="https://telegram.org/js/telegram-web-app.js"></script>
-            </body>
-            </html>
-        `);
-    } catch (err) {
-        console.error(`Ошибка при обработке файла ${filePath}:`, err);
-        res.status(500).send('Ошибка при обработке файла');
-    }
-});
-
-// Команда /start для приветствия и отображения кнопки
+// Команда /start для приветствия и отображения кнопок
 bot.start(async (ctx) => {
     await ctx.reply(
-        'Добро пожаловать! Этот бот поможет вам просматривать материалы. Нажмите на кнопку ниже, чтобы начать.',
+        'Добро пожаловать! Этот бот поможет вам просматривать материалы и проходить тесты.',
         Markup.inlineKeyboard([
-            Markup.button.callback('📂 Просмотреть материалы', 'open_materials')
+            Markup.button.callback('📂 Просмотреть материалы', 'open_materials'),
+            Markup.button.callback('📝 Пройти тест', 'generate_test'),
         ])
     );
+});
+
+// Обработка кнопки "Пройти тест"
+bot.action('generate_test', async (ctx) => {
+    try {
+        await ctx.reply('Генерирую тест на основе материалов, пожалуйста, подождите...');
+
+        // Получаем содержимое всех материалов
+        const materialsContent = await getMaterialsContent();
+
+        if (!materialsContent) {
+            return ctx.reply('Материалы отсутствуют или не удалось их загрузить.');
+        }
+
+        // Генерируем тест через OpenAI API
+        const test = await generateTest(materialsContent);
+
+        // Отправляем сгенерированный тест пользователю
+        await ctx.reply(`Сгенерированный тест:\n\n${test}`);
+    } catch (err) {
+        console.error('Ошибка при генерации теста:', err);
+        await ctx.reply('Произошла ошибка при генерации теста. Попробуйте позже.');
+    }
 });
 
 // Обработка кнопки "Просмотреть материалы"
@@ -165,42 +147,6 @@ bot.action(/^category:(.+)$/, async (ctx) => {
     buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
 
     await ctx.reply(`Категория: ${category}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
-});
-
-// Обработка выбора материала
-bot.action(/^material:(.+)$/, async (ctx) => {
-    const materialId = ctx.match[1];
-    const filePath = fileMap[materialId]; // Получаем путь из fileMap
-
-    if (!filePath || !fs.existsSync(filePath)) {
-        console.error(`Файл не найден: ${filePath}`);
-        return ctx.reply('Файл не найден.');
-    }
-
-    try {
-        const url = `${webAppUrl}/article/${materialId}`;
-        console.log(`Ссылка на Web App: ${url}`);
-
-        // Отправляем сообщение с Web App
-        await ctx.reply(
-            `Открываю материал "${path.basename(filePath)}" в Web App...`,
-            {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            {
-                                text: 'Открыть материал',
-                                url // Используем прямую ссылку
-                            }
-                        ]
-                    ]
-                }
-            }
-        );
-    } catch (err) {
-        console.error(`Ошибка при обработке файла ${filePath}:`, err);
-        await ctx.reply('Ошибка при обработке материала.');
-    }
 });
 
 // Запуск Express-сервера
