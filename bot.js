@@ -39,7 +39,7 @@ async function getMaterialsStructure() {
         // Проверяем файлы в корне папки materials
         const rootFiles = items.filter(item => item.endsWith('.docx'));
         if (rootFiles.length > 0) {
-            structure['Без категории'] = rootFiles; // Убираем вложенность "Корневые материалы"
+            structure['Без категории'] = rootFiles;
         }
 
         // Проверяем папки категорий
@@ -134,46 +134,23 @@ bot.action(/^category:(.+)$/, async (ctx) => {
     const structure = await getMaterialsStructure();
     const materials = structure[category];
 
-    if (!materials || Object.keys(materials).length === 0) {
+    if (!materials || materials.length === 0) {
         return ctx.reply('В этой категории нет материалов.');
     }
 
-    const buttons = Array.isArray(materials)
-        ? materials.map(material => [
-            Markup.button.callback(material, `material:${encodeURIComponent(material)}`)
-        ])
-        : Object.keys(materials).map(section => [
-            Markup.button.callback(section, `section:${encodeURIComponent(category)}:${encodeURIComponent(section)}`)
-        ]);
+    const buttons = materials.map(material => [
+        Markup.button.callback(material, `material:${encodeURIComponent(category)}::${encodeURIComponent(material)}`)
+    ]);
 
     buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
 
-    await ctx.reply(`Категория: ${category}\nВыберите материал или раздел:`, Markup.inlineKeyboard(buttons));
-});
-
-// Обработка выбора раздела
-bot.action(/^section:(.+):(.+)$/, async (ctx) => {
-    const [category, section] = ctx.match.slice(1);
-    const structure = await getMaterialsStructure();
-    const materials = structure[category][section];
-
-    if (!materials || materials.length === 0) {
-        return ctx.reply('В этом разделе нет материалов.');
-    }
-
-    const buttons = materials.map(material => [
-        Markup.button.callback(material, `material:${encodeURIComponent(category)}:${encodeURIComponent(section)}:${encodeURIComponent(material)}`)
-    ]);
-
-    buttons.push([Markup.button.callback('🔙 Назад', `category:${category}`)]);
-
-    await ctx.reply(`Раздел: ${section}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
+    await ctx.reply(`Категория: ${category}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
 });
 
 // Обработка выбора материала
-bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
-    const [category, section, material] = ctx.match.slice(1);
-    const filePath = path.join(materialsPath, category || '', section || '', material);
+bot.action(/^material:(.+)::(.+)$/, async (ctx) => {
+    const [category, material] = ctx.match.slice(1);
+    const filePath = path.join(materialsPath, category === 'Без категории' ? '' : category, material);
 
     if (!fs.existsSync(filePath)) {
         console.error(`Файл не найден: ${filePath}`);
@@ -181,14 +158,14 @@ bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
     }
 
     try {
-        const url = `http://89.169.131.216:${PORT}/article/${encodeURIComponent(category)}/${encodeURIComponent(section)}/${encodeURIComponent(material)}`;
+        const url = `http://89.169.131.216:${PORT}/article/${encodeURIComponent(category)}/${encodeURIComponent(material)}`;
         console.log(`Ссылка на Web App: ${url}`);
 
         await ctx.reply(
             `Откройте материал "${material}" через Web App:`,
             Markup.inlineKeyboard([
                 Markup.button.url('Открыть материал', url),
-                Markup.button.callback('🔙 Назад', `section:${category}:${section}`)
+                Markup.button.callback('🔙 Назад', `category:${category}`)
             ])
         );
     } catch (err) {
