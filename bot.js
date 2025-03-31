@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const { exec } = require('child_process'); // Для запуска LocalTunnel
+const axios = require('axios'); // Для выполнения HTTP-запросов
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -31,11 +32,24 @@ app.use('/static', express.static(path.join(__dirname, 'static')));
 
 // Переменная для хранения HTTPS-URL от LocalTunnel
 let webAppUrl = '';
+let tunnelPassword = ''; // Переменная для хранения пароля
+
+// Функция для получения пароля LocalTunnel
+async function getTunnelPassword() {
+    try {
+        const response = await axios.get('https://loca.lt/mytunnelpassword');
+        tunnelPassword = response.data.trim();
+        console.log(`Пароль LocalTunnel получен: ${tunnelPassword}`);
+    } catch (err) {
+        console.error('Ошибка при получении пароля LocalTunnel:', err);
+        throw new Error('Не удалось получить пароль LocalTunnel');
+    }
+}
 
 // Функция для запуска LocalTunnel
 function startLocalTunnel() {
     return new Promise((resolve, reject) => {
-        const tunnel = exec(`lt --port ${PORT}`, (err, stdout, stderr) => {
+        const tunnel = exec(`lt --port ${PORT} --password ${tunnelPassword}`, (err, stdout, stderr) => {
             if (err) {
                 console.error('Ошибка при запуске LocalTunnel:', err);
                 reject(err);
@@ -245,7 +259,8 @@ bot.action(/^material:(.+)$/, async (ctx) => {
 app.listen(PORT, async () => {
     console.log(`Сервер запущен на http://localhost:${PORT}`);
     try {
-        await startLocalTunnel();
+        await getTunnelPassword(); // Получаем пароль
+        await startLocalTunnel(); // Запускаем LocalTunnel с паролем
         console.log(`Web App доступен по адресу: ${webAppUrl}`);
     } catch (err) {
         console.error('Не удалось запустить LocalTunnel:', err);
