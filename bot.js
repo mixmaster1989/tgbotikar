@@ -46,13 +46,16 @@ async function parseDocxToText(filePath) {
 async function generateTest(material) {
     try {
         const prompt = `Создай тест на основе следующего материала:\n\n${material}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`;
-        const response = await openai.createCompletion({
-            model: 'text-davinci-003', // Или используйте 'gpt-4', если доступно
-            prompt,
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4', // Или используйте 'gpt-3.5-turbo', если GPT-4 недоступен
+            messages: [
+                { role: 'system', content: 'Ты помощник, который генерирует тесты.' },
+                { role: 'user', content: prompt },
+            ],
             max_tokens: 500,
             temperature: 0.7,
         });
-        return response.data.choices[0].text.trim();
+        return response.choices[0].message.content.trim();
     } catch (err) {
         console.error('Ошибка при генерации теста:', err);
         throw new Error('Не удалось сгенерировать тест.');
