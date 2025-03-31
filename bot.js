@@ -20,9 +20,9 @@ bot.use(session());
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware для добавления нестандартного заголовка User-Agent
+// Middleware для добавления заголовка bypass-tunnel-reminder
 app.use((req, res, next) => {
-    req.headers['user-agent'] = 'CustomUserAgent/1.0'; // Устанавливаем нестандартный User-Agent
+    req.headers['bypass-tunnel-reminder'] = 'true'; // Устанавливаем заголовок для обхода Tunnel Reminder Page
     next();
 });
 
