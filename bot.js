@@ -8,6 +8,9 @@ require('dotenv').config();
 // Путь к папке с материалами
 const materialsPath = path.join(__dirname, 'materials');
 
+// Глобальный объект для хранения путей к файлам
+const fileMap = {};
+
 // Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
 bot.use(session());
@@ -39,7 +42,11 @@ async function getMaterialsStructure() {
         // Проверяем файлы в корне папки materials
         const rootFiles = items.filter(item => item.endsWith('.docx'));
         if (rootFiles.length > 0) {
-            structure['Без категории'] = rootFiles;
+            structure['Без категории'] = rootFiles.map((file, index) => {
+                const id = `root-${index}`;
+                fileMap[id] = path.join(materialsPath, file); // Сохраняем путь в fileMap
+                return { id, name: file };
+            });
         }
 
         // Проверяем папки категорий
@@ -57,7 +64,11 @@ async function getMaterialsStructure() {
 
                     if (isSectionDir) {
                         const files = await fs.readdir(sectionPath);
-                        structure[item][section] = files.filter(file => file.endsWith('.docx'));
+                        structure[item][section] = files.filter(file => file.endsWith('.docx')).map((file, index) => {
+                            const id = `${item}-${section}-${index}`;
+                            fileMap[id] = path.join(sectionPath, file); // Сохраняем путь в fileMap
+                            return { id, name: file };
+                        });
                     }
                 }
             }
@@ -70,18 +81,11 @@ async function getMaterialsStructure() {
 }
 
 // Маршрут для отображения статьи
-app.get('/article/:category?/:section?/:fileName', async (req, res) => {
-    const { category, section, fileName } = req.params;
+app.get('/article/:id', async (req, res) => {
+    const { id } = req.params;
+    const filePath = fileMap[id]; // Получаем путь из fileMap
 
-    // Формируем путь к файлу
-    const filePath = path.join(
-        materialsPath,
-        category || '', // Если category пустой, используем корень
-        section || '',  // Если section пустой, используем корень
-        fileName
-    );
-
-    if (!fs.existsSync(filePath)) {
+    if (!filePath || !fs.existsSync(filePath)) {
         console.error(`Файл не найден: ${filePath}`);
         return res.status(404).send('Файл не найден');
     }
@@ -94,7 +98,7 @@ app.get('/article/:category?/:section?/:fileName', async (req, res) => {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>${fileName}</title>
+                <title>${path.basename(filePath)}</title>
                 <link rel="stylesheet" href="/static/styles.css">
             </head>
             <body>
@@ -138,14 +142,9 @@ bot.action(/^category:(.+)$/, async (ctx) => {
         return ctx.reply('В этой категории нет материалов.');
     }
 
-    const buttons = materials.map(material => {
-        const callbackData = `material:${encodeURIComponent(category)}::${encodeURIComponent(material)}`;
-        if (callbackData.length > 64) {
-            console.error(`Длина callback_data превышает 64 символа: ${callbackData}`);
-            return null;
-        }
-        return [Markup.button.callback(material, callbackData)];
-    }).filter(Boolean); // Убираем null значения
+    const buttons = materials.map(material => [
+        Markup.button.callback(material.name, `material:${material.id}`)
+    ]);
 
     buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
 
@@ -153,24 +152,24 @@ bot.action(/^category:(.+)$/, async (ctx) => {
 });
 
 // Обработка выбора материала
-bot.action(/^material:(.+)::(.+)$/, async (ctx) => {
-    const [category, material] = ctx.match.slice(1);
-    const filePath = path.join(materialsPath, category === 'Без категории' ? '' : category, material);
+bot.action(/^material:(.+)$/, async (ctx) => {
+    const materialId = ctx.match[1];
+    const filePath = fileMap[materialId]; // Получаем путь из fileMap
 
-    if (!fs.existsSync(filePath)) {
+    if (!filePath || !fs.existsSync(filePath)) {
         console.error(`Файл не найден: ${filePath}`);
         return ctx.reply('Файл не найден.');
     }
 
     try {
-        const url = `http://89.169.131.216:${PORT}/article/${encodeURIComponent(category)}/${encodeURIComponent(material)}`;
+        const url = `http://89.169.131.216:${PORT}/article/${materialId}`;
         console.log(`Ссылка на Web App: ${url}`);
 
         await ctx.reply(
-            `Откройте материал "${material}" через Web App:`,
+            `Откройте материал через Web App:`,
             Markup.inlineKeyboard([
                 Markup.button.url('Открыть материал', url),
-                Markup.button.callback('🔙 Назад', `category:${category}`)
+                Markup.button.callback('🔙 Назад', 'materials')
             ])
         );
     } catch (err) {
