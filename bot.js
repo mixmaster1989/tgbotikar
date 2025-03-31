@@ -44,6 +44,19 @@ async function parseDocxToText(filePath) {
     }
 }
 
+// Функция для парсинга .docx в HTML
+async function parseDocxToHtml(filePath) {
+    try {
+        console.log(`Парсинг файла: ${filePath}`);
+        const result = await mammoth.convertToHtml({ path: filePath });
+        console.log(`Парсинг завершен: ${filePath}`);
+        return result.value.trim(); // Возвращаем HTML-контент
+    } catch (err) {
+        console.error(`Ошибка при парсинге файла ${filePath}:`, err);
+        return '<p>Ошибка при обработке файла.</p>'; // Возвращаем сообщение об ошибке
+    }
+}
+
 // Функция для получения списка файлов из корня
 async function getFilesFromRoot() {
     try {
@@ -73,7 +86,7 @@ app.get('/article/:fileName', async (req, res) => {
     }
 
     try {
-        const htmlContent = await parseDocxToText(filePath);
+        const htmlContent = await parseDocxToHtml(filePath); // Парсим файл в HTML
         res.send(`
             <!DOCTYPE html>
             <html lang="en">
@@ -86,7 +99,7 @@ app.get('/article/:fileName', async (req, res) => {
             <body>
                 <div class="container">
                     <div class="article">
-                        ${htmlContent}
+                        ${htmlContent} <!-- Вставляем HTML-контент -->
                     </div>
                     <button class="close-btn" onclick="Telegram.WebApp.close()">Закрыть</button>
                 </div>
