@@ -142,7 +142,7 @@ bot.action(/^category:(.+)$/, async (ctx) => {
         }
 
         const buttons = materials.map(material => [
-            Markup.button.callback(material, `material:${category}:Корневые материалы:${material}`)
+            Markup.button.callback(material, `material:${encodeURIComponent(material)}`)
         ]);
 
         buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
@@ -155,7 +155,7 @@ bot.action(/^category:(.+)$/, async (ctx) => {
     }
 
     const buttons = Object.keys(sections).map(section => [
-        Markup.button.callback(section, `section:${category}:${section}`)
+        Markup.button.callback(section, `section:${encodeURIComponent(category)}:${encodeURIComponent(section)}`)
     ]);
 
     buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
@@ -210,6 +210,36 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
             Markup.inlineKeyboard([
                 Markup.button.url('Открыть материал', url),
                 Markup.button.callback('🔙 Назад', `section:${category}:${section}`)
+            ])
+        );
+    } catch (err) {
+        console.error(`Ошибка при обработке файла ${filePath}:`, err);
+        await ctx.reply('Ошибка при обработке материала.');
+    }
+});
+
+// Обработка материала из категории "Без категории"
+bot.action(/^material:(.+)$/, async (ctx) => {
+    const material = decodeURIComponent(ctx.match[1]);
+    const filePath = path.join(materialsPath, 'Без категории', 'Корневые материалы', material);
+
+    if (!fs.existsSync(filePath)) {
+        console.error(`Файл не найден: ${filePath}`);
+        return ctx.reply('Файл не найден.');
+    }
+
+    try {
+        // Формируем ссылку на Web App
+        const url = `http://89.169.131.216:${PORT}/article/Без категории/Корневые материалы/${encodeURIComponent(material)}`;
+
+        console.log(`Ссылка на Web App: ${url}`); // Логируем ссылку
+
+        // Отправляем кнопку с ссылкой на Web App
+        await ctx.reply(
+            `Откройте материал "${material}" через Web App:`,
+            Markup.inlineKeyboard([
+                Markup.button.url('Открыть материал', url),
+                Markup.button.callback('🔙 Назад', 'materials')
             ])
         );
     } catch (err) {
