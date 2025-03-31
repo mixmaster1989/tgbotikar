@@ -138,9 +138,14 @@ bot.action(/^category:(.+)$/, async (ctx) => {
         return ctx.reply('В этой категории нет материалов.');
     }
 
-    const buttons = materials.map(material => [
-        Markup.button.callback(material, `material:${encodeURIComponent(category)}::${encodeURIComponent(material)}`)
-    ]);
+    const buttons = materials.map(material => {
+        const callbackData = `material:${encodeURIComponent(category)}::${encodeURIComponent(material)}`;
+        if (callbackData.length > 64) {
+            console.error(`Длина callback_data превышает 64 символа: ${callbackData}`);
+            return null;
+        }
+        return [Markup.button.callback(material, callbackData)];
+    }).filter(Boolean); // Убираем null значения
 
     buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
 
