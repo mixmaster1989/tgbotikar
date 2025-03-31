@@ -39,7 +39,7 @@ async function getMaterialsStructure() {
         // Проверяем файлы в корне папки materials
         const rootFiles = items.filter(item => item.endsWith('.docx'));
         if (rootFiles.length > 0) {
-            structure['Без категории'] = { 'Корневые материалы': rootFiles };
+            structure['Без категории'] = rootFiles; // Убираем вложенность "Корневые материалы"
         }
 
         // Проверяем папки категорий
@@ -132,35 +132,23 @@ bot.command('materials', async (ctx) => {
 bot.action(/^category:(.+)$/, async (ctx) => {
     const category = ctx.match[1];
     const structure = await getMaterialsStructure();
-    const sections = structure[category];
+    const materials = structure[category];
 
-    if (category === 'Без категории') {
-        const materials = sections['Корневые материалы'];
+    if (!materials || Object.keys(materials).length === 0) {
+        return ctx.reply('В этой категории нет материалов.');
+    }
 
-        if (!materials || materials.length === 0) {
-            return ctx.reply('В этой категории нет материалов.');
-        }
-
-        const buttons = materials.map(material => [
+    const buttons = Array.isArray(materials)
+        ? materials.map(material => [
             Markup.button.callback(material, `material:${encodeURIComponent(material)}`)
+        ])
+        : Object.keys(materials).map(section => [
+            Markup.button.callback(section, `section:${encodeURIComponent(category)}:${encodeURIComponent(section)}`)
         ]);
-
-        buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
-
-        return ctx.reply(`Категория: ${category}\nВыберите материал:`, Markup.inlineKeyboard(buttons));
-    }
-
-    if (!sections || Object.keys(sections).length === 0) {
-        return ctx.reply('В этой категории нет разделов.');
-    }
-
-    const buttons = Object.keys(sections).map(section => [
-        Markup.button.callback(section, `section:${encodeURIComponent(category)}:${encodeURIComponent(section)}`)
-    ]);
 
     buttons.push([Markup.button.callback('🔙 Назад', 'materials')]);
 
-    await ctx.reply(`Категория: ${category}\nВыберите раздел:`, Markup.inlineKeyboard(buttons));
+    await ctx.reply(`Категория: ${category}\nВыберите материал или раздел:`, Markup.inlineKeyboard(buttons));
 });
 
 // Обработка выбора раздела
@@ -174,7 +162,7 @@ bot.action(/^section:(.+):(.+)$/, async (ctx) => {
     }
 
     const buttons = materials.map(material => [
-        Markup.button.callback(material, `material:${category}:${section}:${material}`)
+        Markup.button.callback(material, `material:${encodeURIComponent(category)}:${encodeURIComponent(section)}:${encodeURIComponent(material)}`)
     ]);
 
     buttons.push([Markup.button.callback('🔙 Назад', `category:${category}`)]);
@@ -183,11 +171,8 @@ bot.action(/^section:(.+):(.+)$/, async (ctx) => {
 });
 
 // Обработка выбора материала
-bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
-    console.log('Обработчик кнопки "material" вызван'); // Логируем вызов обработчика
+bot.action(/^material:(.+):(.+):(.+)$/, async (ctx) => {
     const [category, section, material] = ctx.match.slice(1);
-    console.log(`Выбран материал: category=${category}, section=${section}, material=${material}`); // Логируем данные
-
     const filePath = path.join(materialsPath, category || '', section || '', material);
 
     if (!fs.existsSync(filePath)) {
@@ -196,15 +181,9 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
     }
 
     try {
-        // Формируем ссылку на Web App
-        let url = `http://89.169.131.216:${PORT}/article`;
-        if (category) url += `/${encodeURIComponent(category)}`;
-        if (section) url += `/${encodeURIComponent(section)}`;
-        url += `/${encodeURIComponent(material)}`;
+        const url = `http://89.169.131.216:${PORT}/article/${encodeURIComponent(category)}/${encodeURIComponent(section)}/${encodeURIComponent(material)}`;
+        console.log(`Ссылка на Web App: ${url}`);
 
-        console.log(`Ссылка на Web App: ${url}`); // Логируем ссылку
-
-        // Отправляем кнопку с ссылкой на Web App
         await ctx.reply(
             `Откройте материал "${material}" через Web App:`,
             Markup.inlineKeyboard([
@@ -215,72 +194,6 @@ bot.action(/^material:(.*?):(.*?):(.+)$/, async (ctx) => {
     } catch (err) {
         console.error(`Ошибка при обработке файла ${filePath}:`, err);
         await ctx.reply('Ошибка при обработке материала.');
-    }
-});
-
-// Обработка материала из категории "Без категории"
-bot.action(/^material:(.+)$/, async (ctx) => {
-    const material = decodeURIComponent(ctx.match[1]);
-    const filePath = path.join(materialsPath, 'Без категории', 'Корневые материалы', material);
-
-    if (!fs.existsSync(filePath)) {
-        console.error(`Файл не найден: ${filePath}`);
-        return ctx.reply('Файл не найден.');
-    }
-
-    try {
-        // Формируем ссылку на Web App
-        const url = `http://89.169.131.216:${PORT}/article/Без категории/Корневые материалы/${encodeURIComponent(material)}`;
-
-        console.log(`Ссылка на Web App: ${url}`); // Логируем ссылку
-
-        // Отправляем кнопку с ссылкой на Web App
-        await ctx.reply(
-            `Откройте материал "${material}" через Web App:`,
-            Markup.inlineKeyboard([
-                Markup.button.url('Открыть материал', url),
-                Markup.button.callback('🔙 Назад', 'materials')
-            ])
-        );
-    } catch (err) {
-        console.error(`Ошибка при обработке файла ${filePath}:`, err);
-        await ctx.reply('Ошибка при обработке материала.');
-    }
-});
-
-// Обработка команды /start
-bot.start((ctx) => {
-    ctx.reply(
-        'Добро пожаловать! Нажмите кнопку ниже, чтобы просмотреть доступные материалы.',
-        Markup.inlineKeyboard([
-            Markup.button.callback('📂 Просмотреть материалы', 'materials')
-        ])
-    );
-});
-
-// Обработка кнопки "materials"
-bot.action('materials', async (ctx) => {
-    console.log('Обработчик "materials" вызван'); // Логируем вызов обработчика
-    try {
-        const structure = await getMaterialsStructure();
-        console.log('Структура материалов:', structure); // Логируем структуру материалов
-
-        const buttons = Object.keys(structure).map(category => [
-            Markup.button.callback(category, `category:${category}`)
-        ]);
-
-        if (buttons.length === 0) {
-            console.log('Нет доступных категорий'); // Логируем отсутствие категорий
-            return ctx.reply('Нет доступных категорий.');
-        }
-
-        buttons.push([Markup.button.callback('🔙 На главную', 'start')]);
-
-        console.log('Отправляем список категорий'); // Логируем отправку категорий
-        await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
-    } catch (err) {
-        console.error('Ошибка в обработчике "materials":', err);
-        await ctx.reply('Произошла ошибка при загрузке материалов.');
     }
 });
 
