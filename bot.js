@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
+const { exec } = require('child_process'); // Для запуска LocalTunnel
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -21,6 +22,34 @@ const PORT = process.env.PORT || 3000;
 
 // Статические файлы для фронтенда
 app.use('/static', express.static(path.join(__dirname, 'static')));
+
+// Переменная для хранения HTTPS-URL от LocalTunnel
+let webAppUrl = '';
+
+// Функция для запуска LocalTunnel
+function startLocalTunnel() {
+    return new Promise((resolve, reject) => {
+        const tunnel = exec(`lt --port ${PORT}`, (err, stdout, stderr) => {
+            if (err) {
+                console.error('Ошибка при запуске LocalTunnel:', err);
+                reject(err);
+            }
+        });
+
+        tunnel.stdout.on('data', (data) => {
+            const match = data.match(/https:\/\/[^\s]+/);
+            if (match) {
+                webAppUrl = match[0];
+                console.log(`LocalTunnel запущен: ${webAppUrl}`);
+                resolve(webAppUrl);
+            }
+        });
+
+        tunnel.stderr.on('data', (data) => {
+            console.error('LocalTunnel stderr:', data);
+        });
+    });
+}
 
 // Функция для парсинга .docx в HTML
 async function parseDocxToHtml(filePath) {
@@ -142,20 +171,6 @@ bot.action('open_materials', async (ctx) => {
     await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
 });
 
-// Команда /materials для отображения категорий
-bot.command('materials', async (ctx) => {
-    const structure = await getMaterialsStructure();
-    const buttons = Object.keys(structure).map(category => [
-        Markup.button.callback(category, `category:${category}`)
-    ]);
-
-    if (buttons.length === 0) {
-        return ctx.reply('Нет доступных категорий.');
-    }
-
-    await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons));
-});
-
 // Обработка выбора категории
 bot.action(/^category:(.+)$/, async (ctx) => {
     const category = ctx.match[1];
@@ -186,7 +201,7 @@ bot.action(/^material:(.+)$/, async (ctx) => {
     }
 
     try {
-        const url = `http://89.169.131.216:${PORT}/article/${materialId}`;
+        const url = `${webAppUrl}/article/${materialId}`;
         console.log(`Ссылка на Web App: ${url}`);
 
         // Отправляем сообщение с Web App
@@ -211,9 +226,15 @@ bot.action(/^material:(.+)$/, async (ctx) => {
     }
 });
 
-// Запуск Express-сервера
-app.listen(PORT, () => {
+// Запуск Express-сервера и LocalTunnel
+app.listen(PORT, async () => {
     console.log(`Сервер запущен на http://localhost:${PORT}`);
+    try {
+        await startLocalTunnel();
+        console.log(`Web App доступен по адресу: ${webAppUrl}`);
+    } catch (err) {
+        console.error('Не удалось запустить LocalTunnel:', err);
+    }
 });
 
 // Запуск бота
