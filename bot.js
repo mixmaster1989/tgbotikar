@@ -75,18 +75,26 @@ async function getFilesFromRoot() {
 // Функция для генерации тестов через Hugging Face API
 async function generateTestWithHuggingFace(material) {
     try {
-        const response = await axios.post(
-            'https://api-inference.huggingface.co/models/gpt2', // Используем модель GPT-2
-            {
-                inputs: `Создай тест на основе следующего материала:\n\n${material}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
-            },
+        const response = await fetch(
+            'https://router.huggingface.co/hf-inference/models/gpt2', // Новый URL
             {
                 headers: {
-                    Authorization: `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`, // Замените на ваш токен
+                    Authorization: `Bearer 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`, // Токен
+                    'Content-Type': 'application/json',
                 },
+                method: 'POST',
+                body: JSON.stringify({
+                    inputs: `Создай тест на основе следующего материала:\n\n${material}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
+                }),
             }
         );
-        return response.data.generated_text;
+
+        if (!response.ok) {
+            throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return result.generated_text || 'Не удалось получить текст.';
     } catch (err) {
         console.error('Ошибка при генерации теста через Hugging Face API:', err);
         throw new Error('Не удалось сгенерировать тест.');
