@@ -66,12 +66,74 @@ async function getFilesFromRoot() {
     }
 }
 
+// Функция для локальной генерации простого теста
+function generateSimpleTest(material) {
+    // Разбиваем материал на предложения
+    const sentences = material.split(/[.!?]+/).filter(s => s.trim().length > 10);
+    
+    // Если материала недостаточно, возвращаем сообщение об ошибке
+    if (sentences.length < 5) {
+        return 'Недостаточно материала для генерации теста.';
+    }
+
+    // Выбираем 5 случайных предложений для вопросов
+    const selectedSentences = [];
+    const usedIndexes = new Set();
+    
+    while (selectedSentences.length < 5 && selectedSentences.length < sentences.length) {
+        const idx = Math.floor(Math.random() * sentences.length);
+        if (!usedIndexes.has(idx)) {
+            usedIndexes.add(idx);
+            selectedSentences.push(sentences[idx].trim());
+        }
+    }
+
+    // Генерируем тест
+    let test = 'Тест по материалу:\n\n';
+    
+    selectedSentences.forEach((sentence, idx) => {
+        // Создаем вопрос из предложения
+        const words = sentence.split(' ').filter(w => w.length > 3);
+        if (words.length === 0) return;
+        
+        const randomWord = words[Math.floor(Math.random() * words.length)];
+        const question = sentence.replace(randomWord, '________');
+        
+        // Создаем варианты ответов
+        const correctAnswer = randomWord;
+        const otherWords = words.filter(w => w !== randomWord);
+        const alternatives = [correctAnswer];
+        
+        // Добавляем случайные слова как альтернативные варианты
+        while (alternatives.length < 4 && otherWords.length > 0) {
+            const randomIndex = Math.floor(Math.random() * otherWords.length);
+            const word = otherWords.splice(randomIndex, 1)[0];
+            if (word !== correctAnswer) {
+                alternatives.push(word);
+            }
+        }
+        
+        // Перемешиваем варианты ответов
+        const shuffledAlternatives = alternatives.sort(() => Math.random() - 0.5);
+        const correctIndex = shuffledAlternatives.indexOf(correctAnswer);
+        
+        // Добавляем вопрос в тест
+        test += `${idx + 1}. ${question}\n`;
+        shuffledAlternatives.forEach((alt, i) => {
+            test += `${String.fromCharCode(97 + i)}) ${alt}\n`;
+        });
+        test += `Правильный ответ: ${String.fromCharCode(97 + correctIndex)}\n\n`;
+    });
+    
+    return test;
+}
+
 // Функция для генерации тестов через Hugging Face API
 async function generateTestWithHuggingFace(material) {
     const maxAttempts = 3;
     const models = [
-        'bigscience/bloomz-560m',  // меньше и быстрее
-        'EleutherAI/gpt-neo-1.3B', // оригинальная модель как запасной вариант
+        'bigscience/bloomz-560m',
+        'EleutherAI/gpt-neo-1.3B',
     ];
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -98,6 +160,7 @@ async function generateTestWithHuggingFace(material) {
                                 do_sample: true
                             },
                         }),
+                        timeout: 30000 // 30 секунд таймаут
                     }
                 );
 
@@ -105,9 +168,8 @@ async function generateTestWithHuggingFace(material) {
                     const errorText = await response.text();
                     console.error(`Ошибка API (${model}):`, response.status, response.statusText, errorText);
                     
-                    // Если модель занята, пробуем следующую
-                    if (response.status === 500 && errorText.includes('Model too busy')) {
-                        continue;
+                    if (response.status === 500 || response.status === 503) {
+                        continue; // Пробуем следующую модель при ошибках сервера
                     }
                     
                     throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
@@ -122,18 +184,18 @@ async function generateTestWithHuggingFace(material) {
                 return result.generated_text || 'Не удалось получить текст.';
             } catch (err) {
                 console.error(`Ошибка при генерации теста через модель ${model}:`, err);
-                // Продолжаем со следующей моделью
                 continue;
             }
         }
         
-        // Если все модели не сработали, ждем перед следующей попыткой
         if (attempt < maxAttempts - 1) {
-            await new Promise(resolve => setTimeout(resolve, 5000)); // 5 секунд между попытками
+            await new Promise(resolve => setTimeout(resolve, 5000));
         }
     }
 
-    throw new Error('Не удалось сгенерировать тест после нескольких попыток.');
+    // Если все попытки с API не удались, используем локальную генерацию
+    console.log('Использую локальную генерацию теста...');
+    return generateSimpleTest(material);
 }
 
 // Маршрут для отображения статьи
@@ -235,25 +297,31 @@ bot.action(/^material:(.+)$/, async (ctx) => {
 bot.action('generate_test', async (ctx) => {
     try {
         await ctx.reply('Генерирую тест на основе материалов, пожалуйста, подождите...');
-
-        // Получаем содержимое всех материалов
+        
+        // Получаем все файлы
         const files = await getFilesFromRoot();
         if (files.length === 0) {
-            return ctx.reply('Нет доступных файлов для генерации теста.');
+            return ctx.reply('Нет доступных материалов для генерации теста.');
         }
-
-        // Читаем содержимое первого файла (для примера)
-        const filePath = path.join(materialsPath, files[0]);
-        const material = await parseDocxToText(filePath);
-
-        // Генерируем тест через Hugging Face API
-        const test = await generateTestWithHuggingFace(material);
-
-        // Отправляем сгенерированный тест пользователю
-        await ctx.reply(`Сгенерированный тест:\n\n${test}`);
+        
+        // Выбираем случайный файл
+        const randomFile = files[Math.floor(Math.random() * files.length)];
+        const filePath = path.join(materialsPath, randomFile);
+        
+        // Получаем текст из файла
+        const result = await parseDocxToText(filePath);
+        if (!result) {
+            return ctx.reply('Не удалось прочитать материал для теста.');
+        }
+        
+        // Генерируем тест
+        const test = await generateTestWithHuggingFace(result);
+        
+        // Отправляем тест пользователю
+        await ctx.reply(`Тест создан на основе материала "${randomFile}":\n\n${test}`);
     } catch (err) {
         console.error('Ошибка при генерации теста:', err);
-        await ctx.reply('Произошла ошибка при генерации теста. Попробуйте позже.');
+        await ctx.reply('Произошла ошибка при генерации теста. Пожалуйста, попробуйте позже.');
     }
 });
 
