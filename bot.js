@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
-const GPT4All = require('gpt4all');
+const { GPT4All } = require('gpt4all'); // Обновляем импорт
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -646,10 +646,10 @@ D) [вариант]
 
 Текст: ${text}`,
             { 
-                temp: 0.7, 
-                maxTokens: 2000, 
-                topK: 40, 
-                topP: 0.9 
+                temperature: 0.7, 
+                max_tokens: 2000, 
+                top_k: 40, 
+                top_p: 0.9 
             }
         );
 
