@@ -80,7 +80,7 @@ async function generateTestWithHuggingFace(material) {
         const truncatedMaterial = material.slice(0, maxInputTokens); // Обрезаем текст до допустимой длины
 
         const response = await fetch(
-            'https://router.huggingface.co/hf-inference/models/gpt2', // Новый URL
+            'https://router.huggingface.co/hf-inference/models/EleutherAI/gpt-neo-1.3B', // Новый URL
             {
                 headers: {
                     Authorization: `Bearer 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`, // Токен
