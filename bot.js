@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
-const { GPT4All } = require('gpt4all-ts');  // Используем TypeScript версию
+const { GPT4All } = require('node-gpt4all');  // Используем node-gpt4all
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -34,9 +34,8 @@ let gptInitialized = false;
 // Инициализируем модель при запуске
 (async () => {
     try {
-        gpt4all = new GPT4All();
-        await gpt4all.init();
-        await gpt4all.open();
+        gpt4all = new GPT4All('ggml-gpt4all-j');  // используем базовую модель
+        await gpt4all.init(false);  // false означает не скачивать модель, если она уже есть
         gptInitialized = true;
         console.log('GPT4All успешно инициализирован');
     } catch (err) {
@@ -86,7 +85,7 @@ async function getFilesFromRoot() {
 
 // Функция для генерации теста через GPT4All
 async function generateTestWithGPT4All(material) {
-    if (!gptInitialized) {
+    if (!gptInitialized || !gpt4all) {
         throw new Error('GPT4All не инициализирован');
     }
 
@@ -107,10 +106,10 @@ d) [Вариант D]
 
         const response = await gpt4all.generate(prompt, {
             temp: 0.7,
-            max_tokens: 800,
-            top_k: 40,
-            top_p: 0.9,
-            repeat_penalty: 1.1
+            maxTokens: 800,
+            topK: 40,
+            topP: 0.9,
+            repeatPenalty: 1.1
         });
 
         return response.trim();
