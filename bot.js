@@ -1,9 +1,10 @@
-const { Telegraf, Markup, session } = require('telegraf');
+ const { Telegraf, Markup, session } = require('telegraf');
 const express = require('express');
 const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
+const { GPT4All } = require('gpt4all');
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -609,12 +610,108 @@ function evaluateQuestions(questions) {
     return score;
 }
 
-// Улучшенная функция для локальной генерации теста
-function generateSmartTest(material) {
+// Инициализация модели GPT4All
+const gpt4all = new GPT4All('gpt4all-j-v1.3-groovy', { verbose: true });
+let model = null;
+
+// Функция инициализации модели
+async function initModel() {
+    if (!model) {
+        console.log('Инициализация модели...');
+        model = await gpt4all.load();
+        console.log('Модель загружена!');
+    }
+}
+
+// Функция для генерации вопросов через AI
+async function generateAIQuestions(text, count = 5) {
+    try {
+        await initModel();
+        
+        const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
+Q1: [вопрос]
+A) [вариант]
+B) [вариант]
+C) [вариант]
+D) [вариант]
+Правильный ответ: [буква]
+
+Текст: ${text}`;
+
+        const response = await model.generate(prompt, {
+            temp: 0.7,
+            maxTokens: 2000,
+            topK: 40,
+            topP: 0.9,
+            repeat: false,
+            repeatPenalty: 1.1
+        });
+
+        return parseAIResponse(response);
+    } catch (err) {
+        console.error('Ошибка при генерации вопросов через AI:', err);
+        return null;
+    }
+}
+
+// Функция для парсинга ответа AI
+function parseAIResponse(response) {
+    const questions = [];
+    const parts = response.split('\nQ');
+    
+    for (let part of parts) {
+        if (!part.trim()) continue;
+        
+        try {
+            // Если часть не начинается с номера, добавляем Q
+            if (!part.startsWith('1:')) {
+                part = '1:' + part;
+            }
+            
+            const [questionPart, ...optionsParts] = part.split('\n');
+            const question = questionPart.split(':')[1].trim();
+            
+            const options = [];
+            let correctAnswer = '';
+            
+            for (const line of optionsParts) {
+                if (line.startsWith('Правильный ответ:')) {
+                    correctAnswer = line.split(':')[1].trim();
+                } else if (line.match(/^[A-D]\)/)) {
+                    options.push(line.substring(2).trim());
+                }
+            }
+            
+            if (question && options.length === 4 && correctAnswer) {
+                questions.push({
+                    type: 'ai-generated',
+                    question,
+                    options,
+                    correctAnswer
+                });
+            }
+        } catch (err) {
+            console.error('Ошибка при парсинге вопроса:', err);
+        }
+    }
+    
+    return questions;
+}
+
+// Улучшенная функция для генерации теста
+async function generateSmartTest(material) {
     // Анализируем текст
     const textAnalysis = extractKeyPhrases(material);
     
-    // Генерируем вопросы
+    // Пробуем сначала сгенерировать через AI
+    const aiQuestions = await generateAIQuestions(material, 5);
+    
+    if (aiQuestions && aiQuestions.length >= 5) {
+        return formatTest(aiQuestions);
+    }
+    
+    // Если AI не справился, используем старый метод
+    console.log('Fallback на алгоритмическую генерацию...');
     let questions = createQuestions(textAnalysis, 5);
     
     // Оцениваем качество вопросов
