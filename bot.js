@@ -75,8 +75,8 @@ async function getFilesFromRoot() {
 // Функция для генерации тестов через Hugging Face API
 async function generateTestWithHuggingFace(material) {
     try {
-        // Ограничиваем длину текста до 800 символов (чтобы оставить место для генерируемого текста)
-        const truncatedMaterial = material.slice(0, 800);
+        // Ограничиваем длину текста до 824 символов (чтобы общее количество токенов не превышало 1024)
+        const truncatedMaterial = material.slice(0, 824);
 
         const response = await fetch(
             'https://router.huggingface.co/hf-inference/models/gpt2', // Новый URL
