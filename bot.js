@@ -130,14 +130,29 @@ function generateSimpleTest(material) {
 
 // Функция для генерации тестов через Hugging Face API
 async function generateTestWithHuggingFace(material) {
-    const maxAttempts = 2; // Уменьшаем количество попыток
+    const maxAttempts = 2;
     const models = [
+        // Маленькие модели (быстрые)
         'bigscience/bloomz-560m',
+        'facebook/opt-125m',
+        'EleutherAI/pythia-160m',
+        
+        // Средние модели
+        'bigscience/bloomz-1b1',
+        'facebook/opt-1.3b',
+        'EleutherAI/pythia-1.4b',
+        
+        // Большие модели (более качественные)
         'EleutherAI/gpt-neo-1.3B',
+        'bigscience/bloomz-3b',
+        'facebook/opt-2.7b'
     ];
 
+    // Перемешиваем модели для случайного порядка
+    const shuffledModels = models.sort(() => Math.random() - 0.5);
+
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        for (const model of models) {
+        for (const model of shuffledModels) {
             try {
                 console.log(`Попытка ${attempt + 1} с моделью ${model}`);
                 
