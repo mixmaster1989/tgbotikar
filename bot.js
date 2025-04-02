@@ -4,7 +4,6 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
-const fetch = require('node-fetch');  // Добавляем node-fetch
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -262,31 +261,28 @@ async function generateTestWithHuggingFace(material) {
                     setTimeout(() => reject(new Error('API Timeout')), 15000);
                 });
                 
-                const apiPromise = fetch(
-                    `https://api-inference.huggingface.co/models/${model}`,
-                    {
-                        headers: {
-                            'Authorization': 'Bearer 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',
-                            'Content-Type': 'application/json',
+                const apiPromise = axios({
+                    method: 'post',
+                    url: `https://api-inference.huggingface.co/models/${model}`,
+                    headers: {
+                        'Authorization': 'Bearer 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',
+                        'Content-Type': 'application/json',
+                    },
+                    data: {
+                        inputs: `Создай тест на основе следующего материала:\n\n${material.slice(0, 800)}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
+                        parameters: {
+                            max_new_tokens: 500,
+                            temperature: 0.7,
+                            top_p: 0.95,
+                            do_sample: true
                         },
-                        method: 'POST',
-                        body: JSON.stringify({
-                            inputs: `Создай тест на основе следующего материала:\n\n${material.slice(0, 800)}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
-                            parameters: {
-                                max_new_tokens: 500,
-                                temperature: 0.7,
-                                top_p: 0.95,
-                                do_sample: true
-                            },
-                        })
                     }
-                );
+                });
 
                 const response = await Promise.race([apiPromise, timeoutPromise]);
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`Ошибка API (${model}):`, response.status, response.statusText, errorText);
+                if (response.status !== 200) {
+                    console.error(`Ошибка API (${model}):`, response.status, response.statusText);
                     
                     if (response.status === 500 || response.status === 503) {
                         continue;
@@ -295,7 +291,7 @@ async function generateTestWithHuggingFace(material) {
                     throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
                 }
 
-                const result = await response.json();
+                const result = response.data;
                 
                 if (Array.isArray(result) && result.length > 0) {
                     return result[0].generated_text || 'Не удалось получить текст.';
