@@ -1,9 +1,11 @@
 const gpt4all = require('gpt4all');
+const path = require('path');
 
 async function testGPT4All() {
     try {
         console.log('Инициализация GPT4All...');
-        const model = await gpt4all.loadModel('gpt4all-j-v1.3-groovy');
+        const modelPath = path.join(process.env.HOME, 'my-telegram-bot', 'models', 'gpt4all-j-v1.3-groovy.gguf');
+        const model = await gpt4all.loadModel(modelPath);
         
         console.log('Модель инициализирована');
         

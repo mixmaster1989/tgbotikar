@@ -618,7 +618,8 @@ async function initModel() {
     if (!model) {
         console.log('Начинаем инициализацию GPT4All модели...');
         try {
-            model = await gpt4all.loadModel('gpt4all-j-v1.3-groovy');
+            const modelPath = path.join(process.env.HOME, 'my-telegram-bot', 'models', 'gpt4all-j-v1.3-groovy.gguf');
+            model = await gpt4all.loadModel(modelPath);
             console.log('Модель успешно загружена!');
         } catch (err) {
             console.error('Ошибка при загрузке модели:', err);
