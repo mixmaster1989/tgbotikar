@@ -75,6 +75,9 @@ async function getFilesFromRoot() {
 // Функция для генерации тестов через Hugging Face API
 async function generateTestWithHuggingFace(material) {
     try {
+        // Ограничиваем длину текста до 1000 символов
+        const truncatedMaterial = material.slice(0, 1000);
+
         const response = await fetch(
             'https://router.huggingface.co/hf-inference/models/gpt2', // Новый URL
             {
@@ -84,12 +87,14 @@ async function generateTestWithHuggingFace(material) {
                 },
                 method: 'POST',
                 body: JSON.stringify({
-                    inputs: `Создай тест на основе следующего материала:\n\n${material}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
+                    inputs: `Создай тест на основе следующего материала:\n\n${truncatedMaterial}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
                 }),
             }
         );
 
         if (!response.ok) {
+            const errorDetails = await response.json();
+            console.error('Ошибка API:', response.status, response.statusText, errorDetails);
             throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
         }
 
