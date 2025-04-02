@@ -70,33 +70,41 @@ async function getFilesFromRoot() {
 async function generateTestWithHuggingFace(material) {
     try {
         // Рассчитываем максимальную длину входного текста
-        const maxInputTokens = 800; // Учитываем max_new_tokens
-        const truncatedMaterial = material.slice(0, maxInputTokens); // Обрезаем текст до допустимой длины
+        const maxInputTokens = 800;
+        const truncatedMaterial = material.slice(0, maxInputTokens);
 
         const response = await fetch(
-            'https://router.huggingface.co/hf-inference/models/EleutherAI/gpt-neo-1.3B', // Новый URL
+            'https://api-inference.huggingface.co/models/EleutherAI/gpt-neo-1.3B',
             {
                 headers: {
-                    Authorization: `Bearer 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`, // Токен
+                    'Authorization': 'Bearer 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',
                     'Content-Type': 'application/json',
                 },
                 method: 'POST',
                 body: JSON.stringify({
                     inputs: `Создай тест на основе следующего материала:\n\n${truncatedMaterial}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
                     parameters: {
-                        max_new_tokens: 50, // Ограничиваем количество генерируемых токенов
+                        max_new_tokens: 500,
+                        temperature: 0.7,
+                        top_p: 0.95,
+                        do_sample: true
                     },
                 }),
             }
         );
 
         if (!response.ok) {
-            const errorDetails = await response.json();
-            console.error('Ошибка API:', response.status, response.statusText, errorDetails);
+            const errorText = await response.text();
+            console.error('Ошибка API:', response.status, response.statusText, errorText);
             throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
         }
 
         const result = await response.json();
+        
+        if (Array.isArray(result) && result.length > 0) {
+            return result[0].generated_text || 'Не удалось получить текст.';
+        }
+        
         return result.generated_text || 'Не удалось получить текст.';
     } catch (err) {
         console.error('Ошибка при генерации теста через Hugging Face API:', err);
