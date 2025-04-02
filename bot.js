@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
+const fetch = require('node-fetch');  // Добавляем node-fetch
 require('dotenv').config();
 
 // Путь к папке с материалами
