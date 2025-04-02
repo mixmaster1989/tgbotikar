@@ -2,25 +2,45 @@ const gpt4all = require('gpt4all');
 const path = require('path');
 const fs = require('fs');
 
+async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 минут максимум
+    const startTime = Date.now();
+    while (true) {
+        if (fs.existsSync(filePath) && !filePath.endsWith('.part')) {
+            return true;
+        }
+        
+        if (Date.now() - startTime > maxWaitTime) {
+            throw new Error(`Превышено время ожидания загрузки файла: ${filePath}`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Ждем 5 секунд
+    }
+}
+
 async function testGPT4All() {
     try {
         console.log('Инициализация GPT4All...');
-        const modelPath = path.join(process.env.HOME, '.cache', 'gpt4all', 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+        const modelDir = path.join(process.env.HOME, '.cache', 'gpt4all');
+        const partModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf.part');
+        const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
         
-        console.log('Полный путь к модели:', modelPath);
+        console.log('Ожидание завершения загрузки модели...');
+        await waitForFileDownload(partModelPath);
+        
+        console.log('Полный путь к модели:', finalModelPath);
         
         // Проверяем существование файла
-        if (!fs.existsSync(modelPath)) {
-            console.error(`ОШИБКА: Файл модели не найден по пути: ${modelPath}`);
-            console.error('Содержимое директории:', fs.readdirSync(path.dirname(modelPath)));
-            throw new Error(`Файл модели не найден: ${modelPath}`);
+        if (!fs.existsSync(finalModelPath)) {
+            console.error(`ОШИБКА: Файл модели не найден по пути: ${finalModelPath}`);
+            console.error('Содержимое директории:', fs.readdirSync(modelDir));
+            throw new Error(`Файл модели не найден: ${finalModelPath}`);
         }
         
         // Получаем статистику файла
-        const stats = fs.statSync(modelPath);
+        const stats = fs.statSync(finalModelPath);
         console.log('Размер файла модели:', stats.size, 'байт');
         
-        const model = await gpt4all.loadModel(modelPath);
+        const model = await gpt4all.loadModel(finalModelPath);
         
         console.log('Модель инициализирована');
         
