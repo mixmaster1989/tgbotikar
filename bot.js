@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
+const { GPT4All } = require('gpt4all');
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -25,6 +26,22 @@ app.use('/static', express.static(path.join(__dirname, 'static')));
 
 // URL Web App (используем публичный IP)
 const webAppUrl = `http://89.169.131.216:${PORT}`;
+
+// Инициализация GPT4All
+const gpt4all = new GPT4All('gpt4all-j-v1.3-groovy');  // или другая модель, которая у вас установлена
+let gptInitialized = false;
+
+// Инициализируем модель при запуске
+(async () => {
+    try {
+        await gpt4all.init();
+        await gpt4all.open();
+        gptInitialized = true;
+        console.log('GPT4All успешно инициализирован');
+    } catch (err) {
+        console.error('Ошибка инициализации GPT4All:', err);
+    }
+})();
 
 // Функция для парсинга .docx в текст
 async function parseDocxToText(filePath) {
@@ -66,63 +83,125 @@ async function getFilesFromRoot() {
     }
 }
 
-// Функция для локальной генерации простого теста
-function generateSimpleTest(material) {
-    // Разбиваем материал на предложения
-    const sentences = material.split(/[.!?]+/).filter(s => s.trim().length > 10);
-    
-    // Если материала недостаточно, возвращаем сообщение об ошибке
-    if (sentences.length < 5) {
-        return 'Недостаточно материала для генерации теста.';
+// Функция для генерации теста через GPT4All
+async function generateTestWithGPT4All(material) {
+    if (!gptInitialized) {
+        throw new Error('GPT4All не инициализирован');
     }
 
-    // Выбираем 5 случайных предложений для вопросов
-    const selectedSentences = [];
-    const usedIndexes = new Set();
-    
-    while (selectedSentences.length < 5 && selectedSentences.length < sentences.length) {
-        const idx = Math.floor(Math.random() * sentences.length);
-        if (!usedIndexes.has(idx)) {
-            usedIndexes.add(idx);
-            selectedSentences.push(sentences[idx].trim());
-        }
-    }
+    try {
+        const prompt = `Создай тест из 5 вопросов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный:
 
+${material.slice(0, 1000)}
+
+Формат ответа:
+1. [Вопрос 1]
+a) [Вариант A]
+b) [Вариант B]
+c) [Вариант C]
+d) [Вариант D]
+Правильный ответ: [буква]
+
+2. [Следующий вопрос...]`;
+
+        const response = await gpt4all.generate(prompt, {
+            temp: 0.7,
+            max_tokens: 800,
+            top_k: 40,
+            top_p: 0.9,
+            repeat_penalty: 1.1
+        });
+
+        return response.trim();
+    } catch (err) {
+        console.error('Ошибка при генерации теста через GPT4All:', err);
+        throw err;
+    }
+}
+
+// Улучшенная функция для локальной генерации теста
+function generateSmartTest(material) {
+    // Разбиваем материал на предложения и абзацы
+    const paragraphs = material.split('\n\n').filter(p => p.trim().length > 30);
+    const sentences = material.split(/[.!?]+/).filter(s => s.trim().length > 20);
+    
+    // Функция для извлечения ключевых фраз из текста
+    function extractKeyPhrases(text) {
+        // Удаляем стоп-слова и знаки препинания
+        const stopWords = new Set(['и', 'в', 'во', 'не', 'что', 'он', 'на', 'я', 'с', 'со', 'как', 'а', 'то', 'все', 'она', 'так', 'его', 'но', 'да', 'ты', 'к', 'у', 'же', 'вы', 'за', 'бы', 'по', 'только', 'ее', 'мне', 'было', 'вот', 'от', 'меня', 'еще', 'нет', 'о', 'из', 'ему']);
+        const words = text.toLowerCase()
+            .replace(/[.,!?;:()]/g, '')
+            .split(' ')
+            .filter(word => word.length > 3 && !stopWords.has(word));
+        
+        // Находим часто встречающиеся слова
+        const wordFreq = {};
+        words.forEach(word => {
+            wordFreq[word] = (wordFreq[word] || 0) + 1;
+        });
+        
+        // Возвращаем топ слов
+        return Object.entries(wordFreq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([word]) => word);
+    }
+    
+    // Функция для создания вопроса на основе предложения
+    function createQuestion(sentence, keyPhrases) {
+        const words = sentence.split(' ');
+        const potentialAnswers = words.filter(w => w.length > 4 && keyPhrases.includes(w.toLowerCase()));
+        
+        if (potentialAnswers.length === 0) return null;
+        
+        const answer = potentialAnswers[Math.floor(Math.random() * potentialAnswers.length)];
+        const question = sentence.replace(answer, '_________');
+        
+        // Создаем неправильные варианты из ключевых фраз
+        const otherOptions = keyPhrases
+            .filter(w => w !== answer.toLowerCase())
+            .sort(() => Math.random() - 0.5)
+            .slice(0, 3)
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1));
+        
+        const options = [answer, ...otherOptions].sort(() => Math.random() - 0.5);
+        const correctIndex = options.indexOf(answer);
+        
+        return {
+            question,
+            options,
+            correctAnswer: String.fromCharCode(97 + correctIndex)
+        };
+    }
+    
     // Генерируем тест
     let test = 'Тест по материалу:\n\n';
+    const keyPhrases = extractKeyPhrases(material);
+    const questions = [];
     
-    selectedSentences.forEach((sentence, idx) => {
-        // Создаем вопрос из предложения
-        const words = sentence.split(' ').filter(w => w.length > 3);
-        if (words.length === 0) return;
-        
-        const randomWord = words[Math.floor(Math.random() * words.length)];
-        const question = sentence.replace(randomWord, '________');
-        
-        // Создаем варианты ответов
-        const correctAnswer = randomWord;
-        const otherWords = words.filter(w => w !== randomWord);
-        const alternatives = [correctAnswer];
-        
-        // Добавляем случайные слова как альтернативные варианты
-        while (alternatives.length < 4 && otherWords.length > 0) {
-            const randomIndex = Math.floor(Math.random() * otherWords.length);
-            const word = otherWords.splice(randomIndex, 1)[0];
-            if (word !== correctAnswer) {
-                alternatives.push(word);
-            }
+    // Пробуем создать вопросы из каждого абзаца
+    for (const paragraph of paragraphs) {
+        const question = createQuestion(paragraph, keyPhrases);
+        if (question) questions.push(question);
+        if (questions.length >= 5) break;
+    }
+    
+    // Если не хватает вопросов, используем отдельные предложения
+    if (questions.length < 5) {
+        for (const sentence of sentences) {
+            const question = createQuestion(sentence, keyPhrases);
+            if (question) questions.push(question);
+            if (questions.length >= 5) break;
         }
-        
-        // Перемешиваем варианты ответов
-        const shuffledAlternatives = alternatives.sort(() => Math.random() - 0.5);
-        const correctIndex = shuffledAlternatives.indexOf(correctAnswer);
-        
-        // Добавляем вопрос в тест
-        test += `${idx + 1}. ${question}\n`;
-        shuffledAlternatives.forEach((alt, i) => {
-            test += `${String.fromCharCode(97 + i)}) ${alt}\n`;
+    }
+    
+    // Форматируем тест
+    questions.forEach((q, idx) => {
+        test += `${idx + 1}. ${q.question}\n`;
+        q.options.forEach((opt, i) => {
+            test += `${String.fromCharCode(97 + i)}) ${opt}\n`;
         });
-        test += `Правильный ответ: ${String.fromCharCode(97 + correctIndex)}\n\n`;
+        test += `Правильный ответ: ${q.correctAnswer}\n\n`;
     });
     
     return test;
@@ -156,9 +235,8 @@ async function generateTestWithHuggingFace(material) {
             try {
                 console.log(`Попытка ${attempt + 1} с моделью ${model}`);
                 
-                // Создаем промис с таймаутом для API запроса
                 const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('API Timeout')), 15000); // 15 секунд таймаут
+                    setTimeout(() => reject(new Error('API Timeout')), 15000);
                 });
                 
                 const apiPromise = fetch(
@@ -181,7 +259,6 @@ async function generateTestWithHuggingFace(material) {
                     }
                 );
 
-                // Используем Promise.race для обработки таймаута
                 const response = await Promise.race([apiPromise, timeoutPromise]);
 
                 if (!response.ok) {
@@ -209,12 +286,18 @@ async function generateTestWithHuggingFace(material) {
         }
         
         if (attempt < maxAttempts - 1) {
-            await new Promise(resolve => setTimeout(resolve, 3000)); // Уменьшаем время ожидания между попытками
+            await new Promise(resolve => setTimeout(resolve, 3000));
         }
     }
 
-    console.log('Использую локальную генерацию теста...');
-    return generateSimpleTest(material);
+    // Пробуем GPT4All как запасной вариант
+    try {
+        console.log('Пробую использовать GPT4All...');
+        return await generateTestWithGPT4All(material);
+    } catch (err) {
+        console.error('Ошибка GPT4All, использую локальную генерацию...', err);
+        return generateSmartTest(material);
+    }
 }
 
 // Маршрут для отображения статьи
@@ -314,15 +397,13 @@ bot.action(/^material:(.+)$/, async (ctx) => {
 
 // Обработка кнопки "Сгенерировать тест"
 bot.action('generate_test', async (ctx) => {
-    // Создаем промис с таймаутом для всей операции
     const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Operation Timeout')), 60000); // 60 секунд максимум на всю операцию
+        setTimeout(() => reject(new Error('Operation Timeout')), 60000);
     });
 
     try {
         await ctx.reply('Генерирую тест на основе материалов, пожалуйста, подождите...');
         
-        // Оборачиваем основную логику в Promise.race с таймаутом
         await Promise.race([
             (async () => {
                 const files = await getFilesFromRoot();
@@ -338,13 +419,12 @@ bot.action('generate_test', async (ctx) => {
                     throw new Error('Не удалось прочитать материал для теста.');
                 }
                 
-                // Если API недоступен, сразу используем локальную генерацию
                 let test;
                 try {
                     test = await generateTestWithHuggingFace(result);
                 } catch (err) {
-                    console.log('Ошибка API, использую локальную генерацию...');
-                    test = generateSimpleTest(result);
+                    console.log('Ошибка API, использую локальную генерацию...', err);
+                    test = generateSmartTest(result);
                 }
                 
                 await ctx.reply(`Тест создан на основе материала "${randomFile}":\n\n${test}`);
