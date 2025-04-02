@@ -82,7 +82,7 @@ async function generateTestWithHuggingFace(material) {
             },
             {
                 headers: {
-                    Authorization: `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                    node bot.js`, // Замените на ваш токен
+                    Authorization: `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`, // Замените на ваш токен
                 },
             }
         );
