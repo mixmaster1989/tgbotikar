@@ -4,7 +4,7 @@ const path = require('path');
 async function testGPT4All() {
     try {
         console.log('Инициализация GPT4All...');
-        const modelPath = path.resolve(process.env.GPT4ALL_MODEL_PATH);
+        const modelPath = path.join(process.env.HOME, '.cache', 'gpt4all', 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
         
         console.log('Полный путь к модели:', modelPath);
         
@@ -20,6 +20,7 @@ async function testGPT4All() {
         console.log('Ответ:', response);
     } catch (error) {
         console.error('Ошибка:', error);
+        console.error('Детали ошибки:', error.stack);
     }
 }
 

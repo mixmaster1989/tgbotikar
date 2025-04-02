@@ -618,7 +618,7 @@ async function initModel() {
     if (!model) {
         console.log('Начинаем инициализацию GPT4All модели...');
         try {
-            const modelPath = path.resolve(process.env.GPT4ALL_MODEL_PATH);
+            const modelPath = path.join(process.env.HOME, '.cache', 'gpt4all', 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
             
             console.log('Полный путь к модели:', modelPath);
             
@@ -626,6 +626,7 @@ async function initModel() {
             console.log('Модель успешно загружена!');
         } catch (err) {
             console.error('Ошибка при загрузке модели:', err);
+            console.error('Детали ошибки:', err.stack);
             throw err;
         }
     }
@@ -659,6 +660,7 @@ D) [вариант]
         return parseAIResponse(response);
     } catch (err) {
         console.error('Ошибка при генерации вопросов через AI:', err);
+        console.error('Детали ошибки:', err.stack);
         return null;
     }
 }
