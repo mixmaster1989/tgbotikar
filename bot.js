@@ -76,7 +76,7 @@ async function getFilesFromRoot() {
 async function generateTestWithHuggingFace(material) {
     try {
         // Рассчитываем максимальную длину входного текста
-        const maxInputTokens = 1024 - 200; // Учитываем max_new_tokens
+        const maxInputTokens = 800; // Учитываем max_new_tokens
         const truncatedMaterial = material.slice(0, maxInputTokens); // Обрезаем текст до допустимой длины
 
         const response = await fetch(
@@ -90,7 +90,7 @@ async function generateTestWithHuggingFace(material) {
                 body: JSON.stringify({
                     inputs: `Создай тест на основе следующего материала:\n\n${truncatedMaterial}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
                     parameters: {
-                        max_new_tokens: 200, // Ограничиваем количество генерируемых токенов
+                        max_new_tokens: 50, // Ограничиваем количество генерируемых токенов
                     },
                 }),
             }
