@@ -618,7 +618,7 @@ async function initModel() {
     if (!model) {
         console.log('Начинаем инициализацию GPT4All модели...');
         try {
-            const modelPath = path.join(process.env.HOME, 'my-telegram-bot', 'models', 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+            const modelPath = path.join(process.env.HOME, '.cache', 'gpt4all', 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
             model = await gpt4all.loadModel(modelPath);
             console.log('Модель успешно загружена!');
         } catch (err) {
