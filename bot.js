@@ -68,48 +68,72 @@ async function getFilesFromRoot() {
 
 // Функция для генерации тестов через Hugging Face API
 async function generateTestWithHuggingFace(material) {
-    try {
-        // Рассчитываем максимальную длину входного текста
-        const maxInputTokens = 800;
-        const truncatedMaterial = material.slice(0, maxInputTokens);
+    const maxAttempts = 3;
+    const models = [
+        'bigscience/bloomz-560m',  // меньше и быстрее
+        'EleutherAI/gpt-neo-1.3B', // оригинальная модель как запасной вариант
+    ];
 
-        const response = await fetch(
-            'https://api-inference.huggingface.co/models/EleutherAI/gpt-neo-1.3B',
-            {
-                headers: {
-                    'Authorization': 'Bearer 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',
-                    'Content-Type': 'application/json',
-                },
-                method: 'POST',
-                body: JSON.stringify({
-                    inputs: `Создай тест на основе следующего материала:\n\n${truncatedMaterial}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
-                    parameters: {
-                        max_new_tokens: 500,
-                        temperature: 0.7,
-                        top_p: 0.95,
-                        do_sample: true
-                    },
-                }),
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        for (const model of models) {
+            try {
+                console.log(`Попытка ${attempt + 1} с моделью ${model}`);
+                const maxInputTokens = 800;
+                const truncatedMaterial = material.slice(0, maxInputTokens);
+
+                const response = await fetch(
+                    `https://api-inference.huggingface.co/models/${model}`,
+                    {
+                        headers: {
+                            'Authorization': 'Bearer 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',
+                            'Content-Type': 'application/json',
+                        },
+                        method: 'POST',
+                        body: JSON.stringify({
+                            inputs: `Создай тест на основе следующего материала:\n\n${truncatedMaterial}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
+                            parameters: {
+                                max_new_tokens: 500,
+                                temperature: 0.7,
+                                top_p: 0.95,
+                                do_sample: true
+                            },
+                        }),
+                    }
+                );
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`Ошибка API (${model}):`, response.status, response.statusText, errorText);
+                    
+                    // Если модель занята, пробуем следующую
+                    if (response.status === 500 && errorText.includes('Model too busy')) {
+                        continue;
+                    }
+                    
+                    throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                
+                if (Array.isArray(result) && result.length > 0) {
+                    return result[0].generated_text || 'Не удалось получить текст.';
+                }
+                
+                return result.generated_text || 'Не удалось получить текст.';
+            } catch (err) {
+                console.error(`Ошибка при генерации теста через модель ${model}:`, err);
+                // Продолжаем со следующей моделью
+                continue;
             }
-        );
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Ошибка API:', response.status, response.statusText, errorText);
-            throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
-        }
-
-        const result = await response.json();
-        
-        if (Array.isArray(result) && result.length > 0) {
-            return result[0].generated_text || 'Не удалось получить текст.';
         }
         
-        return result.generated_text || 'Не удалось получить текст.';
-    } catch (err) {
-        console.error('Ошибка при генерации теста через Hugging Face API:', err);
-        throw new Error('Не удалось сгенерировать тест.');
+        // Если все модели не сработали, ждем перед следующей попыткой
+        if (attempt < maxAttempts - 1) {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // 5 секунд между попытками
+        }
     }
+
+    throw new Error('Не удалось сгенерировать тест после нескольких попыток.');
 }
 
 // Маршрут для отображения статьи
