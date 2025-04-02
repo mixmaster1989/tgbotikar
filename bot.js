@@ -1,4 +1,3 @@
-const { OpenAI } = require('openai'); // Импортируем OpenAI
 const { Telegraf, Markup, session } = require('telegraf');
 const express = require('express');
 const path = require('path');
@@ -12,11 +11,6 @@ const materialsPath = path.join(__dirname, 'materials');
 
 // Глобальный объект для хранения путей к файлам
 const fileMap = {};
-
-// Инициализация OpenAI API
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY, // Укажите ваш API-ключ
-});
 
 // Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
