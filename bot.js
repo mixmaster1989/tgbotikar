@@ -620,7 +620,7 @@ async function initModel() {
         try {
             const modelPath = process.env.GPT4ALL_MODEL_PATH;
             
-            model = await gpt4all.createModel(modelPath);
+            model = await gpt4all.load(modelPath);
             console.log('Модель успешно загружена!');
         } catch (err) {
             console.error('Ошибка при загрузке модели:', err);
