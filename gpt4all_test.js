@@ -4,7 +4,9 @@ const path = require('path');
 async function testGPT4All() {
     try {
         console.log('Инициализация GPT4All...');
-        const modelPath = process.env.GPT4ALL_MODEL_PATH;
+        const modelPath = path.resolve(process.env.GPT4ALL_MODEL_PATH);
+        
+        console.log('Полный путь к модели:', modelPath);
         
         const model = await gpt4all.loadModel(modelPath);
         

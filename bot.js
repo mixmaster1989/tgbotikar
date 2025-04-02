@@ -618,7 +618,9 @@ async function initModel() {
     if (!model) {
         console.log('Начинаем инициализацию GPT4All модели...');
         try {
-            const modelPath = process.env.GPT4ALL_MODEL_PATH;
+            const modelPath = path.resolve(process.env.GPT4ALL_MODEL_PATH);
+            
+            console.log('Полный путь к модели:', modelPath);
             
             model = await gpt4all.loadModel(modelPath);
             console.log('Модель успешно загружена!');
