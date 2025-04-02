@@ -4,7 +4,6 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
-const { GPT4All } = require('node-gpt4all');  // Используем node-gpt4all
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -26,22 +25,6 @@ app.use('/static', express.static(path.join(__dirname, 'static')));
 
 // URL Web App (используем публичный IP)
 const webAppUrl = `http://89.169.131.216:${PORT}`;
-
-// Инициализация GPT4All
-let gpt4all = null;
-let gptInitialized = false;
-
-// Инициализируем модель при запуске
-(async () => {
-    try {
-        gpt4all = new GPT4All('ggml-gpt4all-j');  // используем базовую модель
-        await gpt4all.init(false);  // false означает не скачивать модель, если она уже есть
-        gptInitialized = true;
-        console.log('GPT4All успешно инициализирован');
-    } catch (err) {
-        console.error('Ошибка инициализации GPT4All:', err);
-    }
-})();
 
 // Функция для парсинга .docx в текст
 async function parseDocxToText(filePath) {
@@ -83,40 +66,128 @@ async function getFilesFromRoot() {
     }
 }
 
-// Функция для генерации теста через GPT4All
-async function generateTestWithGPT4All(material) {
-    if (!gptInitialized || !gpt4all) {
-        throw new Error('GPT4All не инициализирован');
+// Функция для извлечения ключевых фраз из текста
+function extractKeyPhrases(text) {
+    // Удаляем стоп-слова и знаки препинания
+    const stopWords = new Set(['и', 'в', 'во', 'не', 'что', 'он', 'на', 'я', 'с', 'со', 'как', 'а', 'то', 'все', 'она', 'так', 'его', 'но', 'да', 'ты', 'к', 'у', 'же', 'вы', 'за', 'бы', 'по', 'только', 'ее', 'мне', 'было', 'вот', 'от', 'меня', 'еще', 'нет', 'о', 'из', 'ему']);
+    const words = text.toLowerCase()
+        .replace(/[.,!?;:()]/g, '')
+        .split(' ')
+        .filter(word => word.length > 3 && !stopWords.has(word));
+    
+    // Находим часто встречающиеся слова и их контекст
+    const wordFreq = {};
+    const wordContext = {};
+    
+    // Окно контекста
+    const windowSize = 5;
+    
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        wordFreq[word] = (wordFreq[word] || 0) + 1;
+        
+        // Собираем контекст слова
+        if (!wordContext[word]) {
+            wordContext[word] = new Set();
+        }
+        
+        // Добавляем слова из окна контекста
+        for (let j = Math.max(0, i - windowSize); j < Math.min(words.length, i + windowSize); j++) {
+            if (i !== j) {
+                wordContext[word].add(words[j]);
+            }
+        }
     }
+    
+    // Вычисляем важность слов на основе частоты и разнообразия контекста
+    const wordImportance = {};
+    for (const word in wordFreq) {
+        wordImportance[word] = wordFreq[word] * wordContext[word].size;
+    }
+    
+    // Возвращаем топ слов с их контекстом
+    return Object.entries(wordImportance)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(([word]) => ({
+            word,
+            context: Array.from(wordContext[word])
+        }));
+}
 
-    try {
-        const prompt = `Создай тест из 5 вопросов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный:
-
-${material.slice(0, 1000)}
-
-Формат ответа:
-1. [Вопрос 1]
-a) [Вариант A]
-b) [Вариант B]
-c) [Вариант C]
-d) [Вариант D]
-Правильный ответ: [буква]
-
-2. [Следующий вопрос...]`;
-
-        const response = await gpt4all.generate(prompt, {
-            temp: 0.7,
-            maxTokens: 800,
-            topK: 40,
-            topP: 0.9,
-            repeatPenalty: 1.1
+// Функция для создания правдоподобных неправильных ответов
+function generateDistractors(answer, keyPhrases, count = 3) {
+    const answerLower = answer.toLowerCase();
+    const distractors = new Set();
+    
+    // Сначала пробуем использовать слова из того же контекста
+    const answerPhrase = keyPhrases.find(p => p.word === answerLower);
+    if (answerPhrase) {
+        answerPhrase.context.forEach(word => {
+            if (word !== answerLower && word.length > 3) {
+                distractors.add(word);
+            }
         });
-
-        return response.trim();
-    } catch (err) {
-        console.error('Ошибка при генерации теста через GPT4All:', err);
-        throw err;
     }
+    
+    // Если не хватает, добавляем другие ключевые фразы
+    keyPhrases.forEach(phrase => {
+        if (distractors.size < count && phrase.word !== answerLower) {
+            distractors.add(phrase.word);
+        }
+    });
+    
+    // Преобразуем в массив и форматируем
+    return Array.from(distractors)
+        .slice(0, count)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1));
+}
+
+// Функция для создания вопроса на основе предложения
+function createQuestion(sentence, keyPhrases) {
+    // Разбиваем на слова и ищем потенциальные ответы
+    const words = sentence.split(' ');
+    const potentialAnswers = words.filter(w => {
+        const wLower = w.toLowerCase().replace(/[.,!?;:()]/, '');
+        return w.length > 4 && keyPhrases.some(p => p.word === wLower);
+    });
+    
+    if (potentialAnswers.length === 0) return null;
+    
+    // Выбираем слово для вопроса
+    const answer = potentialAnswers[Math.floor(Math.random() * potentialAnswers.length)];
+    const cleanAnswer = answer.replace(/[.,!?;:()]/, '');
+    
+    // Создаем вопрос
+    let question = sentence;
+    
+    // Пробуем создать вопрос разными способами
+    const questionTypes = [
+        // Заполнить пропуск
+        () => sentence.replace(answer, '_________'),
+        // Что/Кто это?
+        () => `Что такое "${cleanAnswer}" в данном контексте?`,
+        // Определение
+        () => `Выберите правильное определение для термина "${cleanAnswer}":`,
+        // Значение
+        () => `Какое значение имеет "${cleanAnswer}" в этом тексте?`
+    ];
+    
+    // Выбираем случайный тип вопроса
+    question = questionTypes[Math.floor(Math.random() * questionTypes.length)]();
+    
+    // Генерируем неправильные варианты
+    const distractors = generateDistractors(cleanAnswer, keyPhrases);
+    
+    // Перемешиваем все варианты ответов
+    const options = [cleanAnswer, ...distractors].sort(() => Math.random() - 0.5);
+    const correctIndex = options.indexOf(cleanAnswer);
+    
+    return {
+        question,
+        options,
+        correctAnswer: String.fromCharCode(97 + correctIndex)
+    };
 }
 
 // Улучшенная функция для локальной генерации теста
@@ -125,57 +196,7 @@ function generateSmartTest(material) {
     const paragraphs = material.split('\n\n').filter(p => p.trim().length > 30);
     const sentences = material.split(/[.!?]+/).filter(s => s.trim().length > 20);
     
-    // Функция для извлечения ключевых фраз из текста
-    function extractKeyPhrases(text) {
-        // Удаляем стоп-слова и знаки препинания
-        const stopWords = new Set(['и', 'в', 'во', 'не', 'что', 'он', 'на', 'я', 'с', 'со', 'как', 'а', 'то', 'все', 'она', 'так', 'его', 'но', 'да', 'ты', 'к', 'у', 'же', 'вы', 'за', 'бы', 'по', 'только', 'ее', 'мне', 'было', 'вот', 'от', 'меня', 'еще', 'нет', 'о', 'из', 'ему']);
-        const words = text.toLowerCase()
-            .replace(/[.,!?;:()]/g, '')
-            .split(' ')
-            .filter(word => word.length > 3 && !stopWords.has(word));
-        
-        // Находим часто встречающиеся слова
-        const wordFreq = {};
-        words.forEach(word => {
-            wordFreq[word] = (wordFreq[word] || 0) + 1;
-        });
-        
-        // Возвращаем топ слов
-        return Object.entries(wordFreq)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
-            .map(([word]) => word);
-    }
-    
-    // Функция для создания вопроса на основе предложения
-    function createQuestion(sentence, keyPhrases) {
-        const words = sentence.split(' ');
-        const potentialAnswers = words.filter(w => w.length > 4 && keyPhrases.includes(w.toLowerCase()));
-        
-        if (potentialAnswers.length === 0) return null;
-        
-        const answer = potentialAnswers[Math.floor(Math.random() * potentialAnswers.length)];
-        const question = sentence.replace(answer, '_________');
-        
-        // Создаем неправильные варианты из ключевых фраз
-        const otherOptions = keyPhrases
-            .filter(w => w !== answer.toLowerCase())
-            .sort(() => Math.random() - 0.5)
-            .slice(0, 3)
-            .map(w => w.charAt(0).toUpperCase() + w.slice(1));
-        
-        const options = [answer, ...otherOptions].sort(() => Math.random() - 0.5);
-        const correctIndex = options.indexOf(answer);
-        
-        return {
-            question,
-            options,
-            correctAnswer: String.fromCharCode(97 + correctIndex)
-        };
-    }
-    
-    // Генерируем тест
-    let test = 'Тест по материалу:\n\n';
+    // Извлекаем ключевые фразы с контекстом
     const keyPhrases = extractKeyPhrases(material);
     const questions = [];
     
@@ -189,13 +210,14 @@ function generateSmartTest(material) {
     // Если не хватает вопросов, используем отдельные предложения
     if (questions.length < 5) {
         for (const sentence of sentences) {
+            if (questions.length >= 5) break;
             const question = createQuestion(sentence, keyPhrases);
             if (question) questions.push(question);
-            if (questions.length >= 5) break;
         }
     }
     
     // Форматируем тест
+    let test = 'Тест по материалу:\n\n';
     questions.forEach((q, idx) => {
         test += `${idx + 1}. ${q.question}\n`;
         q.options.forEach((opt, i) => {
@@ -290,14 +312,9 @@ async function generateTestWithHuggingFace(material) {
         }
     }
 
-    // Пробуем GPT4All как запасной вариант
-    try {
-        console.log('Пробую использовать GPT4All...');
-        return await generateTestWithGPT4All(material);
-    } catch (err) {
-        console.error('Ошибка GPT4All, использую локальную генерацию...', err);
-        return generateSmartTest(material);
-    }
+    // Используем улучшенную локальную генерацию как запасной вариант
+    console.log('Использую локальную генерацию...');
+    return generateSmartTest(material);
 }
 
 // Маршрут для отображения статьи
