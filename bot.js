@@ -130,7 +130,7 @@ function generateSimpleTest(material) {
 
 // Функция для генерации тестов через Hugging Face API
 async function generateTestWithHuggingFace(material) {
-    const maxAttempts = 3;
+    const maxAttempts = 2; // Уменьшаем количество попыток
     const models = [
         'bigscience/bloomz-560m',
         'EleutherAI/gpt-neo-1.3B',
@@ -140,10 +140,13 @@ async function generateTestWithHuggingFace(material) {
         for (const model of models) {
             try {
                 console.log(`Попытка ${attempt + 1} с моделью ${model}`);
-                const maxInputTokens = 800;
-                const truncatedMaterial = material.slice(0, maxInputTokens);
-
-                const response = await fetch(
+                
+                // Создаем промис с таймаутом для API запроса
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('API Timeout')), 15000); // 15 секунд таймаут
+                });
+                
+                const apiPromise = fetch(
                     `https://api-inference.huggingface.co/models/${model}`,
                     {
                         headers: {
@@ -152,24 +155,26 @@ async function generateTestWithHuggingFace(material) {
                         },
                         method: 'POST',
                         body: JSON.stringify({
-                            inputs: `Создай тест на основе следующего материала:\n\n${truncatedMaterial}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
+                            inputs: `Создай тест на основе следующего материала:\n\n${material.slice(0, 800)}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
                             parameters: {
                                 max_new_tokens: 500,
                                 temperature: 0.7,
                                 top_p: 0.95,
                                 do_sample: true
                             },
-                        }),
-                        timeout: 30000 // 30 секунд таймаут
+                        })
                     }
                 );
+
+                // Используем Promise.race для обработки таймаута
+                const response = await Promise.race([apiPromise, timeoutPromise]);
 
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error(`Ошибка API (${model}):`, response.status, response.statusText, errorText);
                     
                     if (response.status === 500 || response.status === 503) {
-                        continue; // Пробуем следующую модель при ошибках сервера
+                        continue;
                     }
                     
                     throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
@@ -189,11 +194,10 @@ async function generateTestWithHuggingFace(material) {
         }
         
         if (attempt < maxAttempts - 1) {
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Уменьшаем время ожидания между попытками
         }
     }
 
-    // Если все попытки с API не удались, используем локальную генерацию
     console.log('Использую локальную генерацию теста...');
     return generateSimpleTest(material);
 }
@@ -295,33 +299,50 @@ bot.action(/^material:(.+)$/, async (ctx) => {
 
 // Обработка кнопки "Сгенерировать тест"
 bot.action('generate_test', async (ctx) => {
+    // Создаем промис с таймаутом для всей операции
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Operation Timeout')), 60000); // 60 секунд максимум на всю операцию
+    });
+
     try {
         await ctx.reply('Генерирую тест на основе материалов, пожалуйста, подождите...');
         
-        // Получаем все файлы
-        const files = await getFilesFromRoot();
-        if (files.length === 0) {
-            return ctx.reply('Нет доступных материалов для генерации теста.');
-        }
-        
-        // Выбираем случайный файл
-        const randomFile = files[Math.floor(Math.random() * files.length)];
-        const filePath = path.join(materialsPath, randomFile);
-        
-        // Получаем текст из файла
-        const result = await parseDocxToText(filePath);
-        if (!result) {
-            return ctx.reply('Не удалось прочитать материал для теста.');
-        }
-        
-        // Генерируем тест
-        const test = await generateTestWithHuggingFace(result);
-        
-        // Отправляем тест пользователю
-        await ctx.reply(`Тест создан на основе материала "${randomFile}":\n\n${test}`);
+        // Оборачиваем основную логику в Promise.race с таймаутом
+        await Promise.race([
+            (async () => {
+                const files = await getFilesFromRoot();
+                if (files.length === 0) {
+                    throw new Error('Нет доступных материалов для генерации теста.');
+                }
+                
+                const randomFile = files[Math.floor(Math.random() * files.length)];
+                const filePath = path.join(materialsPath, randomFile);
+                
+                const result = await parseDocxToText(filePath);
+                if (!result) {
+                    throw new Error('Не удалось прочитать материал для теста.');
+                }
+                
+                // Если API недоступен, сразу используем локальную генерацию
+                let test;
+                try {
+                    test = await generateTestWithHuggingFace(result);
+                } catch (err) {
+                    console.log('Ошибка API, использую локальную генерацию...');
+                    test = generateSimpleTest(result);
+                }
+                
+                await ctx.reply(`Тест создан на основе материала "${randomFile}":\n\n${test}`);
+            })(),
+            timeoutPromise
+        ]);
     } catch (err) {
         console.error('Ошибка при генерации теста:', err);
-        await ctx.reply('Произошла ошибка при генерации теста. Пожалуйста, попробуйте позже.');
+        if (err.message === 'Operation Timeout') {
+            await ctx.reply('Превышено время ожидания. Попробуйте еще раз.');
+        } else {
+            await ctx.reply('Произошла ошибка при генерации теста. Пожалуйста, попробуйте позже.');
+        }
     }
 });
 
