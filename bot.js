@@ -617,29 +617,10 @@ let model = null;
 async function initModel() {
     if (!model) {
         console.log('Начинаем инициализацию GPT4All модели...');
-        
-        // Список моделей для попытки загрузки
-        const modelNames = [
-            'Phi-3-mini-4k-instruct.Q4_0.gguf',
-            'mistral-7b-instruct-v0.1.Q4_0.gguf',
-            'gpt4all-13b-snoozy-q4_0.gguf'
-        ];
-
         try {
-            for (const modelName of modelNames) {
-                try {
-                    console.log(`Пытаемся загрузить модель: ${modelName}`);
-                    model = await gpt4all.loadModel(modelName);
-                    console.log(`Модель ${modelName} успешно загружена!`);
-                    break;
-                } catch (err) {
-                    console.warn(`Не удалось загрузить модель ${modelName}:`, err.message);
-                }
-            }
-
-            if (!model) {
-                throw new Error('Не удалось загрузить ни одну из моделей');
-            }
+            const modelPath = path.join(process.env.HOME, 'my-telegram-bot', 'models', 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+            model = await gpt4all.loadModel(modelPath);
+            console.log('Модель успешно загружена!');
         } catch (err) {
             console.error('Ошибка при загрузке модели:', err);
             throw err;
