@@ -4,6 +4,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
+const axios = require('axios');
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -71,6 +72,27 @@ async function getFilesFromRoot() {
     }
 }
 
+// Функция для генерации тестов через Hugging Face API
+async function generateTestWithHuggingFace(material) {
+    try {
+        const response = await axios.post(
+            'https://api-inference.huggingface.co/models/gpt2', // Используем модель GPT-2
+            {
+                inputs: `Создай тест на основе следующего материала:\n\n${material}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
+            },
+            {
+                headers: {
+                    Authorization: `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                    node bot.js`, // Замените на ваш токен
+                },
+            }
+        );
+        return response.data.generated_text;
+    } catch (err) {
+        console.error('Ошибка при генерации теста через Hugging Face API:', err);
+        throw new Error('Не удалось сгенерировать тест.');
+    }
+}
+
 // Маршрут для отображения статьи
 app.get('/article/:fileName', async (req, res) => {
     const { fileName } = req.params;
@@ -119,7 +141,8 @@ bot.start(async (ctx) => {
     await ctx.reply(
         'Добро пожаловать! Этот бот поможет вам просматривать материалы.',
         Markup.inlineKeyboard([
-            Markup.button.callback('📂 Просмотреть материалы', 'open_materials')
+            Markup.button.callback('📂 Просмотреть материалы', 'open_materials'),
+            Markup.button.callback('📝 Сгенерировать тест', 'generate_test')
         ])
     );
 });
@@ -163,6 +186,32 @@ bot.action(/^material:(.+)$/, async (ctx) => {
             Markup.button.callback('🔙 Назад', 'open_materials')
         ])
     );
+});
+
+// Обработка кнопки "Сгенерировать тест"
+bot.action('generate_test', async (ctx) => {
+    try {
+        await ctx.reply('Генерирую тест на основе материалов, пожалуйста, подождите...');
+
+        // Получаем содержимое всех материалов
+        const files = await getFilesFromRoot();
+        if (files.length === 0) {
+            return ctx.reply('Нет доступных файлов для генерации теста.');
+        }
+
+        // Читаем содержимое первого файла (для примера)
+        const filePath = path.join(materialsPath, files[0]);
+        const material = await parseDocxToText(filePath);
+
+        // Генерируем тест через Hugging Face API
+        const test = await generateTestWithHuggingFace(material);
+
+        // Отправляем сгенерированный тест пользователю
+        await ctx.reply(`Сгенерированный тест:\n\n${test}`);
+    } catch (err) {
+        console.error('Ошибка при генерации теста:', err);
+        await ctx.reply('Произошла ошибка при генерации теста. Попробуйте позже.');
+    }
 });
 
 // Запуск Express-сервера
