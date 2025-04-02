@@ -617,17 +617,25 @@ let model = null;
 // Функция инициализации модели
 async function initModel() {
     if (!model) {
-        console.log('Инициализация модели...');
-        model = await gpt4all.load();
-        console.log('Модель загружена!');
+        console.log('Начинаем инициализацию GPT4All модели...');
+        console.log('Путь к модели:', gpt4all.modelPath);
+        try {
+            model = await gpt4all.load();
+            console.log('Модель успешно загружена!');
+        } catch (err) {
+            console.error('Ошибка при загрузке модели:', err);
+            throw err;
+        }
     }
 }
 
 // Функция для генерации вопросов через AI
 async function generateAIQuestions(text, count = 5) {
     try {
+        console.log('Начинаем генерацию вопросов через AI...');
         await initModel();
         
+        console.log(`Отправляем текст длиной ${text.length} символов в модель...`);
         const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
 Q1: [вопрос]
 A) [вариант]
