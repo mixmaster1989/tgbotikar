@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
-const { GPT4All } = require('gpt4all');
+const { GPT4All } = require('gpt4all-ts');  // Используем TypeScript версию
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -28,12 +28,13 @@ app.use('/static', express.static(path.join(__dirname, 'static')));
 const webAppUrl = `http://89.169.131.216:${PORT}`;
 
 // Инициализация GPT4All
-const gpt4all = new GPT4All('gpt4all-j-v1.3-groovy');  // или другая модель, которая у вас установлена
+let gpt4all = null;
 let gptInitialized = false;
 
 // Инициализируем модель при запуске
 (async () => {
     try {
+        gpt4all = new GPT4All();
         await gpt4all.init();
         await gpt4all.open();
         gptInitialized = true;
