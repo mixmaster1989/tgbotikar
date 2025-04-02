@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const mammoth = require('mammoth');
 const axios = require('axios');
-const { GPT4All } = require('gpt4all'); 
+const gpt4all = require('gpt4all'); 
 require('dotenv').config();
 
 // Путь к папке с материалами
@@ -611,16 +611,14 @@ function evaluateQuestions(questions) {
 }
 
 // Инициализация модели GPT4All
-const model = new GPT4All();
-let isModelInitialized = false;
+let model = null;
 
 // Функция инициализации модели
 async function initModel() {
-    if (!isModelInitialized) {
+    if (!model) {
         console.log('Начинаем инициализацию GPT4All модели...');
         try {
-            await model.init();
-            isModelInitialized = true;
+            model = await gpt4all.createEmbedder();
             console.log('Модель успешно загружена!');
         } catch (err) {
             console.error('Ошибка при загрузке модели:', err);
@@ -636,8 +634,8 @@ async function generateAIQuestions(text, count = 5) {
         await initModel();
         
         console.log(`Отправляем текст длиной ${text.length} символов в модель...`);
-        const response = await model.generate(
-            `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
+        const response = await gpt4all.generate(text, {
+            prompt: `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
 Q1: [вопрос]
 A) [вариант]
 B) [вариант]
@@ -646,13 +644,11 @@ D) [вариант]
 Правильный ответ: [буква]
 
 Текст: ${text}`,
-            { 
-                temperature: 0.7, 
-                max_tokens: 2000, 
-                top_k: 40, 
-                top_p: 0.9 
-            }
-        );
+            temperature: 0.7, 
+            max_tokens: 2000, 
+            top_k: 40, 
+            top_p: 0.9 
+        });
 
         return parseAIResponse(response);
     } catch (err) {
