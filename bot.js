@@ -233,20 +233,13 @@ function generateSmartTest(material) {
 async function generateTestWithHuggingFace(material) {
     const maxAttempts = 2;
     const models = [
-        // Маленькие модели (быстрые)
-        'bigscience/bloomz-560m',
-        'facebook/opt-125m',
-        'EleutherAI/pythia-160m',
-        
-        // Средние модели
-        'bigscience/bloomz-1b1',
-        'facebook/opt-1.3b',
-        'EleutherAI/pythia-1.4b',
-        
-        // Большие модели (более качественные)
-        'EleutherAI/gpt-neo-1.3B',
-        'bigscience/bloomz-3b',
-        'facebook/opt-2.7b'
+        // Многоязычные модели, хорошо работающие с русским
+        'ai-forever/rugpt3small_based_on_gpt2',    // Русская GPT модель
+        'sberbank-ai/rugpt3large_based_on_gpt2',   // Большая русская GPT
+        'DeepPavlov/rubert-base-cased',            // BERT для русского
+        'xlm-roberta-base',                        // Многоязычная RoBERTa
+        'cointegrated/rubert-tiny2',               // Легкая русская BERT
+        'DeepPavlov/bert-base-multilingual-cased', // Многоязычный BERT
     ];
 
     // Перемешиваем модели для случайного порядка
@@ -269,12 +262,27 @@ async function generateTestWithHuggingFace(material) {
                         'Content-Type': 'application/json',
                     },
                     data: {
-                        inputs: `Создай тест на основе следующего материала:\n\n${material.slice(0, 800)}\n\nТест должен содержать 5 вопросов с вариантами ответов и правильным ответом.`,
+                        inputs: `Сгенерируй тест из 5 вопросов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный.
+
+Текст для анализа:
+${material.slice(0, 800)}
+
+Формат вывода должен быть таким:
+
+1. [Вопрос по тексту]
+a) [Первый вариант ответа]
+b) [Второй вариант ответа]
+c) [Третий вариант ответа]
+d) [Четвертый вариант ответа]
+Правильный ответ: [буква]
+
+2. [Следующий вопрос...]`,
                         parameters: {
-                            max_new_tokens: 500,
-                            temperature: 0.7,
+                            max_new_tokens: 1000,
+                            temperature: 0.8,
                             top_p: 0.95,
-                            do_sample: true
+                            do_sample: true,
+                            num_return_sequences: 1
                         },
                     }
                 });
@@ -292,12 +300,23 @@ async function generateTestWithHuggingFace(material) {
                 }
 
                 const result = response.data;
+                let generatedText = '';
                 
                 if (Array.isArray(result) && result.length > 0) {
-                    return result[0].generated_text || 'Не удалось получить текст.';
+                    generatedText = result[0].generated_text;
+                } else if (result.generated_text) {
+                    generatedText = result.generated_text;
                 }
-                
-                return result.generated_text || 'Не удалось получить текст.';
+
+                // Проверяем качество сгенерированного текста
+                if (!generatedText || 
+                    !generatedText.includes('Правильный ответ') || 
+                    generatedText.length < 100) {
+                    console.log(`Модель ${model} сгенерировала некачественный текст, пробуем следующую...`);
+                    continue;
+                }
+
+                return generatedText;
             } catch (err) {
                 console.error(`Ошибка при генерации теста через модель ${model}:`, err);
                 continue;
@@ -309,9 +328,14 @@ async function generateTestWithHuggingFace(material) {
         }
     }
 
-    // Используем улучшенную локальную генерацию как запасной вариант
-    console.log('Использую локальную генерацию...');
-    return generateSmartTest(material);
+    // Используем TextCortex как запасной вариант
+    console.log('Hugging Face API не дал хороших результатов, пробую TextCortex...');
+    try {
+        return await generateTestWithTextCortex(material);
+    } catch (err) {
+        console.log('TextCortex недоступен, использую локальную генерацию...');
+        return generateSmartTest(material);
+    }
 }
 
 // Функция для генерации теста через TextCortex API
@@ -331,11 +355,11 @@ async function generateTestWithTextCortex(material) {
                 target_lang: 'ru',
                 temperature: 0.7,
                 max_tokens: 800,
-                text: `Создай тест на основе этого материала. Нужно 5 вопросов с 4 вариантами ответа каждый:
+                text: `Создай тест на основе этого материала. Нужно 5 вопросов с 4 вариантами ответа каждый.
 
 ${material.slice(0, 1000)}
 
-Формат ответа должен быть такой:
+Формат ответа должен быть таким:
 
 1. [Вопрос]
 a) [Вариант A]
