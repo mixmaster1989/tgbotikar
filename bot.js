@@ -229,7 +229,7 @@ function generateSmartTest(material) {
     return test;
 }
 
-// Функция для генерации тестов через Hugging Face API
+// Функция для генерации теста через Hugging Face API
 async function generateTestWithHuggingFace(material) {
     const maxAttempts = 2;
     const models = [
@@ -312,6 +312,71 @@ async function generateTestWithHuggingFace(material) {
     // Используем улучшенную локальную генерацию как запасной вариант
     console.log('Использую локальную генерацию...');
     return generateSmartTest(material);
+}
+
+// Функция для генерации теста через TextCortex API
+async function generateTestWithTextCortex(material) {
+    try {
+        console.log('Пробую использовать TextCortex API...');
+        
+        const response = await axios({
+            method: 'post',
+            url: 'https://api.textcortex.com/v1/texts/completions',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer tc_r_nw0bv_qj9hk_dwjbh_nk4hq_6kpf8'  // Это тестовый ключ с ограничениями
+            },
+            data: {
+                source_lang: 'ru',
+                target_lang: 'ru',
+                temperature: 0.7,
+                max_tokens: 800,
+                text: `Создай тест на основе этого материала. Нужно 5 вопросов с 4 вариантами ответа каждый:
+
+${material.slice(0, 1000)}
+
+Формат ответа должен быть такой:
+
+1. [Вопрос]
+a) [Вариант A]
+b) [Вариант B]
+c) [Вариант C]
+d) [Вариант D]
+Правильный ответ: [буква]
+
+2. [Следующий вопрос...]`
+            }
+        });
+
+        if (response.data && response.data.data && response.data.data.text) {
+            return response.data.data.text;
+        }
+        
+        throw new Error('Неверный формат ответа от TextCortex API');
+    } catch (err) {
+        console.error('Ошибка TextCortex API:', err);
+        throw err;
+    }
+}
+
+// Функция для генерации тестов, пробует разные API
+async function generateTest(material) {
+    // Сначала пробуем Hugging Face
+    try {
+        return await generateTestWithHuggingFace(material);
+    } catch (err) {
+        console.log('Hugging Face API недоступен, пробую TextCortex...');
+        
+        // Затем пробуем TextCortex
+        try {
+            return await generateTestWithTextCortex(material);
+        } catch (err) {
+            console.log('TextCortex API недоступен, использую локальную генерацию...');
+            
+            // Если оба API недоступны, используем локальную генерацию
+            return generateSmartTest(material);
+        }
+    }
 }
 
 // Маршрут для отображения статьи
@@ -433,14 +498,7 @@ bot.action('generate_test', async (ctx) => {
                     throw new Error('Не удалось прочитать материал для теста.');
                 }
                 
-                let test;
-                try {
-                    test = await generateTestWithHuggingFace(result);
-                } catch (err) {
-                    console.log('Ошибка API, использую локальную генерацию...', err);
-                    test = generateSmartTest(result);
-                }
-                
+                const test = await generateTest(result);
                 await ctx.reply(`Тест создан на основе материала "${randomFile}":\n\n${test}`);
             })(),
             timeoutPromise
