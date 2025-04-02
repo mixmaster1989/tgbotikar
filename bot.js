@@ -618,7 +618,7 @@ async function initModel() {
     if (!model) {
         console.log('Начинаем инициализацию GPT4All модели...');
         try {
-            model = await gpt4all.createEmbedder();
+            model = await gpt4all.loadModel('gpt4all-j-v1.3-groovy');
             console.log('Модель успешно загружена!');
         } catch (err) {
             console.error('Ошибка при загрузке модели:', err);
@@ -634,8 +634,8 @@ async function generateAIQuestions(text, count = 5) {
         await initModel();
         
         console.log(`Отправляем текст длиной ${text.length} символов в модель...`);
-        const response = await gpt4all.generate(text, {
-            prompt: `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
+        const response = await model.prompt(
+            `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
 Q1: [вопрос]
 A) [вариант]
 B) [вариант]
@@ -644,11 +644,13 @@ D) [вариант]
 Правильный ответ: [буква]
 
 Текст: ${text}`,
-            temperature: 0.7, 
-            max_tokens: 2000, 
-            top_k: 40, 
-            top_p: 0.9 
-        });
+            { 
+                temperature: 0.7, 
+                max_tokens: 2000, 
+                top_k: 40, 
+                top_p: 0.9 
+            }
+        );
 
         return parseAIResponse(response);
     } catch (err) {
