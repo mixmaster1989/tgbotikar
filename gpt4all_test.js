@@ -54,8 +54,16 @@ async function testGPT4All() {
         return response;
     } catch (error) {
         console.error('Ошибка при работе с GPT4All:', error);
+        console.error('Детали ошибки:', error.stack);
         throw error;
     }
+}
+
+// Немедленный запуск теста при выполнении скрипта
+if (require.main === module) {
+    testGPT4All()
+        .then(() => console.log('Тест GPT4All завершен успешно'))
+        .catch(err => console.error('Ошибка в тесте GPT4All:', err));
 }
 
 // Экспортируем функции для использования в других модулях
