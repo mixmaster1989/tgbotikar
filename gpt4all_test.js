@@ -23,8 +23,11 @@ async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 ми�
 
 // Функция для скачивания файла с прогресс-баром и точным контролем временного файла
 async function downloadModelFile(url, outputPath) {
+    // Диагностика путей перед загрузкой
+    const pathOptions = diagnosePaths(outputPath);
+
     console.log(`Начало загрузки модели: ${url}`);
-    console.log(`Путь сохранения: ${outputPath}`);
+    console.log(`Исходный путь сохранения: ${outputPath}`);
 
     // Создаем директорию, если она не существует
     const modelDir = path.dirname(outputPath);
@@ -80,6 +83,36 @@ async function downloadModelFile(url, outputPath) {
             reject(err);
         });
     });
+}
+
+function diagnosePaths(outputPath) {
+    const pathOptions = [
+        { 
+            name: 'Домашняя директория (os.homedir())', 
+            path: path.join(os.homedir(), '.cache', 'gpt4all', path.basename(outputPath)) 
+        },
+        { 
+            name: 'Текущий путь', 
+            path: outputPath 
+        },
+        { 
+            name: 'Абсолютный путь из outputPath', 
+            path: path.resolve(outputPath) 
+        },
+        { 
+            name: 'Директория проекта', 
+            path: path.join(process.cwd(), 'models', path.basename(outputPath)) 
+        }
+    ];
+
+    console.log('Варианты путей для загрузки модели:');
+    pathOptions.forEach((option, index) => {
+        console.log(`${index + 1}. ${option.name}:`);
+        console.log(`   ${option.path}`);
+        console.log(`   Существует: ${fs.existsSync(path.dirname(option.path)) ? 'Да' : 'Нет'}`);
+    });
+
+    return pathOptions;
 }
 
 // Функция для проверки и загрузки модели
