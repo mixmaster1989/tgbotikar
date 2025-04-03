@@ -33,7 +33,10 @@ async function downloadModelFile(url, outputPath) {
     }
 
     // Создаем точный путь для временного файла
-    const partFilePath = path.join(modelDir, path.basename(outputPath) + '.part');
+    const fileName = path.basename(outputPath);
+    const fileExtension = path.extname(fileName);
+    const fileBaseName = path.basename(fileName, fileExtension);
+    const partFilePath = path.join(modelDir, `${fileBaseName}.part${fileExtension}`);
     console.log(`Временный файл: ${partFilePath}`);
 
     return new Promise((resolve, reject) => {
