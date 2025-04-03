@@ -1,4 +1,4 @@
-const { Telegraf, Markup,session } = require('telegraf');
+const { Telegraf, Markup, session } = require('telegraf');
 const sqlite3 = require('sqlite3').verbose();
 const fetch = require("node-fetch");
 const fs = require('fs-extra');
@@ -73,7 +73,7 @@ db.serialize(() => {
 
 // Главное меню
 bot.command('start', async (ctx) => {
-    return await ctx.reply('Выберите действие:', 
+    return await ctx.reply('Выберите действие:',
         Markup.inlineKeyboard([
             [Markup.button.callback('Тесты', 'tests')],
             [Markup.button.callback('Материалы', 'materials')],
@@ -91,7 +91,7 @@ bot.action('materials', async (ctx) => {
     ]);
     buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
 
-    await ctx.editMessageText('Выберите категорию:', 
+    await ctx.editMessageText('Выберите категорию:',
         Markup.inlineKeyboard(buttons)
     );
 });
@@ -102,13 +102,15 @@ bot.action(/^category:(.+)$/, async (ctx) => {
     const structure = await getMaterialsStructure();
     const sections = structure[category];
 
-    const buttons = Object.keys(sections).map(section => [
-        Markup.button.callback(section, `section:${category}:${section}`)
-    ]);
+    const buttons = Object.keys(sections).map(section => {
+        const sanitizedCategory = category.replace(/[^a-zA-Z0-9:_-]/g, '');
+        const sanitizedSection = section.replace(/[^a-zA-Z0-9:_-]/g, '');
+        return [Markup.button.callback(section, `section:${sanitizedCategory}:${sanitizedSection}`.slice(0, 64))];
+    });
     buttons.push([Markup.button.callback('« Назад к категориям', 'materials')]);
     buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
 
-    await ctx.editMessageText(`Категория: ${category}\nВыберите раздел:`, 
+    await ctx.editMessageText(`Категория: ${category}\nВыберите раздел:`,
         Markup.inlineKeyboard(buttons)
     );
 });
@@ -117,15 +119,19 @@ bot.action(/^category:(.+)$/, async (ctx) => {
 bot.action(/^section:(.+):(.+)$/, async (ctx) => {
     const [category, section] = ctx.match.slice(1);
     const structure = await getMaterialsStructure();
-    const materials = structure[category][section];
+    const materials = structure[category]?.[section];
+
+    if (!materials) {
+        return ctx.reply('Invalid section or category.');
+    }
 
     const buttons = materials.map(material => [
-        Markup.button.callback(material, `material:${category}:${section}:${material}`)
+        Markup.button.callback(material, `material:${category}:${section}:${material}`.slice(0, 64))
     ]);
     buttons.push([Markup.button.callback('« Назад к разделам', `category:${category}`)]);
     buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
 
-    await ctx.editMessageText(`Раздел: ${section}\nВыберите материал:`, 
+    await ctx.editMessageText(`Раздел: ${section}\nВыберите материал:`,
         Markup.inlineKeyboard(buttons)
     );
 });
@@ -149,7 +155,7 @@ bot.action(/^category:(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery();
     const categoryId = parseInt(ctx.match[1]);
     const sections = await getSections(categoryId);
-    
+
     const buttons = sections.map(section => [
         Markup.button.callback(section.name, `section:${section.id}`)
     ]);
@@ -159,7 +165,7 @@ bot.action(/^category:(\d+)$/, async (ctx) => {
         Markup.button.callback('« На главную', 'main_menu')
     ]);
 
-    await ctx.editMessageText('Выберите раздел:', 
+    await ctx.editMessageText('Выберите раздел:',
         Markup.inlineKeyboard(buttons)
     );
 });
@@ -170,7 +176,7 @@ bot.action(/^section:(\d+)$/, async (ctx) => {
     const sectionId = parseInt(ctx.match[1]);
     const articles = await getArticles(sectionId);
     const section = await getSectionById(sectionId);
-    
+
     const buttons = articles.map(article => [
         Markup.button.callback(article.title, `article:${article.id}`)
     ]);
@@ -181,7 +187,7 @@ bot.action(/^section:(\d+)$/, async (ctx) => {
     ]);
 
     await ctx.deleteMessage();
-    await ctx.reply('Выберите статью:', 
+    await ctx.reply('Выберите статью:',
         Markup.inlineKeyboard(buttons)
     );
 });
@@ -192,13 +198,13 @@ bot.action(/^article:(\d+)$/, async (ctx) => {
     const articleId = parseInt(ctx.match[1]);
     const article = await getArticleById(articleId);
     const section = await getSectionById(article.section_id);
-    
+
     let caption = `${article.title}\n\n${article.description}`;
     const buttons = [
         [Markup.button.callback('« Назад к статьям', `section:${article.section_id}`)],
         [Markup.button.callback('« На главную', 'main_menu')]
     ];
-    
+
     if (article.image_path) {
         await ctx.deleteMessage();
 
@@ -210,13 +216,13 @@ bot.action(/^article:(\d+)$/, async (ctx) => {
 
         await ctx.replyWithPhoto(
             { source: article.image_path },
-            { 
+            {
                 caption,
                 ...Markup.inlineKeyboard(buttons)
             }
         );
     } else {
-        await ctx.editMessageText(caption, 
+        await ctx.editMessageText(caption,
             Markup.inlineKeyboard(buttons)
         );
     }
@@ -225,7 +231,7 @@ bot.action(/^article:(\d+)$/, async (ctx) => {
 // Обработчик кнопки "На главную"
 bot.action('main_menu', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.editMessageText('Выберите действие:', 
+    await ctx.editMessageText('Выберите действие:',
         Markup.inlineKeyboard([
             [Markup.button.callback('Тесты', 'tests')],
             [Markup.button.callback('Материалы', 'materials')],
@@ -238,7 +244,7 @@ bot.action('main_menu', async (ctx) => {
 // Очистка базы данных
 bot.action('clear_db', async (ctx) => {
     await ctx.answerCbQuery();
-    
+
     // Удаляем все данные из таблиц
     await new Promise((resolve, reject) => {
         db.run('DELETE FROM articles', (err) => {
@@ -298,8 +304,8 @@ bot.on('text', async (ctx) => {
         ]);
         buttons.push([Markup.button.callback('Добавить категорию', 'add_category')]);
         buttons.push([Markup.button.callback('« На главную', 'main_menu')]);
-        
-        await ctx.reply('Выберите категорию:', 
+
+        await ctx.reply('Выберите категорию:',
             Markup.inlineKeyboard(buttons)
         );
         return;
@@ -310,7 +316,7 @@ bot.on('text', async (ctx) => {
         const categoryId = ctx.session.addingSection;
         await addSection(ctx.message.text, categoryId);
         ctx.session = null;
-        
+
         const sections = await getSections(categoryId);
         const buttons = sections.map(section => [
             Markup.button.callback(section.name, `section:${section.id}`)
@@ -320,9 +326,9 @@ bot.on('text', async (ctx) => {
             Markup.button.callback('« Назад к категориям', 'materials'),
             Markup.button.callback('« На главную', 'main_menu')
         ]);
-        
+
         await ctx.reply('Раздел добавлен!');
-        await ctx.reply('Выберите раздел:', 
+        await ctx.reply('Выберите раздел:',
             Markup.inlineKeyboard(buttons)
         );
         return;
@@ -370,7 +376,7 @@ bot.on('text', async (ctx) => {
 
         ctx.session = null;
         await ctx.reply('Статья добавлена!');
-        await ctx.reply('Выберите статью:', 
+        await ctx.reply('Выберите статью:',
             Markup.inlineKeyboard(buttons)
         );
     }
@@ -415,7 +421,7 @@ bot.on('photo', async (ctx) => {
 
         ctx.session = null;
         await ctx.reply('Статья добавлена!');
-        await ctx.reply('Выберите статью:', 
+        await ctx.reply('Выберите статью:',
             Markup.inlineKeyboard(buttons)
         );
     }
@@ -469,7 +475,7 @@ function getSectionById(id) {
 
 function addSection(name, categoryId) {
     return new Promise((resolve, reject) => {
-        db.run('INSERT INTO sections (name, category_id) VALUES (?, ?)', 
+        db.run('INSERT INTO sections (name, category_id) VALUES (?, ?)',
             [name, categoryId], (err) => {
                 if (err) reject(err);
                 resolve();
