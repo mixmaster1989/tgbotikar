@@ -1,4 +1,4 @@
-const gpt4all = require('gpt4all');
+const { loadModel, createCompletion } = require('gpt4all');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -19,6 +19,7 @@ async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 ми�
 }
 
 async function testGPT4All() {
+    let model = null;
     try {
         console.log('Инициализация GPT4All...');
         const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
@@ -31,30 +32,39 @@ async function testGPT4All() {
             throw new Error(`Файл модели не найден: ${modelPath}`);
         }
 
-        // Инициализация модели
-        const gpt = await gpt4all.init({
-            model: modelPath,
-            modelType: 'mistral',
-            verbose: true
+        // Загрузка модели
+        model = await loadModel(modelPath, {
+            verbose: true,
+            device: 'cpu'
+        });
+
+        // Создание chat-сессии
+        const chat = await model.createChatSession({
+            temperature: 0.7
         });
 
         // Тестовый промпт
         const prompt = 'Расскажи короткую историю о программисте';
         console.log(`Отправляем промпт: ${prompt}`);
 
-        const response = await gpt.prompt(prompt, {
-            max_tokens: 200,
-            temperature: 0.7,
-            top_p: 0.9
-        });
+        const response = await createCompletion(chat, prompt);
 
         console.log('Ответ модели:');
-        console.log(response);
+        console.log(response.choices[0].message.content);
 
-        return response;
+        // Освобождаем ресурсы
+        model.dispose();
+
+        return response.choices[0].message.content;
     } catch (error) {
         console.error('Ошибка при работе с GPT4All:', error);
         console.error('Детали ошибки:', error.stack);
+        
+        // Освобождаем ресурсы в случае ошибки
+        if (model) {
+            model.dispose();
+        }
+        
         throw error;
     }
 }
