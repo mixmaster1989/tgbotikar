@@ -2,6 +2,9 @@ const { loadModel, createCompletion } = require('gpt4all');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const https = require('https');
+const { promisify } = require('util');
+const pipeline = promisify(require('stream').pipeline);
 
 async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 минут максимум
     const startTime = Date.now();
@@ -15,6 +18,83 @@ async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 ми�
         }
         
         await new Promise(resolve => setTimeout(resolve, 5000)); // Ждем 5 секунд
+    }
+}
+
+// Функция для скачивания файла с прогресс-баром
+async function downloadModelFile(url, outputPath) {
+    console.log(`Начало загрузки модели: ${url}`);
+    console.log(`Путь сохранения: ${outputPath}`);
+
+    // Создаем директорию, если она не существует
+    const modelDir = path.dirname(outputPath);
+    if (!fs.existsSync(modelDir)) {
+        fs.mkdirSync(modelDir, { recursive: true });
+    }
+
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+        let downloadedBytes = 0;
+        let totalBytes = 0;
+
+        https.get(url, (response) => {
+            if (response.statusCode !== 200) {
+                reject(new Error(`Ошибка загрузки: ${response.statusCode}`));
+                return;
+            }
+
+            totalBytes = parseInt(response.headers['content-length'], 10);
+            console.log(`Размер файла: ${totalBytes} байт`);
+
+            const partFilePath = `${outputPath}.part`;
+            const writeStream = fs.createWriteStream(partFilePath);
+
+            response.on('data', (chunk) => {
+                downloadedBytes += chunk.length;
+                const percent = ((downloadedBytes / totalBytes) * 100).toFixed(2);
+                const elapsedTime = (Date.now() - startTime) / 1000;
+                const speed = (downloadedBytes / elapsedTime / 1024 / 1024).toFixed(2);
+                
+                process.stdout.write(`Загружено: ${percent}% (${downloadedBytes}/${totalBytes} байт), Скорость: ${speed} МБ/с\r`);
+            });
+
+            response.pipe(writeStream);
+
+            writeStream.on('finish', () => {
+                writeStream.close();
+                // Переименовываем part-файл в финальный
+                fs.renameSync(partFilePath, outputPath);
+                console.log(`\nЗагрузка завершена: ${outputPath}`);
+                resolve(outputPath);
+            });
+
+            writeStream.on('error', (err) => {
+                console.error('Ошибка записи файла:', err);
+                reject(err);
+            });
+        }).on('error', (err) => {
+            console.error('Ошибка загрузки:', err);
+            reject(err);
+        });
+    });
+}
+
+// Функция для проверки и загрузки модели
+async function ensureModelDownloaded() {
+    const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
+    const modelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+    const modelUrl = 'https://gpt4all.io/models/gguf/mistral-7b-instruct-v0.1.Q4_K_M.gguf';
+
+    if (!fs.existsSync(modelPath)) {
+        console.log('Модель не найдена. Начинаем загрузку...');
+        try {
+            await downloadModelFile(modelUrl, modelPath);
+        } catch (error) {
+            console.error('Не удалось загрузить модель:', error);
+            throw error;
+        }
+    } else {
+        console.log('Модель уже существует:', modelPath);
     }
 }
 
@@ -138,6 +218,7 @@ if (require.main === module) {
         try {
             checkModelAvailability();
             await downloadModelConfig();
+            await ensureModelDownloaded();
             await testGPT4All();
             console.log('Тест GPT4All завершен успешно');
         } catch (err) {
@@ -151,5 +232,7 @@ module.exports = {
     testGPT4All,
     waitForFileDownload,
     downloadModelConfig,
-    checkModelAvailability
+    checkModelAvailability,
+    ensureModelDownloaded,
+    downloadModelFile
 };
