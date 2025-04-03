@@ -134,7 +134,8 @@ async function testGPT4All() {
         model = await loadModel(modelPath, {
             verbose: true,
             device: 'cpu',
-            modelConfigFile: configPath
+            modelConfigFile: configPath,
+            cacheDir: modelDir
         });
 
         // Создание chat-сессии
