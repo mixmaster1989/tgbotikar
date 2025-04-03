@@ -88,6 +88,11 @@ async function ensureModelDownloaded() {
     const modelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
     const modelUrl = 'https://gpt4all.io/models/gguf/mistral-7b-instruct-v0.1.Q4_K_M.gguf';
 
+    // Создаем директорию, если она не существует
+    if (!fs.existsSync(modelDir)) {
+        fs.mkdirSync(modelDir, { recursive: true });
+    }
+
     if (!fs.existsSync(modelPath)) {
         console.log('Модель не найдена. Начинаем загрузку...');
         try {
