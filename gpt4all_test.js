@@ -32,15 +32,17 @@ async function testGPT4All() {
             throw new Error(`Файл модели не найден: ${modelPath}`);
         }
 
-        // Загрузка модели
+        // Загрузка модели с явным указанием пути
         model = await loadModel(modelPath, {
             verbose: true,
-            device: 'cpu'
+            device: 'cpu',
+            modelConfigFile: path.join(modelDir, 'models3.json')
         });
 
         // Создание chat-сессии
         const chat = await model.createChatSession({
-            temperature: 0.7
+            temperature: 0.7,
+            systemPrompt: 'Ты helpful AI ассистент. Отвечай кратко и по существу.'
         });
 
         // Тестовый промпт
@@ -69,15 +71,39 @@ async function testGPT4All() {
     }
 }
 
+// Функция для предварительной загрузки конфигурации моделей
+async function downloadModelConfig() {
+    const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
+    const configPath = path.join(modelDir, 'models3.json');
+    
+    if (!fs.existsSync(configPath)) {
+        console.log('Загрузка конфигурации моделей...');
+        try {
+            const { execSync } = require('child_process');
+            execSync(`curl -L https://gpt4all.io/models/models3.json -o ${configPath}`);
+            console.log('Конфигурация моделей загружена');
+        } catch (error) {
+            console.error('Ошибка загрузки конфигурации:', error);
+        }
+    }
+}
+
 // Немедленный запуск теста при выполнении скрипта
 if (require.main === module) {
-    testGPT4All()
-        .then(() => console.log('Тест GPT4All завершен успешно'))
-        .catch(err => console.error('Ошибка в тесте GPT4All:', err));
+    (async () => {
+        try {
+            await downloadModelConfig();
+            await testGPT4All();
+            console.log('Тест GPT4All завершен успешно');
+        } catch (err) {
+            console.error('Ошибка в тесте GPT4All:', err);
+        }
+    })();
 }
 
 // Экспортируем функции для использования в других модулях
 module.exports = {
     testGPT4All,
-    waitForFileDownload
+    waitForFileDownload,
+    downloadModelConfig
 };
