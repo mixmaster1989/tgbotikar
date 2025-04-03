@@ -24,19 +24,34 @@ async function testGPT4All() {
         console.log('Инициализация GPT4All...');
         const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
         const modelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+        const configPath = path.join(modelDir, 'models3.json');
         
         console.log('Полный путь к модели:', modelPath);
+        console.log('Путь к конфигурации:', configPath);
         
-        // Проверяем существование файла
+        // Проверяем существование файлов
         if (!fs.existsSync(modelPath)) {
+            console.error(`ОШИБКА: Файл модели не найден по пути: ${modelPath}`);
+            console.error('Содержимое директории:', fs.readdirSync(modelDir));
             throw new Error(`Файл модели не найден: ${modelPath}`);
         }
 
-        // Загрузка модели с явным указанием пути
+        if (!fs.existsSync(configPath)) {
+            console.error(`ОШИБКА: Файл конфигурации не найден по пути: ${configPath}`);
+            throw new Error(`Файл конфигурации не найден: ${configPath}`);
+        }
+
+        // Получаем статистику файлов
+        const modelStats = fs.statSync(modelPath);
+        const configStats = fs.statSync(configPath);
+        console.log('Размер файла модели:', modelStats.size, 'байт');
+        console.log('Размер файла конфигурации:', configStats.size, 'байт');
+
+        // Загрузка модели с явным указанием путей
         model = await loadModel(modelPath, {
             verbose: true,
             device: 'cpu',
-            modelConfigFile: path.join(modelDir, 'models3.json')
+            modelConfigFile: configPath
         });
 
         // Создание chat-сессии
@@ -88,10 +103,40 @@ async function downloadModelConfig() {
     }
 }
 
+// Функция для проверки доступности модели
+function checkModelAvailability() {
+    const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
+    const modelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+    const configPath = path.join(modelDir, 'models3.json');
+
+    console.log('Проверка доступности модели и конфигурации...');
+    console.log('Директория моделей:', modelDir);
+    
+    try {
+        const files = fs.readdirSync(modelDir);
+        console.log('Файлы в директории:', files);
+    } catch (error) {
+        console.error('Ошибка чтения директории:', error);
+    }
+
+    if (!fs.existsSync(modelPath)) {
+        console.error(`ВНИМАНИЕ: Файл модели не найден: ${modelPath}`);
+    } else {
+        console.log(`Файл модели найден: ${modelPath}`);
+    }
+
+    if (!fs.existsSync(configPath)) {
+        console.error(`ВНИМАНИЕ: Файл конфигурации не найден: ${configPath}`);
+    } else {
+        console.log(`Файл конфигурации найден: ${configPath}`);
+    }
+}
+
 // Немедленный запуск теста при выполнении скрипта
 if (require.main === module) {
     (async () => {
         try {
+            checkModelAvailability();
             await downloadModelConfig();
             await testGPT4All();
             console.log('Тест GPT4All завершен успешно');
@@ -105,5 +150,6 @@ if (require.main === module) {
 module.exports = {
     testGPT4All,
     waitForFileDownload,
-    downloadModelConfig
+    downloadModelConfig,
+    checkModelAvailability
 };
