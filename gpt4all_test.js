@@ -23,18 +23,23 @@ async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 ми�
 
 // Функция для скачивания файла с прогресс-баром и точным контролем временного файла
 async function downloadModelFile(url, outputPath) {
-    console.log('Отладка путей:');
-    console.log('os.homedir():', os.homedir());
-    console.log('Полный путь outputPath:', outputPath);
-    console.log('Начало загрузки модели:', url);
-
-    // Явно определяем корректную директорию
+    // Определяем базовую директорию для загрузки моделей
     const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
+    
+    // Извлекаем только имя файла, игнорируя входящий путь
     const fileName = path.basename(outputPath);
-    const partFilePath = path.join(modelDir, fileName + '.part');
+    
+    // Формируем полный путь для сохранения в директории кэша
+    const finalModelPath = path.join(modelDir, fileName);
+    const partFilePath = finalModelPath + '.part';
 
-    console.log('Директория модели:', modelDir);
-    console.log('Путь временного файла:', partFilePath);
+    console.log('Отладка путей:');
+    console.log('Домашняя директория:', os.homedir());
+    console.log('Директория моделей:', modelDir);
+    console.log('Входящий путь:', outputPath);
+    console.log('Финальный путь модели:', finalModelPath);
+    console.log('Временный файл:', partFilePath);
+    console.log('URL модели:', url);
 
     // Создаем директорию, если она не существует
     if (!fs.existsSync(modelDir)) {
@@ -71,8 +76,8 @@ async function downloadModelFile(url, outputPath) {
 
             writeStream.on('finish', () => {
                 writeStream.close();
+                
                 // Переименовываем part-файл в финальный
-                const finalModelPath = path.join(modelDir, fileName);
                 fs.renameSync(partFilePath, finalModelPath);
                 console.log(`\nЗагрузка завершена: ${finalModelPath}`);
                 resolve(finalModelPath);
