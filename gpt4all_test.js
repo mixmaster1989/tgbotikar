@@ -21,7 +21,7 @@ async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 ми�
     }
 }
 
-// Функция для скачивания файла с прогресс-баром
+// Функция для скачивания файла с прогресс-баром и точным контролем временного файла
 async function downloadModelFile(url, outputPath) {
     console.log(`Начало загрузки модели: ${url}`);
     console.log(`Путь сохранения: ${outputPath}`);
@@ -31,6 +31,10 @@ async function downloadModelFile(url, outputPath) {
     if (!fs.existsSync(modelDir)) {
         fs.mkdirSync(modelDir, { recursive: true });
     }
+
+    // Создаем точный путь для временного файла
+    const partFilePath = path.join(modelDir, path.basename(outputPath) + '.part');
+    console.log(`Временный файл: ${partFilePath}`);
 
     return new Promise((resolve, reject) => {
         const startTime = Date.now();
@@ -46,7 +50,6 @@ async function downloadModelFile(url, outputPath) {
             totalBytes = parseInt(response.headers['content-length'], 10);
             console.log(`Размер файла: ${totalBytes} байт`);
 
-            const partFilePath = `${outputPath}.part`;
             const writeStream = fs.createWriteStream(partFilePath);
 
             response.on('data', (chunk) => {
@@ -166,23 +169,6 @@ async function testGPT4All() {
     }
 }
 
-// Функция для предварительной загрузки конфигурации моделей
-async function downloadModelConfig() {
-    const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
-    const configPath = path.join(modelDir, 'models3.json');
-    
-    if (!fs.existsSync(configPath)) {
-        console.log('Загрузка конфигурации моделей...');
-        try {
-            const { execSync } = require('child_process');
-            execSync(`curl -L https://gpt4all.io/models/models3.json -o ${configPath}`);
-            console.log('Конфигурация моделей загружена');
-        } catch (error) {
-            console.error('Ошибка загрузки конфигурации:', error);
-        }
-    }
-}
-
 // Функция для проверки доступности модели
 function checkModelAvailability() {
     const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
@@ -209,6 +195,23 @@ function checkModelAvailability() {
         console.error(`ВНИМАНИЕ: Файл конфигурации не найден: ${configPath}`);
     } else {
         console.log(`Файл конфигурации найден: ${configPath}`);
+    }
+}
+
+// Функция для предварительной загрузки конфигурации моделей
+async function downloadModelConfig() {
+    const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
+    const configPath = path.join(modelDir, 'models3.json');
+    
+    if (!fs.existsSync(configPath)) {
+        console.log('Загрузка конфигурации моделей...');
+        try {
+            const { execSync } = require('child_process');
+            execSync(`curl -L https://gpt4all.io/models/models3.json -o ${configPath}`);
+            console.log('Конфигурация моделей загружена');
+        } catch (error) {
+            console.error('Ошибка загрузки конфигурации:', error);
+        }
     }
 }
 
