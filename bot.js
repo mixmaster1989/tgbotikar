@@ -8,6 +8,7 @@ const mammoth = require('mammoth');
 const axios = require('axios');
 const gpt4all = require('gpt4all'); 
 require('dotenv').config();
+const os = require('os');
 
 // Путь к папке с материалами
 const materialsPath = path.join(__dirname, 'materials');
@@ -635,7 +636,7 @@ async function initModel() {
     if (!model) {
         console.log('Начинаем инициализацию GPT4All модели...');
         try {
-            const modelDir = path.join(process.env.HOME, '.cache', 'gpt4all');
+            const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
             const partModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf.part');
             const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
             
@@ -665,14 +666,43 @@ async function initModel() {
     }
 }
 
+// Функция инициализации GPT4All модели
+async function initGPT4AllModel() {
+    try {
+        console.log('Инициализация GPT4All модели...');
+        const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
+        const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+        
+        if (!fs.existsSync(finalModelPath)) {
+            console.error(`Файл модели не найден: ${finalModelPath}`);
+            return null;
+        }
+
+        const gpt = await gpt4all.init({
+            model: finalModelPath,
+            modelType: 'mistral',
+            verbose: true
+        });
+
+        console.log('GPT4All модель успешно инициализирована');
+        return gpt;
+    } catch (error) {
+        console.error('Ошибка при инициализации GPT4All:', error);
+        return null;
+    }
+}
+
+// Глобальная переменная для хранения модели
+let gpt4allModel = null;
+
 // Функция для генерации вопросов через AI
 async function generateAIQuestions(text, count = 5) {
     try {
         console.log('Начинаем генерацию вопросов через AI...');
-        await initModel();
+        await initGPT4AllModel();
         
         console.log(`Отправляем текст длиной ${text.length} символов в модель...`);
-        const response = await model.prompt(
+        const response = await gpt4allModel.prompt(
             `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
 Q1: [вопрос]
 A) [вариант]

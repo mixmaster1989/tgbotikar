@@ -1,6 +1,7 @@
 const gpt4all = require('gpt4all');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 минут максимум
     const startTime = Date.now();
@@ -20,40 +21,45 @@ async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 ми�
 async function testGPT4All() {
     try {
         console.log('Инициализация GPT4All...');
-        const modelDir = path.join(process.env.HOME, '.cache', 'gpt4all');
-        const partModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf.part');
-        const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+        const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
+        const modelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
         
-        console.log('Ожидание завершения загрузки модели...');
-        await waitForFileDownload(partModelPath);
-        
-        console.log('Полный путь к модели:', finalModelPath);
+        console.log('Полный путь к модели:', modelPath);
         
         // Проверяем существование файла
-        if (!fs.existsSync(finalModelPath)) {
-            console.error(`ОШИБКА: Файл модели не найден по пути: ${finalModelPath}`);
-            console.error('Содержимое директории:', fs.readdirSync(modelDir));
-            throw new Error(`Файл модели не найден: ${finalModelPath}`);
+        if (!fs.existsSync(modelPath)) {
+            throw new Error(`Файл модели не найден: ${modelPath}`);
         }
-        
-        // Получаем статистику файла
-        const stats = fs.statSync(finalModelPath);
-        console.log('Размер файла модели:', stats.size, 'байт');
-        
-        const model = await gpt4all.loadModel(finalModelPath);
-        
-        console.log('Модель инициализирована');
-        
-        const response = await model.prompt('Привет, как дела?', {
-            temperature: 0.7,
-            max_tokens: 100
+
+        // Инициализация модели
+        const gpt = await gpt4all.init({
+            model: modelPath,
+            modelType: 'mistral',
+            verbose: true
         });
-        
-        console.log('Ответ:', response);
+
+        // Тестовый промпт
+        const prompt = 'Расскажи короткую историю о программисте';
+        console.log(`Отправляем промпт: ${prompt}`);
+
+        const response = await gpt.prompt(prompt, {
+            max_tokens: 200,
+            temperature: 0.7,
+            top_p: 0.9
+        });
+
+        console.log('Ответ модели:');
+        console.log(response);
+
+        return response;
     } catch (error) {
-        console.error('Ошибка:', error);
-        console.error('Детали ошибки:', error.stack);
+        console.error('Ошибка при работе с GPT4All:', error);
+        throw error;
     }
 }
 
-testGPT4All();
+// Экспортируем функции для использования в других модулях
+module.exports = {
+    testGPT4All,
+    waitForFileDownload
+};
