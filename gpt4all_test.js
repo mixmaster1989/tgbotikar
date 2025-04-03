@@ -23,18 +23,24 @@ async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 ми�
 
 // Функция для скачивания файла с прогресс-баром и точным контролем временного файла
 async function downloadModelFile(url, outputPath) {
-    console.log(`Начало загрузки модели: ${url}`);
-    console.log(`Путь сохранения: ${outputPath}`);
+    console.log('Отладка путей:');
+    console.log('os.homedir():', os.homedir());
+    console.log('Полный путь outputPath:', outputPath);
+    console.log('Начало загрузки модели:', url);
+
+    // Явно определяем корректную директорию
+    const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
+    const fileName = path.basename(outputPath);
+    const partFilePath = path.join(modelDir, fileName + '.part');
+
+    console.log('Директория модели:', modelDir);
+    console.log('Путь временного файла:', partFilePath);
 
     // Создаем директорию, если она не существует
-    const modelDir = path.dirname(outputPath);
     if (!fs.existsSync(modelDir)) {
         fs.mkdirSync(modelDir, { recursive: true });
+        console.log('Создана директория:', modelDir);
     }
-
-    // Создаем точный путь для временного файла
-    const partFilePath = path.join(modelDir, path.basename(outputPath) + '.part');
-    console.log(`Временный файл: ${partFilePath}`);
 
     return new Promise((resolve, reject) => {
         const startTime = Date.now();
@@ -66,9 +72,10 @@ async function downloadModelFile(url, outputPath) {
             writeStream.on('finish', () => {
                 writeStream.close();
                 // Переименовываем part-файл в финальный
-                fs.renameSync(partFilePath, outputPath);
-                console.log(`\nЗагрузка завершена: ${outputPath}`);
-                resolve(outputPath);
+                const finalModelPath = path.join(modelDir, fileName);
+                fs.renameSync(partFilePath, finalModelPath);
+                console.log(`\nЗагрузка завершена: ${finalModelPath}`);
+                resolve(finalModelPath);
             });
 
             writeStream.on('error', (err) => {
