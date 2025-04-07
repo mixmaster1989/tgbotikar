@@ -1,28 +1,27 @@
-const { loadModel, createCompletion } = require("gpt4all");
+const { GPT4All } = require("gpt4all");
 
 async function testGpt4All() {
-    try {
-        const model = await loadModel("mistral-7b-instruct-v0.1.Q4_0.gguf", {
-            device: "cpu",
-            nCtx: 2048,
-            verbose: true,
-        });
+  const modelPath = '/home/user1/.cache/gpt4all/mistral-7b-instruct-v0.1.Q4_0.gguf';
+  const model = await GPT4All.load(modelPath, {
+    device: "cpu",
+    nCtx: 512,  // Уменьшили размер контекста
+    ngl: 20,    // Уменьшили количество токенов для генерации
+    verbose: true,
+  });
 
-        const chat = await model.createChatSession({
-            temperature: 0.7,
-            systemPrompt: "Ты дружелюбный помощник.",
-        });
+  const prompt = "Привет, как ты?";
 
-        const prompt = "Придумай короткую мотивационную фразу на день.";
-        const response = await createCompletion(chat, prompt);
+  console.log("Отправляем запрос модели...");
+  
+  // Генерация ответа с выводом токенов по мере их получения
+  await model.createCompletion({
+    prompt: prompt,
+    onToken: (token) => process.stdout.write(token),  // Выводим каждый токен сразу
+  });
 
-        console.log("\nОтвет от модели:");
-        console.log(response.choices[0].message.content);
-
-        model.dispose();
-    } catch (err) {
-        console.error("Ошибка в тесте GPT4All:", err);
-    }
+  console.log("\nЗавершение генерации...");
 }
 
-testGpt4All();
+testGpt4All().catch((error) => {
+  console.error("Ошибка в тесте GPT4All:", error);
+});
