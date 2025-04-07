@@ -75,7 +75,7 @@ async function downloadModelFile(url, outputPath) {
   }
 
   // Создаем точный путь для временного файла в том же каталоге
-  const partFilePath = path.join(modelDir, path.basename(outputPath) + ".part");
+  const partFilePath = outputPath + ".part"; // Исправлено: убрано дублирование пути
   console.log(`Временный файл: ${partFilePath}`);
 
   return new Promise((resolve, reject) => {
@@ -129,7 +129,6 @@ async function downloadModelFile(url, outputPath) {
       });
   });
 }
-
 // Функция для проверки и загрузки модели
 
 const modelPath = '/home/user1/.cache/gpt4all/mistral-7b-instruct-v0.1.Q4_0.gguf';
