@@ -1,35 +1,28 @@
-const gpt4all = require("gpt4all");
-const path = require("path");
-const os = require("os");
-const fs = require("fs");
+const { loadModel, createCompletion } = require("gpt4all");
 
-async function testGpt4All() {
-  const modelFileName = "mistral-7b-instruct-v0.1.Q4_0.gguf";
-  const modelPath = path.join(os.homedir(), ".cache", "gpt4all", modelFileName);
-
-  if (!fs.existsSync(modelPath)) {
-    console.log("Модель не найдена, пожалуйста, скачайте вручную:");
-    console.log(`wget -P ~/.cache/gpt4all https://gpt4all.io/models/gguf/${modelFileName}`);
-    return;
-  }
-
-  try {
-    const instance = new gpt4all.GPT4All(modelFileName, {
-      modelPath: path.dirname(modelPath),
-      verbose: true,
+async function main() {
+    // Загрузка модели
+    const model = await loadModel("mistral-7b-instruct-v0.1.Q4_0.gguf", {
+        verbose: true,
+        device: "cpu",
+        nCtx: 2048,
     });
 
-    console.log("Загрузка модели...");
-    await instance.open();
+    // Создание сессии чата
+    const chat = await model.createChatSession({
+        temperature: 0.7,
+        systemPrompt: "Ты helpful AI ассистент. Отвечай кратко и по существу.",
+    });
 
-    console.log("Отправка тестового запроса...");
-    const response = await instance.chat("Привет, что ты умеешь?");
-    console.log("Ответ модели:", response);
+    // Отправка промпта и получение ответа
+    const prompt = "Расскажи короткую историю о программисте";
+    const response = await createCompletion(chat, prompt);
 
-    await instance.close();
-  } catch (err) {
-    console.error("Ошибка в тесте GPT4All:", err);
-  }
+    console.log("Ответ модели:");
+    console.log(response.choices[0].message.content);
+
+    // Освобождение ресурсов
+    model.dispose();
 }
 
-testGpt4All();
+main().catch(console.error);
