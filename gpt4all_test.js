@@ -131,6 +131,16 @@ async function downloadModelFile(url, outputPath) {
 }
 
 // Функция для проверки и загрузки модели
+const fs = require('fs');
+const modelPath = '/home/user1/.cache/gpt4all/mistral-7b-instruct-v0.1.Q4_0.gguf';
+
+if (!fs.existsSync(modelPath)) {
+    console.log('Модель не найдена, загружаем...');
+    // Код для загрузки модели
+} else {
+    console.log('Модель найдена, продолжаем работу...');
+}
+
 async function ensureModelDownloaded() {
   const modelDir = path.join(os.homedir(), ".cache", "gpt4all");
   const modelPath = path.join(modelDir, "mistral-7b-instruct-v0.1.Q4_0.gguf");
