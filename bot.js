@@ -618,58 +618,6 @@ function evaluateQuestions(questions) {
     return score;
 }
 
-// Инициализация модели GPT4All
-let model = null;
-
-// Функция ожидания завершения загрузки файла
-async function waitForFileDownload(filePath, maxWaitTime = 600000) { // 10 минут максимум
-    const startTime = Date.now();
-    while (true) {
-        if (fs.existsSync(filePath) && !filePath.endsWith('.part')) {
-            return true;
-        }
-
-        if (Date.now() - startTime > maxWaitTime) {
-            throw new Error(`Превышено время ожидания загрузки файла: ${filePath}`);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Ждем 5 секунд
-    }
-}
-
-// Функция инициализации модели
-async function initModel() {
-    if (!model) {
-        console.log('Начинаем инициализацию GPT4All модели...');
-        try {
-            const partModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf.part');
-
-            console.log('Ожидание завершения загрузки модели...');
-            await waitForFileDownload(partModelPath);
-
-            console.log('Полный путь к модели:', finalModelPath);
-
-            // Проверяем существование файла
-            if (!fs.existsSync(finalModelPath)) {
-                console.error(`ОШИБКА: Файл модели не найден по пути: ${finalModelPath}`);
-                console.error('Содержимое директории:', fs.readdirSync(modelDir));
-                throw new Error(`Файл модели не найден: ${finalModelPath}`);
-            }
-
-            // Получаем статистику файла
-            const stats = fs.statSync(finalModelPath);
-            console.log('Размер файла модели:', stats.size, 'байт');
-
-            model = await gpt4all.loadModel(finalModelPath);
-            console.log('Модель успешно загружена!');
-        } catch (err) {
-            console.error('Ошибка при загрузке модели:', err);
-            console.error('Детали ошибки:', err.stack);
-            throw err;
-        }
-    }
-}
-
 // Функция инициализации GPT4All модели
 async function initGPT4AllModel() {
     try {
@@ -680,14 +628,15 @@ async function initGPT4AllModel() {
             return null;
         }
 
-        const gpt = await gpt4all.init({
-            model: finalModelPath,
-            modelType: 'mistral',
-            verbose: true
+        // Используем loadModel вместо init
+        const model = await gpt4all.loadModel(finalModelPath, {
+            device: "cpu", // Указываем устройство
+            nCtx: 2048,    // Контекст
+            verbose: true, // Логирование
         });
 
         console.log('GPT4All модель успешно инициализирована');
-        return gpt;
+        return model;
     } catch (error) {
         console.error('Ошибка при инициализации GPT4All:', error);
         return null;
@@ -701,11 +650,23 @@ let gpt4allModel = null;
 async function generateAIQuestions(text, count = 5) {
     try {
         console.log('Начинаем генерацию вопросов через AI...');
-        await initGPT4AllModel();
 
-        console.log(`Отправляем текст длиной ${text.length} символов в модель...`);
-        const response = await gpt4allModel.prompt(
-            `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
+        if (!gpt4allModel) {
+            gpt4allModel = await initGPT4AllModel();
+        }
+
+        if (!gpt4allModel) {
+            throw new Error('Модель GPT4All не инициализирована.');
+        }
+
+        // Создаём сессию чата
+        const chat = await gpt4allModel.createChatSession({
+            temperature: 0.7,
+            systemPrompt: "Ты дружелюбный помощник.",
+        });
+
+        // Формируем запрос
+        const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
 Q1: [вопрос]
 A) [вариант]
 B) [вариант]
@@ -713,19 +674,17 @@ C) [вариант]
 D) [вариант]
 Правильный ответ: [буква]
 
-Текст: ${text}`,
-            {
-                temperature: 0.7,
-                max_tokens: 2000,
-                top_k: 40,
-                top_p: 0.9
-            }
-        );
+Текст: ${text}`;
 
-        return parseAIResponse(response);
+        // Отправляем запрос в модель
+        const response = await gpt4all.createCompletion(chat, prompt);
+
+        console.log("\nОтвет от модели:");
+        console.log(response.choices[0].message.content);
+
+        return parseAIResponse(response.choices[0].message.content);
     } catch (err) {
         console.error('Ошибка при генерации вопросов через AI:', err);
-        console.error('Детали ошибки:', err.stack);
         return null;
     }
 }
