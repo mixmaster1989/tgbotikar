@@ -1,28 +1,17 @@
-const { loadModel, createCompletion } = require("gpt4all");
+const { loadModel } = require("gpt4all");
 
-async function testGpt4All() {
-    try {
-        const model = await loadModel("mistral-7b-instruct-v0.1.Q4_0.gguf", {
-            device: "cpu",
-            nCtx: 2048,
-            verbose: true,
-        });
+async function getGpt4All() {
+  try {
+    const model = await loadModel("mistral-7b-instruct-v0.1.Q4_0.gguf", {
+      device: "cpu",
+      nCtx: 2048,
+      verbose: true,
+    });
 
-        const chat = await model.createChatSession({
-            temperature: 0.7,
-            systemPrompt: "Ты дружелюбный помощник.",
-        });
-
-        const prompt = "Придумай короткую мотивационную фразу на день.";
-        const response = await createCompletion(chat, prompt);
-
-        console.log("\nОтвет от модели:");
-        console.log(response.choices[0].message.content);
-
-        model.dispose();
-    } catch (err) {
-        console.error("Ошибка в тесте GPT4All:", err);
-    }
+    return model;
+  } catch (err) {
+    console.error("Ошибка в getGpt4All функции:", err);
+  }
 }
 
-testGpt4All();
+module.exports = getGpt4All;
