@@ -14,7 +14,7 @@ const os = require('os');
 const materialsPath = path.join(__dirname, 'materials');
 
 // Глобальный объект для хранения путей к файлам
-const fileMap = {};const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+const fileMap = {};const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_0.gguf');
 
 // Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
