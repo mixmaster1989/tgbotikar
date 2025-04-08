@@ -629,10 +629,11 @@ async function initGPT4AllModel() {
         }
 
         // Загружаем модель напрямую
-        const model = await gpt4all.loadModel(finalModelPath, {
-            device: "cpu", // Указываем устройство
-            nCtx: 2048,    // Контекст
-            verbose: true  // Логирование
+        const model = await gpt4all.loadModel({
+            modelPath: finalModelPath, // Указываем путь к модели
+            device: "cpu",            // Указываем устройство
+            nCtx: 2048,               // Контекст
+            verbose: true             // Логирование
         });
 
         console.log('GPT4All модель успешно инициализирована');
