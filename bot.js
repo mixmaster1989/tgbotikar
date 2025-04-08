@@ -628,13 +628,11 @@ async function initGPT4AllModel() {
             throw new Error(`Файл модели не найден: ${finalModelPath}`);
         }
 
-        // Загружаем модель напрямую без попыток загрузки из интернета
-        const model = await gpt4all.loadModel({
-            modelPath: finalModelPath, // Указываем путь к модели
-            device: "cpu",            // Устройство
-            nCtx: 2048,               // Контекст
-            verbose: true,            // Логирование
-            noDownload: true          // Отключаем загрузку из интернета
+        // Загружаем модель напрямую
+        const model = await gpt4all.loadModel(finalModelPath, {
+            device: "cpu", // Указываем устройство
+            nCtx: 2048,    // Контекст
+            verbose: true  // Логирование
         });
 
         console.log('GPT4All модель успешно инициализирована');
