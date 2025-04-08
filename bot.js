@@ -910,7 +910,8 @@ bot.action('generate_test', async (ctx) => {
         } else {
             await ctx.reply('Произошла ошибка при генерации теста. Пожалуйста, попробуйте позже.');
         }
-    });
+    }
+});
 
 // Запуск Express-сервера
 app.listen(PORT, () => {
