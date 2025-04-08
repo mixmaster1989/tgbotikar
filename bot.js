@@ -623,17 +623,17 @@ async function initGPT4AllModel() {
     try {
         console.log('Инициализация GPT4All модели...');
 
+        // Указываем путь к модели напрямую
+        const modelPath = '/home/user1/.cache/gpt4all/mistral-7b-instruct-v0.1.Q4_0.gguf';
+
         // Проверяем, существует ли файл модели
-        if (!fs.existsSync(finalModelPath)) {
-            throw new Error(`Файл модели не найден: ${finalModelPath}`);
+        if (!fs.existsSync(modelPath)) {
+            throw new Error(`Файл модели не найден: ${modelPath}`);
         }
 
         // Загружаем модель напрямую
-        const model = await gpt4all.loadModel(finalModelPath, {
-            device: "cpu", // Указываем устройство
-            nCtx: 2048,    // Контекст
-            verbose: true  // Логирование
-        });
+        const gpt4all = require('gpt4all');
+        const model = new gpt4all.GPT4All(modelPath); // Используем прямой путь к модели
 
         console.log('GPT4All модель успешно инициализирована');
         return model;
