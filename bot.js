@@ -491,7 +491,7 @@ function createQuestions(textAnalysis, count = 5) {
             .filter((s, i) => i !== sentenceIndex && s.length > 20)
             .sort(() => Math.random() - 0.5);
 
-        for (let i = 0; i < Math.min(3, otherSentences.length); i++) {
+        for (let i = 0; Math.min(3, otherSentences.length); i++) {
             distractors.push(otherSentences[i].trim());
         }
 
@@ -629,11 +629,10 @@ async function initGPT4AllModel() {
         }
 
         // Загружаем модель напрямую
-        const model = await gpt4all.loadModel({
-            modelPath: finalModelPath, // Указываем путь к модели
-            device: "cpu",            // Указываем устройство
-            nCtx: 2048,               // Контекст
-            verbose: true             // Логирование
+        const model = await gpt4all.loadModel(finalModelPath, {
+            device: "cpu", // Указываем устройство
+            nCtx: 2048,    // Контекст
+            verbose: true  // Логирование
         });
 
         console.log('GPT4All модель успешно инициализирована');
