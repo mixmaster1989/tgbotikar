@@ -631,12 +631,12 @@ async function initGPT4AllModel() {
             throw new Error(`Файл модели не найден: ${modelPath}`);
         }
 
-        // Загружаем модель с использованием метода loadModel
-        const model = await gpt4all.loadModel(modelPath, {
-            device: "cpu", // Указываем устройство
-            nCtx: 2048,    // Контекст
-            verbose: true  // Логирование
-        });
+        // Загружаем модель напрямую
+        const gpt4all = require('gpt4all');
+        const model = new gpt4all.GPT4All('mistral', true); // Указываем тип модели и отключаем загрузку
+
+        await model.init(); // Инициализируем модель
+        await model.loadModel(modelPath); // Загружаем модель из указанного пути
 
         console.log('GPT4All модель успешно инициализирована');
         return model;
@@ -910,8 +910,7 @@ bot.action('generate_test', async (ctx) => {
         } else {
             await ctx.reply('Произошла ошибка при генерации теста. Пожалуйста, попробуйте позже.');
         }
-    }
-});
+    });
 
 // Запуск Express-сервера
 app.listen(PORT, () => {
