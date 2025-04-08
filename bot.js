@@ -14,7 +14,7 @@ const os = require('os');
 const materialsPath = path.join(__dirname, 'materials');
 
 // Глобальный объект для хранения путей к файлам
-const fileMap = {};
+const fileMap = {};const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
 
 // Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -671,7 +671,7 @@ async function initGPT4AllModel() {
     try {
         console.log('Инициализация GPT4All модели...');
         const modelDir = path.join(os.homedir(), '.cache', 'gpt4all');
-        const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_K_M.gguf');
+        const finalModelPath = path.join(modelDir, 'mistral-7b-instruct-v0.1.Q4_0.gguf');
         
         if (!fs.existsSync(finalModelPath)) {
             console.error(`Файл модели не найден: ${finalModelPath}`);
