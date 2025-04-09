@@ -1075,3 +1075,8 @@ bot.action("generate_test", async (ctx) => {
         );
 
         await Promise
+    } catch (err) {
+        console.error("Ошибка при генерации теста:", err);
+        await ctx.reply("Произошла ошибка при генерации теста.");
+    }
+});
