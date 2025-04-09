@@ -39,7 +39,23 @@ app.use("/static", express.static(path.join(__dirname, "static")));
 
 // URL Web App (используем публичный IP)
 const webAppUrl = `http://89.169.131.216:${PORT}`;
-
+// Добавляем логгер
+const logger = require('pino')({
+    level: 'debug',
+    transport: {
+      target: 'pino-pretty'
+    }
+  });
+  
+  // Логируем инициализацию
+  logger.info('Инициализация бота...');
+  logger.debug(`Путь к модели: ${finalModelPath}`);
+  logger.debug(`Путь к материалам: ${materialsPath}`);
+  
+  // Добавляем логирование ошибок
+  process.on('uncaughtException', (err) => {
+    logger.error('Неперехваченная ошибка: ', err);
+  });
 // Функция для парсинга .docx в текст
 async function parseDocxToText(filePath) {
     try {
