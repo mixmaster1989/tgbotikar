@@ -1116,3 +1116,13 @@ bot.action("generate_test", async (ctx) => {
         }
     }
 });
+// Запуск бота
+bot.launch()
+    .then(() => console.log("Бот успешно запущен!"))
+    .catch((err) => console.error("Ошибка при запуске бота:", err));
+
+// Запуск Express-сервера
+app.listen(PORT, () => {
+    console.log(`Express-сервер запущен на порту ${PORT}`);
+});
+
