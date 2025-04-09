@@ -1096,3 +1096,6 @@ bot.action("generate_test", async (ctx) => {
         await ctx.reply("Произошла ошибка при генерации теста.");
     }
 });
+// Запуск бота
+bot.launch();
+console.log("Бот запущен!");
