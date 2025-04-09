@@ -7,7 +7,6 @@ const path = require("path");
 const mammoth = require("mammoth");
 const axios = require("axios");
 const gpt4all = require("gpt4all");
-const getGpt4All = require("./gpt4all_test.js");
 require("dotenv").config();
 const os = require("os");
 
@@ -17,7 +16,7 @@ const modelDir = path.join(os.homedir(), ".cache", "gpt4all");
 // Путь к файлу модели
 const finalModelPath = path.join(
     modelDir,
-    "mistral-7b-instruct-v0.1.Q4_0.gguf"
+    "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf"
 );
 
 // Путь к папке с материалами
@@ -815,21 +814,16 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Указываем путь к модели напрямую
-        const modelPath =
-            "/home/user1/.cache/gpt4all/mistral-7b-instruct-v0.1.Q4_0.gguf";
-
         // Проверяем, существует ли файл модели
-        if (!fs.existsSync(modelPath)) {
-            throw new Error(`Файл модели не найден: ${modelPath}`);
+        if (!fs.existsSync(finalModelPath)) {
+            throw new Error(`Файл модели не найден: ${finalModelPath}`);
         }
 
         // Загружаем модель напрямую
-        const gpt4all = require("gpt4all");
-        const model = new gpt4all.GPT4All("mistral", true); // Указываем тип модели и отключаем загрузку
+        const model = new gpt4all.GPT4All("nous-hermes", true); // Указываем тип модели и отключаем загрузку
 
         await model.init(); // Инициализируем модель
-        await model.loadModel(modelPath); // Загружаем модель из указанного пути
+        await model.loadModel(finalModelPath); // Загружаем модель из указанного пути
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
@@ -848,7 +842,7 @@ async function generateAIQuestions(text, count = 5) {
         console.log("Начинаем генерацию вопросов через AI...");
 
         if (!gpt4allModel) {
-            gpt4allModel = await getGpt4All();
+            gpt4allModel = await initGPT4AllModel();
         }
 
         if (!gpt4allModel) {
@@ -885,11 +879,6 @@ D) [вариант]
             console.log(response);
 
             // Парсим вопросы из ответа
-            const modelPath = "/home/user1/.cache/gpt4all/";
-            const finalModelPath = path.join(
-                modelDir,
-                "Nous-Hermes-2-Mistral-7B-DPO.Q4_0gguf"
-            );
             const questions = parseAIResponse(response.text); // Передаём только текст ответа
             allQuestions.push(...questions);
         }
