@@ -821,7 +821,7 @@ async function initGPT4AllModel() {
             throw new Error(`Файл модели не найден: ${finalModelPath}`);
         }
 
-        // Загружаем модель
+        // Загружаем модель из локального пути
         const model = await loadModel(finalModelPath, {
             device: "cpu", // Указываем устройство (CPU)
             nCtx: 2048,    // Контекстные токены
@@ -1087,35 +1087,4 @@ bot.action("generate_test", async (ctx) => {
             "Генерирую тест на основе материалов, пожалуйста, подождите..."
         );
 
-        await Promise.race([
-            (async () => {
-                const files = await getFilesFromRoot();
-                if (files.length === 0) {
-                    throw new Error("Нет доступных материалов для генерации теста.");
-                }
-
-                const randomFile = files[Math.floor(Math.random() * files.length)];
-                const filePath = path.join(materialsPath, randomFile);
-
-                const result = await parseDocxToText(filePath);
-                if (!result) {
-                    throw new Error("Не удалось прочитать материал для теста.");
-                }
-
-                const test = await generateSmartTest(result);
-                await ctx.reply(`Тест создан на основе материала "${randomFile}":\n\n${test}`);
-            })(),
-            timeoutPromise,
-        ]);
-    } catch (err) {
-        console.error("Ошибка при генерации теста:", err);
-        if (err.message === "Operation Timeout") {
-            await ctx.reply("Превышено время ожидания. Попробуйте еще раз.");
-        } else {
-            await ctx.reply("Произошла ошибка при генерации теста. Пожалуйста, попробуйте позже.");
-        }
-    }
-});
-// Запуск бота
-bot.launch();
-console.log("Бот запущен!");
+        await Promise
