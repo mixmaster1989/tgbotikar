@@ -8,9 +8,15 @@ async function getGpt4All() {
       verbose: true,
     });
 
+    // Проверка успешной инициализации модели
+    if (!model) {
+      throw new Error("Модель не была инициализирована.");
+    }
+
     return model;
   } catch (err) {
     console.error("Ошибка в getGpt4All функции:", err);
+    return null; // Возвращаем null в случае ошибки
   }
 }
 
