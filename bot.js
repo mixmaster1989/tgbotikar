@@ -810,6 +810,8 @@ function evaluateQuestions(questions) {
 }
 
 // Функция инициализации GPT4All модели
+const { loadModel } = require("gpt4all");
+
 async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
@@ -819,11 +821,12 @@ async function initGPT4AllModel() {
             throw new Error(`Файл модели не найден: ${finalModelPath}`);
         }
 
-        // Загружаем модель напрямую
-        const model = new gpt4all.GPT4All("nous-hermes", true); // Указываем тип модели и отключаем загрузку
-
-        await model.init(); // Инициализируем модель
-        await model.loadModel(finalModelPath); // Загружаем модель из указанного пути
+        // Загружаем модель
+        const model = await loadModel(finalModelPath, {
+            device: "cpu", // Указываем устройство (CPU)
+            nCtx: 2048,    // Контекстные токены
+            verbose: true, // Включаем подробные логи
+        });
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
