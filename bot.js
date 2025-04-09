@@ -885,6 +885,11 @@ D) [вариант]
             console.log(response);
 
             // Парсим вопросы из ответа
+            const modelPath = "/home/user1/.cache/gpt4all/";
+            const finalModelPath = path.join(
+                modelDir,
+                "Nous-Hermes-2-Mistral-7B-DPO.Q4_0gguf"
+            );
             const questions = parseAIResponse(response.text); // Передаём только текст ответа
             allQuestions.push(...questions);
         }
