@@ -43,19 +43,19 @@ const webAppUrl = `http://89.169.131.216:${PORT}`;
 const logger = require('pino')({
     level: 'debug',
     transport: {
-      target: 'pino-pretty'
+        target: 'pino-pretty'
     }
-  });
-  
-  // Логируем инициализацию
-  logger.info('Инициализация бота...');
-  logger.debug(`Путь к модели: ${finalModelPath}`);
-  logger.debug(`Путь к материалам: ${materialsPath}`);
-  
-  // Добавляем логирование ошибок
-  process.on('uncaughtException', (err) => {
+});
+
+// Логируем инициализацию
+logger.info('Инициализация бота...');
+logger.debug(`Путь к модели: ${finalModelPath}`);
+logger.debug(`Путь к материалам: ${materialsPath}`);
+
+// Добавляем логирование ошибок
+process.on('uncaughtException', (err) => {
     logger.error('Неперехваченная ошибка: ', err);
-  });
+});
 // Функция для парсинга .docx в текст
 async function parseDocxToText(filePath) {
     try {
@@ -874,7 +874,7 @@ D) [вариант]
 Текст: ${part}`;
 
             // Отправляем запрос в модель
-            const response = await gpt4allModel.prompt(prompt, {
+            const response = await gpt4allModel.generate(prompt, {
                 temperature: 0.7,
                 max_tokens: 500, // Ограничиваем количество токенов в ответе
                 top_k: 40,
