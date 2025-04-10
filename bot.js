@@ -815,17 +815,11 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Используем только createCompletion с существующей моделью
-        const model = await gpt4all.createCompletion(finalModelPath, {
-            prompt: "Test",
-            temp: 0.1,
-            topK: 40,
-            topP: 0.9,
-            repeatPenalty: 1.18,
-            repeatLastN: 10,
-            nBatch: 100,
-            promptTemplate: '### Human:\n%1\n\n### Assistant:\n'
-        });
+        // Создаем экземпляр модели через InferenceModel
+        const model = new gpt4all.InferenceModel();
+
+        // Загружаем модель из локального пути
+        await model.load(finalModelPath);
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
@@ -855,7 +849,14 @@ async function generateAIQuestions(text, count = 5) {
         const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Текст: ${text}`;
 
         // Генерируем текст
-        const response = await gpt4allModel.createCompletion(prompt);
+        const response = await gpt4allModel.generate(prompt, {
+            temp: 0.1,
+            topK: 40,
+            topP: 0.9,
+            repeatPenalty: 1.18,
+            repeatLastN: 10,
+            nBatch: 100
+        });
 
         console.log("Ответ от модели:", response);
 
