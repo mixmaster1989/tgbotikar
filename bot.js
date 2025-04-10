@@ -815,16 +815,11 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Проверяем, существует ли файл модели
-        if (!fs.existsSync(finalModelPath)) {
-            throw new Error(`Файл модели не найден: ${finalModelPath}`);
-        }
+        // Создаём экземпляр модели
+        const model = new gpt4all.InferenceModel(); // Используем InferenceModel
 
         // Загружаем модель из локального пути
-        const model = await gpt4all.loadModel(finalModelPath, {
-            nCtx: 2048,    // Контекстные токены
-            verbose: true, // Включаем подробные логи
-        });
+        await model.loadModel(finalModelPath);
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
@@ -854,7 +849,7 @@ async function generateAIQuestions(text, count = 5) {
         const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Текст: ${text}`;
 
         // Генерируем текст
-        const response = await gpt4all.createCompletion(gpt4allModel, prompt);
+        const response = await gpt4allModel.createCompletion(prompt);
 
         console.log("Ответ от модели:", response);
 
