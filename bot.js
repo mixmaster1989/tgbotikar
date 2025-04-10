@@ -815,23 +815,11 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Проверяем существование файла
-        if (!fs.existsSync(finalModelPath)) {
-            throw new Error(`Файл модели не найден: ${finalModelPath}`);
-        }
+        // Создаем экземпляр модели
+        const model = new gpt4all.LLModel();
 
-        // Создаём экземпляр модели с путем к файлу
-        const model = new gpt4all.LLModel(finalModelPath);
-
-        // Настраиваем параметры
-        await model.init({
-            temp: 0.1,
-            topK: 40,
-            topP: 0.9,
-            repeatPenalty: 1.18,
-            repeatLastN: 10,
-            nBatch: 100
-        });
+        // Загружаем модель
+        await model.load(finalModelPath);
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
