@@ -815,21 +815,33 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Создаем экземпляр LLModel
-        const model = new gpt4all.LLModel();
+        // Создаем экземпляр LLModel с именем модели
+        const model = new gpt4all.LLModel("nous-hermes");
 
-        // Загружаем модель
-        await model.load(finalModelPath);
-
-        // Возвращаем объект с методом generate
-        return {
-            generate: async (prompt, options) => {
-                return await model.prompt(prompt, options);
-            }
-        };
+        // Загружаем модель и инициализируем с параметрами
+        await model.init({
+            modelPath: finalModelPath,
+            temp: 0.1,
+            topK: 40,
+            topP: 0.9,
+            repeatPenalty: 1.18,
+            repeatLastN: 10,
+            nBatch: 100
+        });
 
         console.log("GPT4All модель успешно инициализирована");
-        return model;
+
+        // Возвращаем только обертку с обработкой ошибок
+        return {
+            generate: async (prompt, options) => {
+                try {
+                    return await model.prompt(prompt, options);
+                } catch (error) {
+                    console.error("Ошибка при генерации:", error);
+                    return null;
+                }
+            }
+        };
     } catch (error) {
         console.error("Ошибка при инициализации GPT4All:", error);
         return null;
