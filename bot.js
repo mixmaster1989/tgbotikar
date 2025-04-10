@@ -72,6 +72,9 @@ async function getFilesFromRoot() {
 // Глобальная переменная для хранения инициализированной модели
 let gpt4allModel = null;
 
+// Добавляем глобальный объект для хранения правильных ответов
+const activeTests = new Map();
+
 /**
  * Инициализирует модель GPT4All
  * @returns {Promise<Object|null>} объект модели с методом generate или null при ошибке
@@ -120,8 +123,16 @@ async function generateAIQuestions(text) {
         }
 
         console.log("Подготовка промпта для генерации...");
-        // Возвращаемся к предыдущей версии промпта
-        const prompt = `Создай 1 вопрос с 4 вариантами ответа по тексту: ${text}`;
+        const prompt = `Создай 1 вопрос с 4 вариантами ответа по тексту. 
+        Формат ответа строго такой:
+        ВОПРОС: [текст вопроса]
+        А) [вариант ответа]
+        Б) [вариант ответа]
+        В) [вариант ответа]
+        Г) [вариант ответа]
+        ПРАВИЛЬНЫЙ: [буква правильного ответа]
+
+        Текст: ${text}`;
 
         console.log("Отправляем запрос к модели...");
         const result = await gpt4allModel.generate(prompt);
@@ -131,6 +142,25 @@ async function generateAIQuestions(text) {
         console.error("Ошибка при генерации вопросов через AI:", err);
         throw err;
     }
+}
+
+/**
+ * Функция для парсинга ответа модели
+ * @param {string} response - ответ модели
+ * @returns {Object} объект с вопросом, вариантами ответов и правильным ответом
+ */
+function parseTestResponse(response) {
+    const lines = response.split('\n');
+    const question = lines[0].replace('ВОПРОС:', '').trim();
+    const answers = {
+        'А': lines[1].replace('А)', '').trim(),
+        'Б': lines[2].replace('Б)', '').trim(),
+        'В': lines[3].replace('В)', '').trim(),
+        'Г': lines[4].replace('Г)', '').trim()
+    };
+    const correct = lines[5].replace('ПРАВИЛЬНЫЙ:', '').trim();
+
+    return { question, answers, correct };
 }
 
 // Обработчики команд бота
@@ -251,13 +281,36 @@ bot.action(/^test:(.+)$/, async (ctx) => {
 
                 const test = await generateAIQuestions(result);
                 console.log("Вопросы сгенерированы, форматируем результат...");
-                await ctx.reply("✅ AI модель завершила работу\n🎯 Этап 3/3: Подготовка результата");
 
-                await ctx.reply(
-                    `🎉 Тест успешно создан!\n\n` +
-                    `📚 Материал: "${selectedFile}"\n\n` +
-                    `${test}`
-                );
+                // Парсим ответ модели
+                const parsedTest = parseTestResponse(test);
+
+                // Сохраняем правильный ответ
+                const testId = Date.now().toString();
+                activeTests.set(testId, parsedTest.correct);
+
+                // Формируем сообщение с вопросом
+                const message = `🎯 <b>Вопрос:</b>\n\n${parsedTest.question}\n\n` +
+                    `<i>Выберите правильный вариант ответа:</i>`;
+
+                // Создаем клавиатуру с вариантами ответов
+                const keyboard = [
+                    [
+                        Markup.button.callback('А) ' + parsedTest.answers['А'], `answer:${testId}:А`),
+                        Markup.button.callback('Б) ' + parsedTest.answers['Б'], `answer:${testId}:Б`)
+                    ],
+                    [
+                        Markup.button.callback('В) ' + parsedTest.answers['В'], `answer:${testId}:В`),
+                        Markup.button.callback('Г) ' + parsedTest.answers['Г'], `answer:${testId}:Г`)
+                    ]
+                ];
+
+                // Отправляем вопрос с вариантами ответов
+                await ctx.reply(message, {
+                    parse_mode: 'HTML',
+                    ...Markup.inlineKeyboard(keyboard)
+                });
+
             })(),
             timeoutPromise,
         ]);
@@ -267,6 +320,46 @@ bot.action(/^test:(.+)$/, async (ctx) => {
             "❌ Произошла ошибка при генерации теста\n" +
             "🔄 Пожалуйста, попробуйте позже"
         );
+    }
+});
+
+// Добавляем обработчик ответов на вопросы
+bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
+    try {
+        const testId = ctx.match[1];
+        const userAnswer = ctx.match[2];
+        const correctAnswer = activeTests.get(testId);
+
+        if (!correctAnswer) {
+            await ctx.reply('⚠️ Тест устарел. Пожалуйста, сгенерируйте новый.');
+            return;
+        }
+
+        // Удаляем тест из активных
+        activeTests.delete(testId);
+
+        // Проверяем ответ
+        const isCorrect = userAnswer === correctAnswer;
+
+        // Отправляем результат
+        await ctx.reply(
+            isCorrect
+                ? '✅ <b>Правильно!</b>\n\nОтличная работа!'
+                : `❌ <b>Неправильно</b>\n\nПравильный ответ: ${correctAnswer}`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: Markup.inlineKeyboard([
+                    [Markup.button.callback('🔄 Новый тест', 'generate_test')]
+                ])
+            }
+        );
+
+        // Редактируем оригинальное сообщение, чтобы показать, что тест завершен
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+    } catch (err) {
+        console.error('Ошибка при проверке ответа:', err);
+        await ctx.reply('❌ Произошла ошибка при проверке ответа');
     }
 });
 
