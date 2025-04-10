@@ -815,9 +815,15 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Создаём экземпляр модели, используя метод loadModel напрямую
-        const model = await gpt4all.loadModel(finalModelPath, {
-            modelPath: finalModelPath,
+        // Используем только createCompletion с существующей моделью
+        const model = await gpt4all.createCompletion(finalModelPath, {
+            prompt: "Test",
+            temp: 0.1,
+            topK: 40,
+            topP: 0.9,
+            repeatPenalty: 1.18,
+            repeatLastN: 10,
+            nBatch: 100,
             promptTemplate: '### Human:\n%1\n\n### Assistant:\n'
         });
 
