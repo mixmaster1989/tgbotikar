@@ -815,12 +815,15 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Загружаем модель с использованием loadModel
-        const model = await gpt4all.loadModel(finalModelPath, {
+        // Создаем экземпляр модели через LLModel
+        const model = new gpt4all.LLModel({
             modelPath: finalModelPath,
-            type: 'nous-hermes', // Указываем тип модели
+            type: 'nous-hermes',
             verbose: true
         });
+
+        // Загружаем модель
+        await model.load();
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
