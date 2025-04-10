@@ -815,11 +815,11 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Создаём экземпляр модели
-        const model = new gpt4all.InferenceModel(); // Используем InferenceModel
-
-        // Загружаем модель из локального пути
-        await model.loadModel(finalModelPath);
+        // Создаём экземпляр модели, используя метод loadModel напрямую
+        const model = await gpt4all.loadModel(finalModelPath, {
+            modelPath: finalModelPath,
+            promptTemplate: '### Human:\n%1\n\n### Assistant:\n'
+        });
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
