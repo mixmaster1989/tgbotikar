@@ -810,8 +810,6 @@ function evaluateQuestions(questions) {
 }
 
 // Функция инициализации GPT4All модели
-const { loadModel } = require("gpt4all");
-
 async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
@@ -822,11 +820,9 @@ async function initGPT4AllModel() {
         }
 
         // Загружаем модель из локального пути
-        const model = await loadModel(finalModelPath, {
-            device: "cpu", // Указываем устройство (CPU)
-            nCtx: 2048,    // Контекстные токены
-            verbose: true, // Включаем подробные логи
-        });
+        const model = new gpt4all.GPT4All("nous-hermes", true); // Указываем тип модели
+        await model.init(); // Инициализируем модель
+        await model.loadModel(finalModelPath); // Загружаем модель из указанного пути
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
@@ -1087,42 +1083,5 @@ bot.action("generate_test", async (ctx) => {
             "Генерирую тест на основе материалов, пожалуйста, подождите..."
         );
 
-        await Promise.race([
-            (async () => {
-                const files = await getFilesFromRoot();
-                if (files.length === 0) {
-                    throw new Error("Нет доступных материалов для генерации теста.");
-                }
-
-                const randomFile = files[Math.floor(Math.random() * files.length)];
-                const filePath = path.join(materialsPath, randomFile);
-
-                const result = await parseDocxToText(filePath);
-                if (!result) {
-                    throw new Error("Не удалось прочитать материал для теста.");
-                }
-
-                const test = await generateSmartTest(result);
-                await ctx.reply(`Тест создан на основе материала "${randomFile}":\n\n${test}`);
-            })(),
-            timeoutPromise,
-        ]);
-    } catch (err) {
-        console.error("Ошибка при генерации теста:", err);
-        if (err.message === "Operation Timeout") {
-            await ctx.reply("Превышено время ожидания. Попробуйте еще раз.");
-        } else {
-            await ctx.reply("Произошла ошибка при генерации теста. Пожалуйста, попробуйте позже.");
-        }
-    }
-});
-// Запуск бота
-bot.launch()
-    .then(() => console.log("Бот успешно запущен!"))
-    .catch((err) => console.error("Ошибка при запуске бота:", err));
-
-// Запуск Express-сервера
-app.listen(PORT, () => {
-    console.log(`Express-сервер запущен на порту ${PORT}`);
-});
+        await Promise
 
