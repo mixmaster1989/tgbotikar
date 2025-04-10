@@ -9,6 +9,7 @@ const axios = require("axios");
 const { GPT4All } = require("gpt4all");
 require("dotenv").config();
 const os = require("os");
+const gpt4all = require("gpt4all");
 
 // Определяем директорию для модели
 const modelDir = path.join(os.homedir(), ".cache", "gpt4all");
@@ -819,14 +820,11 @@ async function initGPT4AllModel() {
             throw new Error(`Файл модели не найден: ${finalModelPath}`);
         }
 
-        // Создаём экземпляр модели
-        const model = new GPT4All("nous-hermes", true); // Указываем имя модели и флаг verbose
-
-        // Инициализируем модель
-        await model.init();
-
-        // Открываем модель (загружается из стандартного пути)
-        await model.open();
+        // Загружаем модель из локального пути
+        const model = await gpt4all.loadModel(finalModelPath, {
+            nCtx: 2048,    // Контекстные токены
+            verbose: true, // Включаем подробные логи
+        });
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
@@ -856,7 +854,7 @@ async function generateAIQuestions(text, count = 5) {
         const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Текст: ${text}`;
 
         // Генерируем текст
-        const response = await gpt4allModel.prompt(prompt);
+        const response = await gpt4all.createCompletion(gpt4allModel, prompt);
 
         console.log("Ответ от модели:", response);
 
