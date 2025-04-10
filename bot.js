@@ -815,11 +815,11 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Используем самый базовый конструктор
-        const model = new gpt4all.LLModel();
-
-        // Загружаем модель с указанием пути
-        await model.load(finalModelPath);
+        // Создаем экземпляр с явным указанием модели и пути
+        const model = new gpt4all.LLModel({
+            modelName: "nous-hermes-2-mistral-7b-dpo",
+            modelPath: finalModelPath
+        });
 
         console.log("GPT4All модель успешно инициализирована");
 
