@@ -816,7 +816,7 @@ async function initGPT4AllModel() {
         console.log("Инициализация GPT4All модели...");
         console.log("Путь к модели:", finalModelPath);
 
-        // Явно указываем имя модели и путь к ней
+        // Создаем экземпляр модели, передавая параметры в LLModel.
         const model = new gpt4all.LLModel({
             modelName: "Nous-Hermes-2-Mistral-7B-DPO",
             modelPath: finalModelPath,
