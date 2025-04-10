@@ -815,8 +815,8 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Создаем экземпляр модели через InferenceModel
-        const model = new gpt4all.InferenceModel();
+        // Создаем экземпляр модели через InferenceModel с указанием имени модели
+        const model = new gpt4all.InferenceModel("nous-hermes");
 
         // Загружаем модель из локального пути
         await model.load(finalModelPath);
