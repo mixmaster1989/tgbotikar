@@ -814,17 +814,17 @@ function evaluateQuestions(questions) {
 async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
+        console.log("Путь к модели:", finalModelPath);
 
-        // Передаем только путь к модели как строку
-        const model = new gpt4all.LLModel(finalModelPath);
+        // Создаем экземпляр модели с явным приведением пути к строке
+        const model = new gpt4all.LLModel(String(finalModelPath).trim());
 
-        console.log("GPT4All модель успешно инициализирована");
-
-        // Простая обертка
+        // Простая обертка без дополнительных параметров и инициализации
         return {
             generate: async (prompt) => {
                 try {
-                    return await model.prompt(prompt);
+                    const response = await model.prompt(String(prompt).trim());
+                    return response;
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
                     return null;
