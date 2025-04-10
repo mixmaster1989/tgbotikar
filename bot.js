@@ -815,27 +815,17 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Создаем экземпляр LLModel с именем модели
-        const model = new gpt4all.LLModel("nous-hermes");
-
-        // Загружаем модель и инициализируем с параметрами
-        await model.init({
-            modelPath: finalModelPath,
-            temp: 0.1,
-            topK: 40,
-            topP: 0.9,
-            repeatPenalty: 1.18,
-            repeatLastN: 10,
-            nBatch: 100
-        });
+        // Самый простой вызов
+        const model = new gpt4all.LLModel(finalModelPath);
 
         console.log("GPT4All модель успешно инициализирована");
 
-        // Возвращаем только обертку с обработкой ошибок
+        // Простая обертка
         return {
-            generate: async (prompt, options) => {
+            generate: async (prompt) => {
                 try {
-                    return await model.prompt(prompt, options);
+                    // Простой вызов prompt без параметров
+                    return await model.prompt(prompt);
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
                     return null;
@@ -851,11 +841,9 @@ async function initGPT4AllModel() {
 // Глобальная переменная для хранения модели
 let gpt4allModel = null;
 
-// Функция для генерации вопросов через AI
-async function generateAIQuestions(text, count = 5) {
+// Упрощенная функция генерации вопросов
+async function generateAIQuestions(text) {
     try {
-        console.log("Начинаем генерацию вопросов через AI...");
-
         if (!gpt4allModel) {
             gpt4allModel = await initGPT4AllModel();
         }
@@ -864,72 +852,16 @@ async function generateAIQuestions(text, count = 5) {
             throw new Error("Модель GPT4All не инициализирована.");
         }
 
-        // Формируем запрос
-        const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Текст: ${text}`;
-
-        // Генерируем текст
-        const response = await gpt4allModel.generate(prompt, {
-            temp: 0.1,
-            topK: 40,
-            topP: 0.9,
-            repeatPenalty: 1.18,
-            repeatLastN: 10,
-            nBatch: 100
-        });
+        // Максимально простой промт
+        const prompt = `Создай 1 вопрос с 4 вариантами ответа по тексту: ${text}`;
+        const response = await gpt4allModel.generate(prompt);
 
         console.log("Ответ от модели:", response);
-
-        // Парсим вопросы из ответа
-        const questions = parseAIResponse(response);
-        return questions;
+        return response;
     } catch (err) {
         console.error("Ошибка при генерации вопросов через AI:", err);
         return null;
     }
-}
-
-// Функция для парсинга ответа AI
-function parseAIResponse(response) {
-    const questions = [];
-    const parts = response.split("\nQ");
-
-    for (let part of parts) {
-        if (!part.trim()) continue;
-
-        try {
-            // Если часть не начинается с номера, добавляем Q
-            if (!part.startsWith("1:")) {
-                part = "1:" + part;
-            }
-
-            const [questionPart, ...optionsParts] = part.split("\n");
-            const question = questionPart.split(":")[1].trim();
-
-            const options = [];
-            let correctAnswer = "";
-
-            for (const line of optionsParts) {
-                if (line.startsWith("Правильный ответ:")) {
-                    correctAnswer = line.split(":")[1].trim();
-                } else if (line.match(/^[A-D]\)/)) {
-                    options.push(line.substring(2).trim());
-                }
-            }
-
-            if (question && options.length === 4 && correctAnswer) {
-                questions.push({
-                    type: "ai-generated",
-                    question,
-                    options,
-                    correctAnswer,
-                });
-            }
-        } catch (err) {
-            console.error("Ошибка при парсинге вопроса:", err);
-        }
-    }
-
-    return questions;
 }
 
 // Улучшенная функция для генерации теста
