@@ -6,7 +6,7 @@ const express = require("express");
 const path = require("path");
 const mammoth = require("mammoth");
 const axios = require("axios");
-const gpt4all = require("gpt4all");
+const { GPT4All } = require("gpt4all");
 require("dotenv").config();
 const os = require("os");
 
@@ -39,21 +39,21 @@ app.use("/static", express.static(path.join(__dirname, "static")));
 // URL Web App (используем публичный IP)
 const webAppUrl = `http://89.169.131.216:${PORT}`;
 // Добавляем логгер
-const logger = require('pino')({
-    level: 'debug',
+const logger = require("pino")({
+    level: "debug",
     transport: {
-        target: 'pino-pretty'
-    }
+        target: "pino-pretty",
+    },
 });
 
 // Логируем инициализацию
-logger.info('Инициализация бота...');
+logger.info("Инициализация бота...");
 logger.debug(`Путь к модели: ${finalModelPath}`);
 logger.debug(`Путь к материалам: ${materialsPath}`);
 
 // Добавляем логирование ошибок
-process.on('uncaughtException', (err) => {
-    logger.error('Неперехваченная ошибка: ', err);
+process.on("uncaughtException", (err) => {
+    logger.error("Неперехваченная ошибка: ", err);
 });
 // Функция для парсинга .docx в текст
 async function parseDocxToText(filePath) {
@@ -819,10 +819,14 @@ async function initGPT4AllModel() {
             throw new Error(`Файл модели не найден: ${finalModelPath}`);
         }
 
-        // Загружаем модель из локального пути
-        const model = new gpt4all.GPT4All("nous-hermes", true); // Указываем тип модели
-        await model.init(); // Инициализируем модель
-        await model.loadModel(finalModelPath); // Загружаем модель из указанного пути
+        // Создаём экземпляр модели
+        const model = new GPT4All("nous-hermes", true); // Указываем имя модели и флаг verbose
+
+        // Инициализируем модель
+        await model.init();
+
+        // Открываем модель (загружается из стандартного пути)
+        await model.open();
 
         console.log("GPT4All модель успешно инициализирована");
         return model;
@@ -848,42 +852,17 @@ async function generateAIQuestions(text, count = 5) {
             throw new Error("Модель GPT4All не инициализирована.");
         }
 
-        // Разделяем текст на части (например, по 500 символов)
-        const textParts = text.match(/.{1,500}(\s|$)/g); // Разделяем текст на части по 500 символов
-        const allQuestions = [];
+        // Формируем запрос
+        const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Текст: ${text}`;
 
-        for (const part of textParts) {
-            console.log(`Обрабатываем часть текста: ${part.slice(0, 50)}...`);
+        // Генерируем текст
+        const response = await gpt4allModel.prompt(prompt);
 
-            // Формируем запрос для текущей части текста
-            const prompt = `Создай ${count} вопросов с вариантами ответов на основе этого текста. Каждый вопрос должен иметь 4 варианта ответа, где только один правильный. Формат ответа:
-Q1: [вопрос]
-A) [вариант]
-B) [вариант]
-C) [вариант]
-D) [вариант]
-Правильный ответ: [буква]
+        console.log("Ответ от модели:", response);
 
-Текст: ${part}`;
-
-            // Отправляем запрос в модель
-            const response = await gpt4allModel.generate(prompt, {
-                temperature: 0.7,
-                max_tokens: 500, // Ограничиваем количество токенов в ответе
-                top_k: 40,
-                top_p: 0.9,
-            });
-
-            console.log("\nОтвет от модели:");
-            console.log(response);
-
-            // Парсим вопросы из ответа
-            const questions = parseAIResponse(response.text); // Передаём только текст ответа
-            allQuestions.push(...questions);
-        }
-
-        // Возвращаем все вопросы
-        return allQuestions.slice(0, count); // Ограничиваем общее количество вопросов
+        // Парсим вопросы из ответа
+        const questions = parseAIResponse(response);
+        return questions;
     } catch (err) {
         console.error("Ошибка при генерации вопросов через AI:", err);
         return null;
