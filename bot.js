@@ -17,7 +17,9 @@ const PORT = process.env.PORT || 3000; // Порт для веб-сервера
 const webAppUrl = `http://89.169.131.216:${PORT}`; // URL веб-приложения
 
 // Инициализация основных сервисов
-const bot = new Telegraf(process.env.BOT_TOKEN); // Создание экземпляра бота
+const bot = new Telegraf(process.env.BOT_TOKEN, {
+    handlerTimeout: 300000 // увеличиваем до 5 минут
+}); // Создание экземпляра бота
 const app = express(); // Создание Express приложения
 
 // Настройка статических файлов для веб-сервера
