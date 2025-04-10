@@ -107,7 +107,6 @@ async function initGPT4AllModel() {
  */
 async function generateAIQuestions(text) {
     try {
-        // Инициализируем модель если еще не инициализирована
         if (!gpt4allModel) {
             gpt4allModel = await initGPT4AllModel();
         }
@@ -115,8 +114,33 @@ async function generateAIQuestions(text) {
             throw new Error("Модель GPT4All не инициализирована.");
         }
 
-        // Формируем промпт и генерируем вопросы
-        const prompt = `Создай 1 вопрос с 4 вариантами ответа по тексту: ${text}`;
+        // Улучшенный промпт для генерации нескольких вопросов
+        const prompt = `Создай 3 вопроса с 4 вариантами ответа по тексту. 
+        Формат:
+        
+        Вопрос 1:
+        A)
+        B)
+        C)
+        D)
+        Правильный ответ: 
+
+        Вопрос 2:
+        A)
+        B)
+        C)
+        D)
+        Правильный ответ: 
+
+        Вопрос 3:
+        A)
+        B)
+        C)
+        D)
+        Правильный ответ: 
+
+        Текст: ${text}`;
+
         return await gpt4allModel.generate(prompt);
     } catch (err) {
         console.error("Ошибка при генерации вопросов через AI:", err);
@@ -174,41 +198,64 @@ bot.action(/^material:(.+)$/, async (ctx) => {
 
 // Обработка кнопки "Сгенерировать тест"
 bot.action("generate_test", async (ctx) => {
-    // Увеличиваем таймаут до 5 минут
+    try {
+        const files = await getFilesFromRoot();
+        if (files.length === 0) {
+            return ctx.reply("Нет доступных материалов для генерации теста.");
+        }
+
+        // Создаем кнопки для выбора файла
+        const buttons = files.map((file) => [
+            Markup.button.callback(`📄 ${file}`, `test:${file}`),
+        ]);
+
+        // Добавляем кнопку случайного выбора
+        buttons.push([Markup.button.callback("🎲 Случайный материал", "test:random")]);
+
+        await ctx.reply(
+            "Выберите материал для генерации теста:",
+            Markup.inlineKeyboard(buttons)
+        );
+    } catch (err) {
+        console.error("Ошибка при подготовке списка:", err);
+        await ctx.reply("Произошла ошибка. Попробуйте позже.");
+    }
+});
+
+// Добавляем обработчик выбора файла для теста
+bot.action(/^test:(.+)$/, async (ctx) => {
     const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Operation Timeout")), 300000); // 5 минут
+        setTimeout(() => reject(new Error("Operation Timeout")), 300000);
     });
 
     try {
+        const files = await getFilesFromRoot();
+        let selectedFile;
+
+        if (ctx.match[1] === 'random') {
+            selectedFile = files[Math.floor(Math.random() * files.length)];
+        } else {
+            selectedFile = ctx.match[1];
+        }
+
         await ctx.reply(
-            "Генерирую тест на основе материалов, пожалуйста, подождите..."
+            `Генерирую тест по материалу "${selectedFile}", пожалуйста, подождите...`
         );
 
-        // Используем Promise.race для ограничения времени выполнения
         await Promise.race([
             (async () => {
-                // Получаем случайный файл из доступных
-                const files = await getFilesFromRoot();
-                if (files.length === 0) {
-                    throw new Error("Нет доступных материалов для генерации теста.");
-                }
+                const filePath = path.join(materialsPath, selectedFile);
+                await ctx.reply("Обрабатываю материал...");
 
-                const randomFile = files[Math.floor(Math.random() * files.length)];
-                const filePath = path.join(materialsPath, randomFile);
-
-                await ctx.reply("Обрабатываю материал..."); // Добавляем промежуточное уведомление
-
-                // Извлекаем текст и генерируем тест
                 const result = await parseDocxToText(filePath);
                 if (!result) {
                     throw new Error("Не удалось прочитать материал для теста.");
                 }
 
-                await ctx.reply("Генерирую вопросы..."); // Добавляем промежуточное уведомление
-
+                await ctx.reply("Генерирую вопросы...");
                 const test = await generateAIQuestions(result);
                 await ctx.reply(
-                    `Тест создан на основе материала "${randomFile}":\n\n${test}`
+                    `Тест по материалу "${selectedFile}":\n\n${test}`
                 );
             })(),
             timeoutPromise,
