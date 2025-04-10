@@ -815,10 +815,10 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Создаем экземпляр модели через LLModel, передаем путь к файлу модели
-        const model = new gpt4all.LLModel(finalModelPath);
+        // Передаем название модели как строку
+        const model = new gpt4all.LLModel("nous-hermes-2-mistral-7b-dpo");
 
-        // Генерируем текст с параметрами
+        // Инициализируем модель с параметрами
         await model.init({
             temp: 0.1,
             topK: 40,
