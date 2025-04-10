@@ -815,12 +815,11 @@ async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
 
-        // Проверяем и конвертируем путь в строку явно
-        const modelPathString = String(finalModelPath);
-        console.log("Путь к модели:", modelPathString);
+        // Используем самый базовый конструктор
+        const model = new gpt4all.LLModel();
 
-        // Самый простой вызов с явно преобразованным путем
-        const model = new gpt4all.LLModel(modelPathString);
+        // Загружаем модель с указанием пути
+        await model.load(finalModelPath);
 
         console.log("GPT4All модель успешно инициализирована");
 
@@ -828,7 +827,6 @@ async function initGPT4AllModel() {
         return {
             generate: async (prompt) => {
                 try {
-                    // Простой вызов prompt без параметров
                     return await model.prompt(prompt);
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
