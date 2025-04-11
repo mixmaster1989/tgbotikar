@@ -4,6 +4,7 @@ const gpt4all = require("gpt4all");
 const path = require("path");
 const os = require("os");
 const use = require('@tensorflow-models/universal-sentence-encoder');
+const tf = require('@tensorflow/tfjs-node'); // Явно подключаем TensorFlow.js
 
 // Константы
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
