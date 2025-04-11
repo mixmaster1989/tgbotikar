@@ -473,6 +473,38 @@ bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
     }
 });
 
+/**
+ * Проверяет базу данных и запускает сканирование материалов при необходимости
+ */
+async function checkAndRunScan() {
+    try {
+        console.log('\n📊 Проверка базы данных...');
+
+        // Проверяем содержимое
+        const records = await dbAll('SELECT filename, length(content) as content_length FROM test_cache');
+        console.log(`Записей в базе: ${records.length}`);
+
+        if (records.length === 0) {
+            console.log('❗ База пуста, запускаем сканирование...');
+            await scanAndCacheMaterials();
+
+            // Проверяем результат сканирования
+            const newRecords = await dbAll('SELECT filename, length(content) as content_length FROM test_cache');
+            console.log('\n📝 Результаты сканирования:');
+            newRecords.forEach(record => {
+                console.log(`📄 ${record.filename} (размер: ${record.content_length} символов)`);
+            });
+        } else {
+            console.log('\n📝 Содержимое базы:');
+            records.forEach(record => {
+                console.log(`📄 ${record.filename} (размер: ${record.content_length} символов)`);
+            });
+        }
+    } catch (err) {
+        console.error('❌ Ошибка при проверке/сканировании:', err);
+    }
+}
+
 // Добавляем обработку завершения работы
 process.on('SIGINT', () => {
     db.close((err) => {
@@ -485,15 +517,15 @@ process.on('SIGINT', () => {
     });
 });
 
-// Запуск сервисов
+// Изменяем запуск бота
 bot
     .launch()
     .then(async () => {
-        console.log("Бот успешно запущен!");
-        // Запускаем первичное сканирование
-        await scanAndCacheMaterials();
+        console.log("🤖 Бот запущен!");
+        await checkAndRunScan();
+        console.log("\n✅ Бот готов к работе!");
     })
-    .catch((err) => console.error("Ошибка при запуске бота:", err));
+    .catch((err) => console.error("❌ Ошибка при запуске бота:", err));
 
 app.listen(PORT, () => {
     // Запускаем веб-сервер
