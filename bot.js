@@ -90,35 +90,55 @@ async function initGPT4AllModel() {
                     let generatedText = '';
                     let messageId = null;
                     let lastUpdate = Date.now();
+                    let updatePromise = null;
 
-                    const answer = await model.generate(prompt, {
+                    const answer = await model.generate({
+                        prompt: prompt,
+                        maxTokens: 2048,
+                        temperature: 0.7,
+                        repeatPenalty: 1.18,
                         onToken: async (token) => {
                             generatedText += token;
-                            console.log('Текущий токен:', token);
 
-                            // Обновляем сообщение в Telegram каждые 2 секунды
-                            if (ctx && Date.now() - lastUpdate > 2000) {
-                                try {
-                                    if (!messageId) {
-                                        const msg = await ctx.reply("🤖 Генерация:\n\n" + generatedText);
-                                        messageId = msg.message_id;
-                                    } else {
-                                        await ctx.telegram.editMessageText(
-                                            ctx.chat.id,
-                                            messageId,
-                                            null,
-                                            "🤖 Генерация:\n\n" + generatedText
-                                        );
+                            // Ждем завершения предыдущего обновления
+                            if (updatePromise) {
+                                await updatePromise;
+                            }
+
+                            // Обновляем сообщение каждые 2 секунды
+                            if (ctx && (Date.now() - lastUpdate > 2000)) {
+                                updatePromise = (async () => {
+                                    try {
+                                        if (!messageId) {
+                                            const msg = await ctx.reply(
+                                                "🤖 Генерация ответа:\n\n" +
+                                                generatedText
+                                            );
+                                            messageId = msg.message_id;
+                                        } else {
+                                            await ctx.telegram.editMessageText(
+                                                ctx.chat.id,
+                                                messageId,
+                                                null,
+                                                "🤖 Генерация ответа:\n\n" +
+                                                generatedText
+                                            );
+                                        }
+                                        lastUpdate = Date.now();
+                                    } catch (e) {
+                                        console.error('Ошибка при обновлении сообщения:', e);
                                     }
-                                    lastUpdate = Date.now();
-                                } catch (e) {
-                                    console.error('Ошибка при обновлении сообщения:', e);
-                                }
+                                })();
                             }
                         }
                     });
 
-                    // Удаляем промежуточное сообщение если оно было
+                    // Ждем завершения последнего обновления
+                    if (updatePromise) {
+                        await updatePromise;
+                    }
+
+                    // Удаляем промежуточное сообщение
                     if (ctx && messageId) {
                         try {
                             await ctx.telegram.deleteMessage(ctx.chat.id, messageId);
@@ -127,12 +147,12 @@ async function initGPT4AllModel() {
                         }
                     }
 
-                    return answer.text;
+                    return answer.text || generatedText;
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
                     return null;
                 }
-            },
+            }
         };
     } catch (error) {
         console.error("Ошибка при инициализации GPT4All:", error);
