@@ -82,14 +82,51 @@ const activeTests = new Map();
 async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
-        // в loadModel надо пихать название модели а не путь, пути он сам строит
         const model = await gpt4all.loadModel(modelName);
 
-        // Возвращаем обертку с методом generate для удобства использования
         return {
-            generate: async (prompt) => {
+            generate: async (prompt, ctx = null) => {
                 try {
-                    const answer = await model.generate(prompt);
+                    let generatedText = '';
+                    let messageId = null;
+                    let lastUpdate = Date.now();
+
+                    const answer = await model.generate(prompt, {
+                        onToken: async (token) => {
+                            generatedText += token;
+                            console.log('Текущий токен:', token);
+
+                            // Обновляем сообщение в Telegram каждые 2 секунды
+                            if (ctx && Date.now() - lastUpdate > 2000) {
+                                try {
+                                    if (!messageId) {
+                                        const msg = await ctx.reply("🤖 Генерация:\n\n" + generatedText);
+                                        messageId = msg.message_id;
+                                    } else {
+                                        await ctx.telegram.editMessageText(
+                                            ctx.chat.id,
+                                            messageId,
+                                            null,
+                                            "🤖 Генерация:\n\n" + generatedText
+                                        );
+                                    }
+                                    lastUpdate = Date.now();
+                                } catch (e) {
+                                    console.error('Ошибка при обновлении сообщения:', e);
+                                }
+                            }
+                        }
+                    });
+
+                    // Удаляем промежуточное сообщение если оно было
+                    if (ctx && messageId) {
+                        try {
+                            await ctx.telegram.deleteMessage(ctx.chat.id, messageId);
+                        } catch (e) {
+                            console.error('Ошибка при удалении сообщения:', e);
+                        }
+                    }
+
                     return answer.text;
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
@@ -108,7 +145,7 @@ async function initGPT4AllModel() {
  * @param {string} text - исходный текст
  * @returns {Promise<string>} сгенерированные вопросы
  */
-async function generateAIQuestions(text) {
+async function generateAIQuestions(text, ctx) {
     try {
         console.log("Начинаем генерацию вопросов...");
 
@@ -135,7 +172,7 @@ async function generateAIQuestions(text) {
         Текст: ${text}`;
 
         console.log("Отправляем запрос к модели...");
-        const result = await gpt4allModel.generate(prompt);
+        const result = await gpt4allModel.generate(prompt, ctx);
         console.log("Ответ от модели получен");
         return result;
     } catch (err) {
@@ -279,7 +316,7 @@ bot.action(/^test:(.+)$/, async (ctx) => {
                     "🤖 Этап 2/3: Запуск AI модели"
                 );
 
-                const test = await generateAIQuestions(result);
+                const test = await generateAIQuestions(result, ctx);
                 console.log("Вопросы сгенерированы, форматируем результат...");
 
                 // Парсим ответ модели
