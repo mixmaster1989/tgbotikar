@@ -7,6 +7,7 @@ const mammoth = require("mammoth"); // Конвертация DOCX файлов
 const gpt4all = require("gpt4all"); // Локальная AI модель для генерации текста
 require("dotenv").config(); // Загрузка переменных окружения
 const os = require("os"); // Работа с системными путями
+const sqlite3 = require("sqlite3").verbose(); // Подключаем SQLite
 
 // Основные константы и пути
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -24,6 +25,35 @@ const app = express(); // Создание Express приложения
 
 // Настройка статических файлов для веб-сервера
 app.use("/static", express.static(path.join(__dirname, "static")));
+
+// Создаем подключение к базе данных
+const db = new sqlite3.Database("database.sqlite", (err) => {
+    if (err) {
+        console.error("❌ Ошибка подключения к базе данных:", err);
+    } else {
+        console.log("✅ Успешное подключение к базе данных");
+        initDatabase();
+    }
+});
+
+// Функция для инициализации таблицы
+function initDatabase() {
+    db.run(
+        `CREATE TABLE IF NOT EXISTS gpt_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prompt TEXT UNIQUE,
+            response TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        (err) => {
+            if (err) {
+                console.error("❌ Ошибка при создании таблицы:", err);
+            } else {
+                console.log("✅ Таблица gpt_cache готова к использованию");
+            }
+        }
+    );
+}
 
 /**
  * Запускает приложение
@@ -254,8 +284,65 @@ bot.start(async (ctx) => {
         Markup.inlineKeyboard([
             Markup.button.callback("📂 Просмотреть материалы", "open_materials"),
             Markup.button.callback("📝 Сгенерировать тест", "generate_test"),
+            Markup.button.callback("📊 Проверить кэш", "check_cache") // Новая кнопка
         ])
     );
+});
+
+// Обработчик кнопки "Проверить кэш"
+bot.action("check_cache", async (ctx) => {
+    try {
+        db.all("SELECT prompt, response, created_at FROM gpt_cache", (err, rows) => {
+            if (err) {
+                console.error("❌ Ошибка при запросе кэша:", err);
+                return ctx.reply("❌ Ошибка при запросе кэша.");
+            }
+
+            if (rows.length === 0) {
+                return ctx.reply("📂 Кэш пуст.");
+            }
+
+            let message = "📊 Содержимое кэша:\n\n";
+            rows.forEach((row, index) => {
+                message += `${index + 1}. [${row.created_at}]\n`;
+                message += `Промпт: ${row.prompt.slice(0, 50)}...\n`;
+                message += `Ответ: ${row.response.slice(0, 50)}...\n\n`;
+            });
+
+            ctx.reply(message);
+        });
+    } catch (err) {
+        console.error("❌ Ошибка при обработке кнопки 'Проверить кэш':", err);
+        ctx.reply("❌ Произошла ошибка при обработке кнопки.");
+    }
+});
+
+// Команда /cache - проверка содержимого кэша
+bot.command("cache", async (ctx) => {
+    try {
+        db.all("SELECT prompt, response, created_at FROM gpt_cache", (err, rows) => {
+            if (err) {
+                console.error("❌ Ошибка при запросе кэша:", err);
+                return ctx.reply("❌ Ошибка при запросе кэша.");
+            }
+
+            if (rows.length === 0) {
+                return ctx.reply("📂 Кэш пуст.");
+            }
+
+            let message = "📊 Содержимое кэша:\n\n";
+            rows.forEach((row, index) => {
+                message += `${index + 1}. [${row.created_at}]\n`;
+                message += `Промпт: ${row.prompt.slice(0, 50)}...\n`;
+                message += `Ответ: ${row.response.slice(0, 50)}...\n\n`;
+            });
+
+            ctx.reply(message);
+        });
+    } catch (err) {
+        console.error("❌ Ошибка при обработке команды /cache:", err);
+        ctx.reply("❌ Произошла ошибка при обработке команды.");
+    }
 });
 
 // Обработка кнопки "Просмотреть материалы" - показывает список доступных файлов
