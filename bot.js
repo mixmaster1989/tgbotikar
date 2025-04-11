@@ -141,8 +141,27 @@ async function initGPT4AllModel() {
 }
 
 /**
+ * Обрезает текст до безопасного размера
+ * @param {string} text - исходный текст
+ * @returns {string} обрезанный текст
+ */
+function trimText(text) {
+    // Примерно 1500 символов должно уложиться в лимит токенов
+    const MAX_LENGTH = 1500;
+    if (text.length <= MAX_LENGTH) return text;
+
+    // Берем первую часть текста
+    const firstPart = text.substring(0, MAX_LENGTH);
+
+    // Находим последнюю точку для красивого обрезания
+    const lastDot = firstPart.lastIndexOf('.');
+    return lastDot > 0 ? firstPart.substring(0, lastDot + 1) : firstPart;
+}
+
+/**
  * Генерирует вопросы на основе текста используя AI
  * @param {string} text - исходный текст
+ * @param {Object} ctx - контекст Telegram
  * @returns {Promise<string>} сгенерированные вопросы
  */
 async function generateAIQuestions(text, ctx) {
@@ -159,6 +178,10 @@ async function generateAIQuestions(text, ctx) {
             throw new Error("Модель GPT4All не инициализирована.");
         }
 
+        // Обрезаем текст до безопасного размера
+        const trimmedText = trimText(text);
+        console.log(`Исходный размер текста: ${text.length}, обрезанный: ${trimmedText.length}`);
+
         console.log("Подготовка промпта для генерации...");
         const prompt = `Создай 1 вопрос с 4 вариантами ответа по тексту. 
         Формат ответа строго такой:
@@ -169,7 +192,7 @@ async function generateAIQuestions(text, ctx) {
         Г) [вариант ответа]
         ПРАВИЛЬНЫЙ: [буква правильного ответа]
 
-        Текст: ${text}`;
+        Текст: ${trimmedText}`;
 
         console.log("Отправляем запрос к модели...");
         const result = await gpt4allModel.generate(prompt, ctx);
