@@ -137,7 +137,9 @@ async function scanAndCacheMaterials() {
  */
 async function parseDocxToText(filePath) {
     try {
+        console.log(`Извлечение текста из файла: ${filePath}`);
         const result = await mammoth.extractRawText({ path: filePath });
+        console.log(`Текст успешно извлечен (длина: ${result.value.length})`);
         return result.value.trim();
     } catch (err) {
         console.error(`Ошибка при парсинге файла ${filePath}:`, err);
@@ -166,8 +168,13 @@ async function parseDocxToHtml(filePath) {
  */
 async function getFilesFromRoot() {
     try {
+        console.log('Чтение папки materials...');
         const items = await fs.readdir(materialsPath);
-        return items.filter((item) => item.endsWith(".docx"));
+        console.log(`Найдено элементов: ${items.length}`);
+        const files = items.filter((item) => item.endsWith(".docx"));
+        console.log(`Найдено .docx файлов: ${files.length}`);
+        console.log(`Файлы: ${files.join(', ')}`);
+        return files;
     } catch (err) {
         console.error("Ошибка при получении списка файлов:", err);
         return [];
