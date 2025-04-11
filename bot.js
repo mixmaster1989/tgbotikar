@@ -87,53 +87,7 @@ async function initGPT4AllModel() {
         return {
             generate: async (prompt, ctx = null) => {
                 try {
-                    let generatedText = '';
-                    let messageId = null;
-                    let lastUpdate = Date.now();
-
-                    const answer = await model.generate({
-                        prompt: prompt,
-                        temp: 0.7,
-                        maxTokens: 2048,
-                        repeatPenalty: 1.18,
-                        onToken: async (token) => {
-                            generatedText += token;
-
-                            // Обновляем сообщение каждые 2 секунды
-                            if (ctx && (Date.now() - lastUpdate > 2000)) {
-                                try {
-                                    if (!messageId) {
-                                        const msg = await ctx.reply(
-                                            "🤖 Генерация ответа:\n\n" +
-                                            generatedText
-                                        );
-                                        messageId = msg.message_id;
-                                    } else {
-                                        await ctx.telegram.editMessageText(
-                                            ctx.chat.id,
-                                            messageId,
-                                            null,
-                                            "🤖 Генерация ответа:\n\n" +
-                                            generatedText
-                                        );
-                                    }
-                                    lastUpdate = Date.now();
-                                } catch (e) {
-                                    console.error('Ошибка при обновлении сообщения:', e);
-                                }
-                            }
-                        }
-                    });
-
-                    // Удаляем промежуточное сообщение
-                    if (ctx && messageId) {
-                        try {
-                            await ctx.telegram.deleteMessage(ctx.chat.id, messageId);
-                        } catch (e) {
-                            console.error('Ошибка при удалении сообщения:', e);
-                        }
-                    }
-
+                    const answer = await model.generate(prompt);
                     return answer.text;
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
