@@ -7,8 +7,6 @@ const mammoth = require("mammoth"); // Конвертация DOCX файлов
 const gpt4all = require("gpt4all"); // Локальная AI модель для генерации текста
 require("dotenv").config(); // Загрузка переменных окружения
 const os = require("os"); // Работа с системными путями
-const sqlite3 = require('sqlite3').verbose();
-const util = require('util');
 
 // Основные константы и пути
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -26,109 +24,6 @@ const app = express(); // Создание Express приложения
 
 // Настройка статических файлов для веб-сервера
 app.use("/static", express.static(path.join(__dirname, "static")));
-
-// Инициализация БД
-const db = new sqlite3.Database('database.sqlite', (err) => {
-    if (err) {
-        console.error('Ошибка при подключении к БД:', err);
-    } else {
-        console.log('Успешное подключение к БД');
-        initDatabase();
-    }
-});
-
-// Промисифицируем методы БД
-const dbRun = util.promisify(db.run.bind(db));
-const dbGet = util.promisify(db.get.bind(db));
-const dbAll = util.promisify(db.all.bind(db));
-
-/**
- * Функция инициализации БД
- */
-async function initDatabase() {
-    try {
-        await dbRun(`CREATE TABLE IF NOT EXISTS test_cache (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT UNIQUE,
-            content TEXT,
-            test_json TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`);
-        console.log('БД инициализирована');
-    } catch (err) {
-        console.error('Ошибка при инициализации БД:', err);
-    }
-}
-
-/**
- * Функция сканирования и кэширования материалов
- */
-async function scanAndCacheMaterials() {
-    try {
-        console.log('\n🔍 Начинаем сканирование материалов...');
-
-        // Получаем список всех .docx файлов
-        console.log('📂 Чтение папки materials...');
-        const files = await getFilesFromRoot();
-        console.log(`📊 Найдено файлов: ${files.length}`);
-
-        // Если файлов нет, выходим
-        if (files.length === 0) {
-            console.log('❌ В папке materials нет .docx файлов');
-            return;
-        }
-
-        console.log('\n📝 Найденные файлы:');
-        files.forEach(file => console.log(` - ${file}`));
-
-        // Обрабатываем каждый файл
-        for (const filename of files) {
-            try {
-                console.log(`\n⏳ Обработка файла: ${filename}`);
-
-                // Проверяем наличие в базе
-                const existing = await dbGet(
-                    'SELECT filename FROM test_cache WHERE filename = ?',
-                    [filename]
-                );
-
-                if (existing) {
-                    console.log(`⏭️ Пропускаем ${filename} - уже в базе`);
-                    continue;
-                }
-
-                const filePath = path.join(materialsPath, filename);
-                console.log(`📄 Извлечение текста из файла...`);
-
-                const content = await parseDocxToText(filePath);
-
-                if (!content) {
-                    console.error(`❌ Ошибка: Не удалось извлечь текст из ${filename}`);
-                    continue;
-                }
-
-                console.log(`💾 Сохранение в базу данных...`);
-                await dbRun(
-                    'INSERT INTO test_cache (filename, content, test_json) VALUES (?, ?, ?)',
-                    [filename, content, '']
-                );
-
-                console.log(`✅ Файл ${filename} успешно обработан и сохранен`);
-
-            } catch (err) {
-                console.error(`❌ Ошибка при обработке файла ${filename}:`, err);
-            }
-        }
-
-        // Выводим итоги
-        const totalFiles = await dbGet('SELECT COUNT(*) as count FROM test_cache');
-        console.log('\n📊 Итоги сканирования:');
-        console.log(`✅ Всего файлов в базе: ${totalFiles.count}`);
-
-    } catch (err) {
-        console.error('❌ Ошибка при сканировании материалов:', err);
-    }
-}
 
 /**
  * Извлекает текст из DOCX файла
@@ -494,87 +389,38 @@ bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
         console.error('Ошибка при проверке ответа:', err);
         await ctx.reply('❌ Произошла ошибка при проверке ответа');
     }
-});
-
-/**
- * Проверяет базу данных и запускает сканирование материалов при необходимости
- */
-async function checkAndRunScan() {
-    try {
-        console.log('\n📊 Проверка базы данных...');
-
-        // Проверяем содержимое
-        const records = await dbAll('SELECT filename, length(content) as content_length FROM test_cache');
-        console.log(`Записей в базе: ${records.length}`);
-
-        if (records.length === 0) {
-            console.log('❗ База пуста, запускаем сканирование...');
-            await scanAndCacheMaterials();
-
-            // Проверяем результат сканирования
-            const newRecords = await dbAll('SELECT filename, length(content) as content_length FROM test_cache');
-            console.log('\n📝 Результаты сканирования:');
-            newRecords.forEach(record => {
-                console.log(`📄 ${record.filename} (размер: ${record.content_length} символов)`);
-            });
-        } else {
-            console.log('\n📝 Содержимое базы:');
-            records.forEach(record => {
-                console.log(`📄 ${record.filename} (размер: ${record.content_length} символов)`);
-            });
-        }
-    } catch (err) {
-        console.error('❌ Ошибка при проверке/сканировании:', err);
-    }
 }
-
-// Добавляем обработку завершения работы
-process.on('SIGINT', () => {
-    db.close((err) => {
-        if (err) {
-            console.error('Ошибка при закрытии БД:', err);
-        } else {
-            console.log('Соединение с БД закрыто');
-        }
-        process.exit(0);
-    });
-});
 
 /**
  * Запускает приложение
  */
 async function startApp() {
-    try {
-        console.log("🚀 Запуск приложения...");
-
-        // 1. Инициализация и запуск Express-сервера
-        await new Promise((resolve, reject) => {
-            app.listen(PORT, () => {
-                console.log(`🌐 Express-сервер запущен на порту ${PORT}`);
-                resolve();
-            });
-        });
-
-        // 2. Запуск бота
-        console.log("🤖 Запуск Telegram бота...");
         try {
-            await bot.launch();
-            console.log("✅ Telegram бот успешно запущен!");
-        } catch (botError) {
-            console.error("❌ Ошибка при запуске Telegram бота:", botError);
-            throw botError; // Пробрасываем ошибку дальше, чтобы остановить запуск
+            console.log("🚀 Запуск приложения...");
+
+            // 1. Инициализация и запуск Express-сервера
+            await new Promise((resolve) => {
+                app.listen(PORT, () => {
+                    console.log(`🌐 Express-сервер запущен на порту ${PORT}`);
+                    resolve();
+                });
+            });
+
+            // 2. Запуск бота
+            console.log("🤖 Запуск Telegram бота...");
+            try {
+                await bot.launch();
+                console.log("✅ Telegram бот успешно запущен!");
+            } catch (botError) {
+                console.error("❌ Ошибка при запуске Telegram бота:", botError);
+                throw botError;
+            }
+
+            console.log("\n🎉 Приложение полностью готово к работе!");
+
+        } catch (error) {
+            console.error("❌ Ошибка при запуске приложения:", error);
         }
-
-        // 3. Сканирование и кэширование материалов
-        console.log("🔍 Запуск сканирования материалов...");
-        await checkAndRunScan();
-        console.log("✅ Сканирование материалов завершено!");
-
-        console.log("\n🎉 Приложение полностью готово к работе!");
-
-    } catch (error) {
-        console.error("❌ Ошибка при запуске приложения:", error);
     }
-}
 
 startApp();
