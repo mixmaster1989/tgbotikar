@@ -7,6 +7,8 @@ const mammoth = require("mammoth"); // Конвертация DOCX файлов
 const gpt4all = require("gpt4all"); // Локальная AI модель для генерации текста
 require("dotenv").config(); // Загрузка переменных окружения
 const os = require("os"); // Работа с системными путями
+const sqlite3 = require('sqlite3').verbose();
+const util = require('util');
 
 // Основные константы и пути
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -24,6 +26,93 @@ const app = express(); // Создание Express приложения
 
 // Настройка статических файлов для веб-сервера
 app.use("/static", express.static(path.join(__dirname, "static")));
+
+// Инициализация БД
+const db = new sqlite3.Database('database.sqlite', (err) => {
+    if (err) {
+        console.error('Ошибка при подключении к БД:', err);
+    } else {
+        console.log('Успешное подключение к БД');
+        initDatabase();
+    }
+});
+
+// Промисифицируем методы БД
+const dbRun = util.promisify(db.run.bind(db));
+const dbGet = util.promisify(db.get.bind(db));
+const dbAll = util.promisify(db.all.bind(db));
+
+/**
+ * Функция инициализации БД
+ */
+async function initDatabase() {
+    try {
+        await dbRun(`CREATE TABLE IF NOT EXISTS test_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT UNIQUE,
+            content TEXT,
+            test_json TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`);
+        console.log('БД инициализирована');
+    } catch (err) {
+        console.error('Ошибка при инициализации БД:', err);
+    }
+}
+
+/**
+ * Функция сканирования и кэширования материалов
+ */
+async function scanAndCacheMaterials() {
+    try {
+        console.log('Начинаем сканирование материалов...');
+
+        // Получаем список всех .docx файлов
+        const files = await getFilesFromRoot();
+        console.log(`Найдено файлов: ${files.length}`);
+
+        for (const filename of files) {
+            try {
+                // Проверяем, есть ли файл уже в базе
+                const existing = await dbGet(
+                    'SELECT filename FROM test_cache WHERE filename = ?',
+                    [filename]
+                );
+
+                if (existing) {
+                    console.log(`Пропускаем ${filename} - уже в базе`);
+                    continue;
+                }
+
+                // Получаем путь к файлу
+                const filePath = path.join(materialsPath, filename);
+
+                // Извлекаем текст
+                const content = await parseDocxToText(filePath);
+
+                if (!content) {
+                    console.error(`Ошибка: Не удалось извлечь текст из ${filename}`);
+                    continue;
+                }
+
+                // Сохраняем в базу
+                await dbRun(
+                    'INSERT INTO test_cache (filename, content, test_json) VALUES (?, ?, ?)',
+                    [filename, content, '']
+                );
+
+                console.log(`✅ Файл ${filename} успешно обработан и сохранен`);
+
+            } catch (err) {
+                console.error(`Ошибка при обработке файла ${filename}:`, err);
+            }
+        }
+
+        console.log('Сканирование завершено');
+    } catch (err) {
+        console.error('Ошибка при сканировании материалов:', err);
+    }
+}
 
 /**
  * Извлекает текст из DOCX файла
@@ -384,10 +473,26 @@ bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
     }
 });
 
+// Добавляем обработку завершения работы
+process.on('SIGINT', () => {
+    db.close((err) => {
+        if (err) {
+            console.error('Ошибка при закрытии БД:', err);
+        } else {
+            console.log('Соединение с БД закрыто');
+        }
+        process.exit(0);
+    });
+});
+
 // Запуск сервисов
 bot
-    .launch() // Запускаем бота
-    .then(() => console.log("Бот успешно запущен!"))
+    .launch()
+    .then(async () => {
+        console.log("Бот успешно запущен!");
+        // Запускаем первичное сканирование
+        await scanAndCacheMaterials();
+    })
     .catch((err) => console.error("Ошибка при запуске бота:", err));
 
 app.listen(PORT, () => {
