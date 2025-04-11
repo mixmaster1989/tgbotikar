@@ -3,6 +3,7 @@ const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const path = require("path");
 const os = require("os");
+const fs = require("fs");
 
 // Константы
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -161,50 +162,107 @@ async function findSimilarPrompt(prompt) {
     });
 }
 
+// Получение списка всех .docx файлов
+async function getAllDocxFiles() {
+    return new Promise((resolve, reject) => {
+        fs.readdir(materialsPath, (err, files) => {
+            if (err) {
+                console.error("❌ Ошибка при чтении папки materials:", err);
+                reject(err);
+            } else {
+                const docxFiles = files.filter(file => file.endsWith('.docx'));
+                console.log(`📚 Найдено ${docxFiles.length} .docx файлов`);
+                resolve(docxFiles);
+            }
+        });
+    });
+}
+
+// Функция задержки
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 // Основной процесс
 async function main() {
     initDatabase();
 
-    const filePath = path.join(materialsPath, "1.docx");
-    const text = await parseDocxToText(filePath);
+    while (true) { // Бесконечный цикл
+        try {
+            const files = await getAllDocxFiles();
+            if (files.length === 0) {
+                console.error("❌ Нет доступных .docx файлов");
+                return;
+            }
 
-    if (!text) {
-        console.error("❌ Не удалось извлечь текст из файла");
-        return;
+            // Случайный выбор файла
+            const randomFile = files[Math.floor(Math.random() * files.length)];
+            const filePath = path.join(materialsPath, randomFile);
+            console.log(`\n📄 Обработка файла: ${randomFile}`);
+
+            const text = await parseDocxToText(filePath);
+            if (!text) {
+                console.error("❌ Не удалось извлечь текст из файла");
+                continue;
+            }
+
+            const gptModel = await initGPT4AllModel();
+            if (!gptModel) {
+                console.error("❌ Модель GPT4All не инициализирована");
+                continue;
+            }
+
+            // Генерируем различные типы промптов
+            const prompts = [
+                `Создай краткое резюме текста на русском языке:\n\n${text}`,
+                `Создай список из 5 ключевых моментов текста:\n\n${text}`,
+                `Объясни основную идею текста простыми словами:\n\n${text}`,
+                `Создай вопрос с вариантами ответов по тексту:\n\n${text}`,
+                `Выдели три главные мысли из текста:\n\n${text}`
+            ];
+
+            // Выбираем случайный промпт
+            const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+            console.log("\n📝 Выбран промпт:", randomPrompt.split('\n')[0]);
+
+            // Проверяем кэш
+            console.log("🔍 Проверяем кэш на схожесть...");
+            const similarPrompt = await findSimilarPrompt(randomPrompt);
+            if (similarPrompt) {
+                console.log("✅ Найдено в кэше:", similarPrompt.response);
+                // Делаем паузу перед следующей итерацией
+                await delay(10000); // 10 секунд
+                continue;
+            }
+
+            console.log("🤖 Отправляем запрос к модели...");
+            const response = await gptModel.generate(randomPrompt);
+
+            if (!response) {
+                console.error("❌ Не удалось получить ответ от модели");
+                continue;
+            }
+
+            console.log("📨 Ответ от модели:", response);
+            await cacheResponse(randomPrompt, response);
+
+            // Делаем паузу перед следующей итерацией
+            console.log("😴 Ждем 10 секунд перед следующей итерацией...\n");
+            await delay(10000); // 10 секунд
+
+        } catch (error) {
+            console.error("❌ Ошибка в итерации:", error);
+            await delay(5000); // 5 секунд паузы при ошибке
+        }
     }
-
-    const gptModel = await initGPT4AllModel();
-    if (!gptModel) {
-        console.error("❌ Модель GPT4All не инициализирована");
-        return;
-    }
-
-    const prompt = `Создай краткое резюме текста на русском языке:\n\n${text}`;
-
-    // Проверяем кэш на схожий промпт
-    console.log("Проверяем кэш на схожесть...");
-    const similarPrompt = await findSimilarPrompt(prompt);
-    if (similarPrompt) {
-        console.log("✅ Найдено в кэше:", similarPrompt.response);
-        return;
-    }
-
-    console.log("Отправляем запрос к модели...");
-    const response = await gptModel.generate(prompt);
-
-    if (!response) {
-        console.error("❌ Не удалось получить ответ от модели");
-        return;
-    }
-
-    console.log("Ответ от модели:", response);
-
-    await cacheResponse(prompt, response);
-
-    console.log("✅ Процесс завершен. Проверьте содержимое кэша.");
-    db.close();
 }
 
+// Добавляем обработчик для корректного завершения
+process.on('SIGINT', async () => {
+    console.log('\n👋 Получен сигнал завершения, закрываем соединение с БД...');
+    db.close();
+    process.exit(0);
+});
+
+// Запускаем процесс
 main().catch((err) => {
     console.error("❌ Критическая ошибка:", err);
     db.close();
