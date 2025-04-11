@@ -65,37 +65,49 @@ async function initDatabase() {
  */
 async function scanAndCacheMaterials() {
     try {
-        console.log('Начинаем сканирование материалов...');
+        console.log('\n🔍 Начинаем сканирование материалов...');
 
         // Получаем список всех .docx файлов
+        console.log('📂 Чтение папки materials...');
         const files = await getFilesFromRoot();
-        console.log(`Найдено файлов: ${files.length}`);
+        console.log(`📊 Найдено файлов: ${files.length}`);
 
+        // Если файлов нет, выходим
+        if (files.length === 0) {
+            console.log('❌ В папке materials нет .docx файлов');
+            return;
+        }
+
+        console.log('\n📝 Найденные файлы:');
+        files.forEach(file => console.log(` - ${file}`));
+
+        // Обрабатываем каждый файл
         for (const filename of files) {
             try {
-                // Проверяем, есть ли файл уже в базе
+                console.log(`\n⏳ Обработка файла: ${filename}`);
+
+                // Проверяем наличие в базе
                 const existing = await dbGet(
                     'SELECT filename FROM test_cache WHERE filename = ?',
                     [filename]
                 );
 
                 if (existing) {
-                    console.log(`Пропускаем ${filename} - уже в базе`);
+                    console.log(`⏭️ Пропускаем ${filename} - уже в базе`);
                     continue;
                 }
 
-                // Получаем путь к файлу
                 const filePath = path.join(materialsPath, filename);
+                console.log(`📄 Извлечение текста из файла...`);
 
-                // Извлекаем текст
                 const content = await parseDocxToText(filePath);
 
                 if (!content) {
-                    console.error(`Ошибка: Не удалось извлечь текст из ${filename}`);
+                    console.error(`❌ Ошибка: Не удалось извлечь текст из ${filename}`);
                     continue;
                 }
 
-                // Сохраняем в базу
+                console.log(`💾 Сохранение в базу данных...`);
                 await dbRun(
                     'INSERT INTO test_cache (filename, content, test_json) VALUES (?, ?, ?)',
                     [filename, content, '']
@@ -104,13 +116,17 @@ async function scanAndCacheMaterials() {
                 console.log(`✅ Файл ${filename} успешно обработан и сохранен`);
 
             } catch (err) {
-                console.error(`Ошибка при обработке файла ${filename}:`, err);
+                console.error(`❌ Ошибка при обработке файла ${filename}:`, err);
             }
         }
 
-        console.log('Сканирование завершено');
+        // Выводим итоги
+        const totalFiles = await dbGet('SELECT COUNT(*) as count FROM test_cache');
+        console.log('\n📊 Итоги сканирования:');
+        console.log(`✅ Всего файлов в базе: ${totalFiles.count}`);
+
     } catch (err) {
-        console.error('Ошибка при сканировании материалов:', err);
+        console.error('❌ Ошибка при сканировании материалов:', err);
     }
 }
 
