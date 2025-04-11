@@ -101,7 +101,8 @@ async function main() {
         return;
     }
 
-    const prompt = `Создай краткое резюме текста:\n\n${text}`;
+    // Измененный промпт для русского языка
+    const prompt = `Создай краткое резюме текста на русском языке:\n\n${text}`;
     console.log("Отправляем запрос к модели...");
     const response = await gptModel.generate(prompt);
 
