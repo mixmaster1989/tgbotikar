@@ -83,6 +83,24 @@ function cacheResponse(prompt, response) {
     });
 }
 
+// Получение результата из кэша
+function getCachedResponse(prompt) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            "SELECT response FROM gpt_cache WHERE prompt = ?",
+            [prompt],
+            (err, row) => {
+                if (err) {
+                    console.error("❌ Ошибка при запросе кэша:", err);
+                    reject(err);
+                } else {
+                    resolve(row ? row.response : null);
+                }
+            }
+        );
+    });
+}
+
 // Основной процесс
 async function main() {
     initDatabase();
@@ -103,6 +121,17 @@ async function main() {
 
     // Измененный промпт для русского языка
     const prompt = `Создай краткое резюме текста на русском языке:\n\n${text}`;
+
+    // Проверяем кэш
+    console.log("Проверяем кэш...");
+    const cachedResponse = await getCachedResponse(prompt);
+    if (cachedResponse) {
+        console.log("✅ Найдено в кэше:");
+        console.log(cachedResponse);
+        return; // Возвращаем результат из кэша
+    }
+
+    // Если в кэше нет, запускаем генерацию
     console.log("Отправляем запрос к модели...");
     const response = await gptModel.generate(prompt);
 
@@ -113,6 +142,7 @@ async function main() {
 
     console.log("Ответ от модели:", response);
 
+    // Сохраняем результат в кэш
     await cacheResponse(prompt, response);
 
     console.log("✅ Процесс завершен. Проверьте содержимое кэша.");
