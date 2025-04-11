@@ -119,31 +119,34 @@ async function main() {
         return;
     }
 
-    // Измененный промпт для русского языка
-    const prompt = `Создай краткое резюме текста на русском языке:\n\n${text}`;
+    // Первый этап: Генерация промпта для создания теста
+    const promptForPrompt = `Прочитай текст и сгенерируй промпт для создания теста по материалу. Промпт должен быть на русском языке и содержать четкие инструкции для генерации теста.\n\nТекст:\n${text}`;
+    console.log("Отправляем запрос к модели для генерации промпта...");
+    const generatedPromptResponse = await gptModel.generate(promptForPrompt);
 
-    // Проверяем кэш
-    console.log("Проверяем кэш...");
-    const cachedResponse = await getCachedResponse(prompt);
-    if (cachedResponse) {
-        console.log("✅ Найдено в кэше:");
-        console.log(cachedResponse);
-        return; // Возвращаем результат из кэша
-    }
-
-    // Если в кэше нет, запускаем генерацию
-    console.log("Отправляем запрос к модели...");
-    const response = await gptModel.generate(prompt);
-
-    if (!response) {
-        console.error("❌ Не удалось получить ответ от модели");
+    if (!generatedPromptResponse) {
+        console.error("❌ Не удалось получить сгенерированный промпт от модели");
         return;
     }
 
-    console.log("Ответ от модели:", response);
+    console.log("Сгенерированный промпт:", generatedPromptResponse);
+
+    // Парсим сгенерированный промпт
+    const generatedPrompt = generatedPromptResponse.trim(); // Здесь можно добавить дополнительный парсинг, если нужно
+
+    // Второй этап: Генерация теста по сгенерированному промпту
+    console.log("Отправляем запрос к модели для генерации теста...");
+    const testResponse = await gptModel.generate(generatedPrompt);
+
+    if (!testResponse) {
+        console.error("❌ Не удалось получить тест от модели");
+        return;
+    }
+
+    console.log("Сгенерированный тест:", testResponse);
 
     // Сохраняем результат в кэш
-    await cacheResponse(prompt, response);
+    await cacheResponse(generatedPrompt, testResponse);
 
     console.log("✅ Процесс завершен. Проверьте содержимое кэша.");
     db.close();
