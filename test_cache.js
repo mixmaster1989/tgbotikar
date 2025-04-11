@@ -3,6 +3,7 @@ const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const path = require("path");
 const os = require("os");
+const use = require('@tensorflow-models/universal-sentence-encoder');
 
 // Константы
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -17,6 +18,7 @@ function initDatabase() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             prompt TEXT UNIQUE,
             response TEXT,
+            vector BLOB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`,
         (err) => {
@@ -64,12 +66,31 @@ async function initGPT4AllModel() {
     }
 }
 
+// Инициализация модели эмбеддингов
+let embedder;
+async function initEmbedder() {
+    console.log("Инициализация модели эмбеддингов...");
+    embedder = await use.load();
+    console.log("✅ Модель эмбеддингов инициализирована");
+}
+
+// Преобразование текста в вектор
+async function getVector(text) {
+    if (!embedder) {
+        console.error("❌ Модель эмбеддингов не инициализирована");
+        return null;
+    }
+    const embeddings = await embedder.embed([text]);
+    return embeddings.arraySync()[0]; // Возвращаем вектор
+}
+
 // Сохранение результата в кэш
-function cacheResponse(prompt, response) {
+async function cacheResponse(prompt, response) {
+    const vector = await getVector(prompt); // Преобразуем промпт в вектор
     return new Promise((resolve, reject) => {
         db.run(
-            "INSERT INTO gpt_cache (prompt, response) VALUES (?, ?)",
-            [prompt, response],
+            "INSERT INTO gpt_cache (prompt, response, vector) VALUES (?, ?, ?)",
+            [prompt, response, JSON.stringify(vector)], // Сохраняем вектор как JSON
             (err) => {
                 if (err) {
                     console.error("❌ Ошибка при сохранении в кэш:", err);
@@ -101,11 +122,52 @@ function getCachedResponse(prompt) {
     });
 }
 
+// Поиск похожего промпта
+async function findSimilarPrompt(prompt) {
+    const vector = await getVector(prompt); // Преобразуем новый промпт в вектор
+    return new Promise((resolve, reject) => {
+        db.all("SELECT prompt, response, vector FROM gpt_cache", (err, rows) => {
+            if (err) {
+                console.error("❌ Ошибка при запросе кэша:", err);
+                reject(err);
+            } else {
+                let bestMatch = null;
+                let highestSimilarity = 0;
+
+                rows.forEach((row) => {
+                    const cachedVector = JSON.parse(row.vector);
+                    const similarity = cosineSimilarity(vector, cachedVector); // Сравниваем векторы
+                    if (similarity > highestSimilarity) {
+                        highestSimilarity = similarity;
+                        bestMatch = row;
+                    }
+                });
+
+                if (highestSimilarity > 0.8) { // Порог схожести
+                    console.log(`✅ Найден похожий промпт с коэффициентом схожести ${highestSimilarity}`);
+                    resolve(bestMatch);
+                } else {
+                    resolve(null);
+                }
+            }
+        });
+    });
+}
+
+// Функция для вычисления косинусной схожести
+function cosineSimilarity(vec1, vec2) {
+    const dotProduct = vec1.reduce((sum, v, i) => sum + v * vec2[i], 0);
+    const magnitude1 = Math.sqrt(vec1.reduce((sum, v) => sum + v * v, 0));
+    const magnitude2 = Math.sqrt(vec2.reduce((sum, v) => sum + v * v, 0));
+    return dotProduct / (magnitude1 * magnitude2);
+}
+
 // Основной процесс
 async function main() {
     initDatabase();
+    await initEmbedder();
 
-    const filePath = path.join(materialsPath, "1.docx"); // Указываем тестовый файл
+    const filePath = path.join(materialsPath, "1.docx");
     const text = await parseDocxToText(filePath);
 
     if (!text) {
@@ -119,34 +181,27 @@ async function main() {
         return;
     }
 
-    // Первый этап: Генерация промпта для создания теста
-    const promptForPrompt = `Прочитай текст и сгенерируй промпт для создания теста по материалу. Промпт должен быть на русском языке и содержать четкие инструкции для генерации теста.\n\nТекст:\n${text}`;
-    console.log("Отправляем запрос к модели для генерации промпта...");
-    const generatedPromptResponse = await gptModel.generate(promptForPrompt);
+    const prompt = `Создай краткое резюме текста на русском языке:\n\n${text}`;
 
-    if (!generatedPromptResponse) {
-        console.error("❌ Не удалось получить сгенерированный промпт от модели");
+    // Проверяем кэш на схожий промпт
+    console.log("Проверяем кэш на схожесть...");
+    const similarPrompt = await findSimilarPrompt(prompt);
+    if (similarPrompt) {
+        console.log("✅ Найдено в кэше:", similarPrompt.response);
         return;
     }
 
-    console.log("Сгенерированный промпт:", generatedPromptResponse);
+    console.log("Отправляем запрос к модели...");
+    const response = await gptModel.generate(prompt);
 
-    // Парсим сгенерированный промпт
-    const generatedPrompt = generatedPromptResponse.trim(); // Здесь можно добавить дополнительный парсинг, если нужно
-
-    // Второй этап: Генерация теста по сгенерированному промпту
-    console.log("Отправляем запрос к модели для генерации теста...");
-    const testResponse = await gptModel.generate(generatedPrompt);
-
-    if (!testResponse) {
-        console.error("❌ Не удалось получить тест от модели");
+    if (!response) {
+        console.error("❌ Не удалось получить ответ от модели");
         return;
     }
 
-    console.log("Сгенерированный тест:", testResponse);
+    console.log("Ответ от модели:", response);
 
-    // Сохраняем результат в кэш
-    await cacheResponse(generatedPrompt, testResponse);
+    await cacheResponse(prompt, response);
 
     console.log("✅ Процесс завершен. Проверьте содержимое кэша.");
     db.close();
