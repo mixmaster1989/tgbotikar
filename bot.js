@@ -408,19 +408,32 @@ async function startApp() {
 
         // 2. Запуск бота
         console.log("🤖 Запуск Telegram бота...");
-        try {
-            await bot.launch();
-            console.log("✅ Telegram бот успешно запущен!");
-        } catch (botError) {
-            console.error("❌ Ошибка при запуске Telegram бота:", botError);
-            throw botError;
-        }
-
-        console.log("\n🎉 Приложение полностью готово к работе!");
+        return bot.launch()
+            .then(() => {
+                console.log("✅ Telegram бот успешно запущен!");
+                console.log("\n🎉 Приложение полностью готово к работе!");
+                
+                // Добавляем обработчик для корректного завершения
+                process.once('SIGINT', () => {
+                    bot.stop('SIGINT');
+                });
+                process.once('SIGTERM', () => {
+                    bot.stop('SIGTERM');
+                });
+            })
+            .catch(err => {
+                console.error("❌ Ошибка при запуске Telegram бота:", err);
+                process.exit(1);
+            });
 
     } catch (error) {
         console.error("❌ Ошибка при запуске приложения:", error);
+        process.exit(1);
     }
 }
 
-startApp();
+// Запускаем приложение и обрабатываем глобальные ошибки
+startApp().catch(err => {
+    console.error("❌ Критическая ошибка:", err);
+    process.exit(1);
+});
