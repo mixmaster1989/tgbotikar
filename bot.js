@@ -389,38 +389,38 @@ bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
         console.error('Ошибка при проверке ответа:', err);
         await ctx.reply('❌ Произошла ошибка при проверке ответа');
     }
-}
+});
 
 /**
  * Запускает приложение
  */
 async function startApp() {
-        try {
-            console.log("🚀 Запуск приложения...");
+    try {
+        console.log("🚀 Запуск приложения...");
 
-            // 1. Инициализация и запуск Express-сервера
-            await new Promise((resolve) => {
-                app.listen(PORT, () => {
-                    console.log(`🌐 Express-сервер запущен на порту ${PORT}`);
-                    resolve();
-                });
+        // 1. Инициализация и запуск Express-сервера
+        await new Promise((resolve) => {
+            app.listen(PORT, () => {
+                console.log(`🌐 Express-сервер запущен на порту ${PORT}`);
+                resolve();
             });
+        });
 
-            // 2. Запуск бота
-            console.log("🤖 Запуск Telegram бота...");
-            try {
-                await bot.launch();
-                console.log("✅ Telegram бот успешно запущен!");
-            } catch (botError) {
-                console.error("❌ Ошибка при запуске Telegram бота:", botError);
-                throw botError;
-            }
-
-            console.log("\n🎉 Приложение полностью готово к работе!");
-
-        } catch (error) {
-            console.error("❌ Ошибка при запуске приложения:", error);
+        // 2. Запуск бота
+        console.log("🤖 Запуск Telegram бота...");
+        try {
+            await bot.launch();
+            console.log("✅ Telegram бот успешно запущен!");
+        } catch (botError) {
+            console.error("❌ Ошибка при запуске Telegram бота:", botError);
+            throw botError;
         }
+
+        console.log("\n🎉 Приложение полностью готово к работе!");
+
+    } catch (error) {
+        console.error("❌ Ошибка при запуске приложения:", error);
     }
+}
 
 startApp();
