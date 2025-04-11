@@ -90,53 +90,40 @@ async function initGPT4AllModel() {
                     let generatedText = '';
                     let messageId = null;
                     let lastUpdate = Date.now();
-                    let updatePromise = null;
 
                     const answer = await model.generate({
                         prompt: prompt,
+                        temp: 0.7,
                         maxTokens: 2048,
-                        temperature: 0.7,
                         repeatPenalty: 1.18,
                         onToken: async (token) => {
                             generatedText += token;
 
-                            // Ждем завершения предыдущего обновления
-                            if (updatePromise) {
-                                await updatePromise;
-                            }
-
                             // Обновляем сообщение каждые 2 секунды
                             if (ctx && (Date.now() - lastUpdate > 2000)) {
-                                updatePromise = (async () => {
-                                    try {
-                                        if (!messageId) {
-                                            const msg = await ctx.reply(
-                                                "🤖 Генерация ответа:\n\n" +
-                                                generatedText
-                                            );
-                                            messageId = msg.message_id;
-                                        } else {
-                                            await ctx.telegram.editMessageText(
-                                                ctx.chat.id,
-                                                messageId,
-                                                null,
-                                                "🤖 Генерация ответа:\n\n" +
-                                                generatedText
-                                            );
-                                        }
-                                        lastUpdate = Date.now();
-                                    } catch (e) {
-                                        console.error('Ошибка при обновлении сообщения:', e);
+                                try {
+                                    if (!messageId) {
+                                        const msg = await ctx.reply(
+                                            "🤖 Генерация ответа:\n\n" +
+                                            generatedText
+                                        );
+                                        messageId = msg.message_id;
+                                    } else {
+                                        await ctx.telegram.editMessageText(
+                                            ctx.chat.id,
+                                            messageId,
+                                            null,
+                                            "🤖 Генерация ответа:\n\n" +
+                                            generatedText
+                                        );
                                     }
-                                })();
+                                    lastUpdate = Date.now();
+                                } catch (e) {
+                                    console.error('Ошибка при обновлении сообщения:', e);
+                                }
                             }
                         }
                     });
-
-                    // Ждем завершения последнего обновления
-                    if (updatePromise) {
-                        await updatePromise;
-                    }
 
                     // Удаляем промежуточное сообщение
                     if (ctx && messageId) {
@@ -147,7 +134,7 @@ async function initGPT4AllModel() {
                         }
                     }
 
-                    return answer.text || generatedText;
+                    return answer.text;
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
                     return null;
