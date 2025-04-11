@@ -3,9 +3,6 @@ const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const path = require("path");
 const os = require("os");
-const use = require('@tensorflow-models/universal-sentence-encoder');
-const tf = require('@tensorflow/tfjs-node'); // Явно подключаем TensorFlow.js
-tf.setBackend('cpu'); // Явно указываем использование CPU
 
 // Константы
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -20,7 +17,6 @@ function initDatabase() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             prompt TEXT UNIQUE,
             response TEXT,
-            vector BLOB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`,
         (err) => {
@@ -68,31 +64,12 @@ async function initGPT4AllModel() {
     }
 }
 
-// Инициализация модели эмбеддингов
-let embedder;
-async function initEmbedder() {
-    console.log("Инициализация модели эмбеддингов...");
-    embedder = await use.load();
-    console.log("✅ Модель эмбеддингов инициализирована");
-}
-
-// Преобразование текста в вектор
-async function getVector(text) {
-    if (!embedder) {
-        console.error("❌ Модель эмбеддингов не инициализирована");
-        return null;
-    }
-    const embeddings = await embedder.embed([text]);
-    return embeddings.arraySync()[0]; // Возвращаем вектор
-}
-
 // Сохранение результата в кэш
 async function cacheResponse(prompt, response) {
-    const vector = await getVector(prompt); // Преобразуем промпт в вектор
     return new Promise((resolve, reject) => {
         db.run(
-            "INSERT INTO gpt_cache (prompt, response, vector) VALUES (?, ?, ?)",
-            [prompt, response, JSON.stringify(vector)], // Сохраняем вектор как JSON
+            "INSERT INTO gpt_cache (prompt, response) VALUES (?, ?)",
+            [prompt, response],
             (err) => {
                 if (err) {
                     console.error("❌ Ошибка при сохранении в кэш:", err);
@@ -124,11 +101,40 @@ function getCachedResponse(prompt) {
     });
 }
 
+// Функция для вычисления схожести строк (расстояние Левенштейна)
+function levenshteinDistance(str1, str2) {
+    const m = str1.length;
+    const n = str2.length;
+    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+
+    for (let i = 0; i <= m; i++) {
+        dp[i][0] = i;
+    }
+    for (let j = 0; j <= n; j++) {
+        dp[0][j] = j;
+    }
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (str1[i - 1] === str2[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1];
+            } else {
+                dp[i][j] = Math.min(
+                    dp[i - 1][j - 1] + 1,
+                    dp[i - 1][j] + 1,
+                    dp[i][j - 1] + 1
+                );
+            }
+        }
+    }
+
+    return 1 - (dp[m][n] / Math.max(m, n)); // Нормализованное значение схожести
+}
+
 // Поиск похожего промпта
 async function findSimilarPrompt(prompt) {
-    const vector = await getVector(prompt); // Преобразуем новый промпт в вектор
     return new Promise((resolve, reject) => {
-        db.all("SELECT prompt, response, vector FROM gpt_cache", (err, rows) => {
+        db.all("SELECT prompt, response FROM gpt_cache", (err, rows) => {
             if (err) {
                 console.error("❌ Ошибка при запросе кэша:", err);
                 reject(err);
@@ -137,8 +143,7 @@ async function findSimilarPrompt(prompt) {
                 let highestSimilarity = 0;
 
                 rows.forEach((row) => {
-                    const cachedVector = JSON.parse(row.vector);
-                    const similarity = cosineSimilarity(vector, cachedVector); // Сравниваем векторы
+                    const similarity = levenshteinDistance(prompt, row.prompt);
                     if (similarity > highestSimilarity) {
                         highestSimilarity = similarity;
                         bestMatch = row;
@@ -156,18 +161,9 @@ async function findSimilarPrompt(prompt) {
     });
 }
 
-// Функция для вычисления косинусной схожести
-function cosineSimilarity(vec1, vec2) {
-    const dotProduct = vec1.reduce((sum, v, i) => sum + v * vec2[i], 0);
-    const magnitude1 = Math.sqrt(vec1.reduce((sum, v) => sum + v * v, 0));
-    const magnitude2 = Math.sqrt(vec2.reduce((sum, v) => sum + v * v, 0));
-    return dotProduct / (magnitude1 * magnitude2);
-}
-
 // Основной процесс
 async function main() {
     initDatabase();
-    await initEmbedder();
 
     const filePath = path.join(materialsPath, "1.docx");
     const text = await parseDocxToText(filePath);
