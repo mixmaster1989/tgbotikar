@@ -6,11 +6,35 @@ const os = require("os");
 const fs = require("fs");
 const readline = require('readline');
 
+const MAX_TOKENS = 1500; // Безопасный лимит с учетом промпта и ответа
+
 // Константы
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
 const modelDir = path.join(os.homedir(), ".cache", "gpt4all");
 const materialsPath = path.join(__dirname, "materials");
 const db = new sqlite3.Database("database.sqlite");
+
+// Добавляем класс для отслеживания прогресса
+class GenerationProgress {
+    constructor(totalTokens) {
+        this.totalTokens = totalTokens;
+        this.currentTokens = 0;
+        this.lastUpdateTime = Date.now();
+        this.updateInterval = 100; // минимальный интервал обновления в мс
+    }
+
+    update(token) {
+        this.currentTokens++;
+        const now = Date.now();
+
+        // Обновляем прогресс-бар не чаще чем раз в updateInterval мс
+        if (now - this.lastUpdateTime >= this.updateInterval) {
+            this.lastUpdateTime = now;
+            const percentage = Math.min(Math.round((this.currentTokens / this.totalTokens) * 100), 100);
+            updateProgress(percentage, 100);
+        }
+    }
+}
 
 // Инициализация таблицы
 function initDatabase() {
@@ -44,15 +68,42 @@ async function parseDocxToText(filePath) {
     }
 }
 
+// Функция для обрезки текста
+function truncateText(text, maxTokens = MAX_TOKENS) {
+    // Грубая оценка: 1 токен ≈ 4 символа
+    const safeLength = maxTokens * 4;
+    if (text.length > safeLength) {
+        console.log(`⚠️ Текст слишком длинный (${text.length} символов), обрезаем до ${safeLength}`);
+        return text.slice(0, safeLength) + "...";
+    }
+    return text;
+}
+
 // Инициализация GPT4All модели
 async function initGPT4AllModel() {
     try {
         console.log("Инициализация GPT4All модели...");
         const model = await gpt4all.loadModel(modelName);
+
         return {
             generate: async (prompt, options = {}) => {
                 try {
-                    const answer = await model.generate(prompt, options);
+                    let response = '';
+                    const progress = new GenerationProgress(options.max_tokens || 200);
+
+                    const answer = await model.generate(prompt, {
+                        ...options,
+                        callback: (token) => {
+                            response += token;
+                            progress.update(token);
+                            return true;
+                        }
+                    });
+
+                    // Завершаем прогресс-бар
+                    updateProgress(100, 100);
+                    console.log('\n');
+
                     return answer.text;
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
@@ -275,6 +326,9 @@ function updateProgress(current, total) {
 
 // Генерация промпта на основе контекста
 async function generatePromptFromContext(model, text) {
+    // Обрезаем текст перед формированием промпта
+    const truncatedText = truncateText(text);
+
     const metaPrompt = `Проанализируй текст и сформулируй КОНКРЕТНЫЙ вопрос о СУЩЕСТВУЮЩЕМ в тексте факте.
 
 ВАЖНЫЕ ПРАВИЛА:
@@ -294,36 +348,18 @@ async function generatePromptFromContext(model, text) {
 - "Какие шаги необходимо выполнить..." (последовательность действий)
 
 Текст для анализа:
-${text}
+${truncatedText}
 
 Сформулируй один конкретный вопрос о факте из текста:`;
 
     console.log("🤖 Генерируем вопрос на основе контекста...");
 
-    const maxTokens = 50;
-    let generatedPrompt = '';
-
-    // Симулируем прогресс генерации
-    for (let i = 0; i <= maxTokens; i += 5) {
-        updateProgress(i, maxTokens);
-        await delay(50);
-    }
-
-    // Реальная генерация
-    generatedPrompt = await model.generate(metaPrompt, {
+    const generatedPrompt = await model.generate(metaPrompt, {
         temperature: 0.1,
         top_p: 0.5,
         repeat_penalty: 1.2,
-        max_tokens: maxTokens
+        max_tokens: 50
     });
-
-    // Завершаем прогресс-бар
-    updateProgress(maxTokens, maxTokens);
-    console.log('\n');
-
-    if (!generatedPrompt) {
-        throw new Error("Не удалось сгенерировать вопрос");
-    }
 
     // Валидация вопроса
     if (generatedPrompt.toLowerCase().includes('как') ||
@@ -338,6 +374,9 @@ ${text}
 
 // Генерация ответа на основе текста и вопроса
 async function generateAnswer(model, text, question) {
+    // Обрезаем текст перед формированием промпта
+    const truncatedText = truncateText(text);
+
     const answerPrompt = `Ты работаешь в режиме строгой фактологической проверки. 
 Твоя задача - найти в предоставленном тексте ТОЧНЫЙ ответ на вопрос.
 
@@ -350,7 +389,7 @@ async function generateAnswer(model, text, question) {
 6. Цитируй текст там, где это возможно
 
 Текст документа:
-${text}
+${truncatedText}
 
 Вопрос: ${question}
 
@@ -358,26 +397,12 @@ ${text}
 
     console.log("🤖 Генерируем ответ на основе текста...");
 
-    const maxTokens = 200;
-    let response = '';
-
-    // Симулируем прогресс генерации
-    for (let i = 0; i <= maxTokens; i += 10) {
-        updateProgress(i, maxTokens);
-        await delay(100); // Небольшая задержка для визуализации
-    }
-
-    // Реальная генерация
-    response = await model.generate(answerPrompt, {
+    const response = await model.generate(answerPrompt, {
         temperature: 0.1,
         top_p: 0.5,
         repeat_penalty: 1.2,
-        max_tokens: maxTokens
+        max_tokens: 200
     });
-
-    // Завершаем прогресс-бар
-    updateProgress(maxTokens, maxTokens);
-    console.log('\n'); // Переход на новую строку после прогресс-бара
 
     return response;
 }
