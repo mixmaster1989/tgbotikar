@@ -3,92 +3,88 @@ const logger = require('./logger');
 
 class BotHandlers {
     static setupMainMenu(bot) {
+        logger.info('Initializing bot handlers...');
+
         const mainMenuKeyboard = Markup.keyboard([
             ['📚 Кэш', '🤖 Генерация'],
             ['📊 Статистика', '⚙️ Настройки']
         ]).resize().oneTime(false);
 
         bot.command('start', (ctx) => {
-            logger.info(`User ${ctx.from.username} started the bot`);
-            ctx.reply('👋 Привет! Выбери действие:', mainMenuKeyboard);
+            try {
+                logger.info(`User ${ctx.from.username} started the bot`);
+                ctx.reply('👋 Привет! Выбери действие:', mainMenuKeyboard);
+            } catch (error) {
+                logger.error('Error in start command', { error, user: ctx.from });
+            }
         });
 
-        bot.hears('📚 Кэш', (ctx) => {
-            logger.info(`User ${ctx.from.username} opened Cache menu`);
-            ctx.reply('Управление кэшем', {
-                reply_markup: {
-                    keyboard: [
-                        ['📋 Список кэша', '🗑️ Очистить кэш'],
-                        ['🔙 Главное меню']
-                    ],
-                    resize_keyboard: true
-                }
-            });
-        });
+        const menuHandlers = [
+            { text: '📚 Кэш', description: 'Cache menu', submenu: [
+                ['📋 Список кэша', '🗑️ Очистить кэш']
+            ]},
+            { text: '🤖 Генерация', description: 'Generation menu', submenu: [
+                ['▶️ Запустить тест-кэш', '⏹️ Остановить тест-кэш']
+            ]},
+            { text: '📊 Статистика', description: 'Statistics menu', submenu: [
+                ['📈 Кэш', '🤖 Генерация']
+            ]},
+            { text: '⚙️ Настройки', description: 'Settings menu', submenu: [
+                ['🔧 Параметры', '📝 Логи']
+            ]}
+        ];
 
-        bot.hears('🤖 Генерация', (ctx) => {
-            logger.info(`User ${ctx.from.username} opened Generation menu`);
-            ctx.reply('Режимы генерации', {
-                reply_markup: {
-                    keyboard: [
-                        ['▶️ Запустить тест-кэш', '⏹️ Остановить тест-кэш'],
-                        ['🔙 Главное меню']
-                    ],
-                    resize_keyboard: true
-                }
-            });
-        });
-
-        bot.hears('📊 Статистика', (ctx) => {
-            logger.info(`User ${ctx.from.username} opened Statistics menu`);
-            ctx.reply('Статистика работы бота', {
-                reply_markup: {
-                    keyboard: [
-                        ['📈 Кэш', '🤖 Генерация'],
-                        ['🔙 Главное меню']
-                    ],
-                    resize_keyboard: true
-                }
-            });
-        });
-
-        bot.hears('⚙️ Настройки', (ctx) => {
-            logger.info(`User ${ctx.from.username} opened Settings menu`);
-            ctx.reply('Настройки бота', {
-                reply_markup: {
-                    keyboard: [
-                        ['🔧 Параметры', '📝 Логи'],
-                        ['🔙 Главное меню']
-                    ],
-                    resize_keyboard: true
+        menuHandlers.forEach(menu => {
+            bot.hears(menu.text, (ctx) => {
+                try {
+                    logger.info(`User ${ctx.from.username} opened ${menu.description}`);
+                    ctx.reply(menu.description, {
+                        reply_markup: {
+                            keyboard: [
+                                ...menu.submenu,
+                                ['🔙 Главное меню']
+                            ],
+                            resize_keyboard: true
+                        }
+                    });
+                } catch (error) {
+                    logger.error(`Error in ${menu.text} handler`, { error, user: ctx.from });
                 }
             });
         });
 
         bot.hears('🔙 Главное меню', (ctx) => {
-            logger.info(`User ${ctx.from.username} returned to main menu`);
-            ctx.reply('Главное меню', mainMenuKeyboard);
+            try {
+                logger.info(`User ${ctx.from.username} returned to main menu`);
+                ctx.reply('Главное меню', mainMenuKeyboard);
+            } catch (error) {
+                logger.error('Error returning to main menu', { error, user: ctx.from });
+            }
         });
 
-        // Обработчики подменю
-        bot.hears('📋 Список кэша', (ctx) => {
-            logger.info(`User ${ctx.from.username} requested cache list`);
-            ctx.reply('Здесь будет список кэша');
+        // Обработчики подменю с расширенным логированием
+        const subMenuHandlers = [
+            { text: '📋 Список кэша', action: 'Requesting cache list' },
+            { text: '🗑️ Очистить кэш', action: 'Clearing cache' },
+            { text: '▶️ Запустить тест-кэш', action: 'Starting test cache' },
+            { text: '⏹️ Остановить тест-кэш', action: 'Stopping test cache' }
+        ];
+
+        subMenuHandlers.forEach(handler => {
+            bot.hears(handler.text, (ctx) => {
+                try {
+                    logger.info(`User ${ctx.from.username} ${handler.action}`);
+                    ctx.reply(`Выполняется: ${handler.action}`);
+                } catch (error) {
+                    logger.error(`Error in ${handler.text} handler`, { error, user: ctx.from });
+                }
+            });
         });
 
-        bot.hears('🗑️ Очистить кэш', (ctx) => {
-            logger.info(`User ${ctx.from.username} requested cache clear`);
-            ctx.reply('Кэш будет очищен');
-        });
-
-        bot.hears('▶️ Запустить тест-кэш', (ctx) => {
-            logger.info(`User ${ctx.from.username} started test cache`);
-            ctx.reply('Запуск теста кэша');
-        });
-
-        bot.hears('⏹️ Остановить тест-кэш', (ctx) => {
-            logger.info(`User ${ctx.from.username} stopped test cache`);
-            ctx.reply('Тест кэша остановлен');
+        // Глобальный обработчик неизвестных команд
+        bot.on('text', (ctx) => {
+            logger.warn(`Unhandled message from ${ctx.from.username}: ${ctx.message.text}`);
+            ctx.reply('Извините, я не понял эту команду. Пожалуйста, используйте кнопки меню.');
         });
     }
 }
