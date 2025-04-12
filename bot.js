@@ -724,3 +724,20 @@ bot.action("stop_test_cache", async (ctx) => {
         await ctx.reply("❌ Не удалось остановить процесс.");
     }
 });
+
+// Добавим обработку завершения процесса
+process.on('SIGINT', () => {
+    if (activeTestCacheProcess) {
+        console.log('Завершение дочернего процесса test_cache.js');
+        activeTestCacheProcess.kill('SIGTERM');
+    }
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    if (activeTestCacheProcess) {
+        console.log('Завершение дочернего процесса test_cache.js');
+        activeTestCacheProcess.kill('SIGTERM');
+    }
+    process.exit(0);
+});
