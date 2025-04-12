@@ -7,7 +7,7 @@ module.exports = {
     env: {
       NODE_ENV: 'production'
     },
-    interpreter: '/usr/bin/node', 
+    node_args: '-r dotenv/config', // Загрузка .env
     exec_mode: 'fork',
     instances: 1,
     max_memory_restart: '500M'
