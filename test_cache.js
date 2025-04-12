@@ -279,6 +279,15 @@ ${text}
 async function main() {
     initDatabase();
 
+    // Инициализируем модель один раз перед циклом
+    console.log("🚀 Инициализация GPT4All модели...");
+    const gptModel = await initGPT4AllModel();
+    if (!gptModel) {
+        console.error("❌ Модель GPT4All не инициализирована");
+        return;
+    }
+    console.log("✅ Модель успешно инициализирована");
+
     while (true) {
         try {
             const files = await getAllDocxFiles();
@@ -294,12 +303,6 @@ async function main() {
             const text = await parseDocxToText(filePath);
             if (!text) {
                 console.error("❌ Не удалось извлечь текст из файла");
-                continue;
-            }
-
-            const gptModel = await initGPT4AllModel();
-            if (!gptModel) {
-                console.error("❌ Модель GPT4All не инициализирована");
                 continue;
             }
 
