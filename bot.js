@@ -8,6 +8,7 @@ const gpt4all = require("gpt4all"); // Локальная AI модель для
 require("dotenv").config(); // Загрузка переменных окружения
 const os = require("os"); // Работа с системными путями
 const sqlite3 = require("sqlite3").verbose(); // Подключаем SQLite
+const { spawn } = require('child_process'); // Для запуска внешних процессов
 
 // Основные константы и пути
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -287,7 +288,8 @@ bot.start(async (ctx) => {
             [
                 Markup.button.callback("📊 Проверить кэш", "check_cache"),
                 Markup.button.callback("📚 Просмотр датасета", "view_dataset")
-            ]
+            ],
+            [Markup.button.callback("🔄 Запустить обработку кэша", "run_test_cache")] // New button
         ])
     );
 });
@@ -406,7 +408,8 @@ bot.action("back_to_menu", async (ctx) => {
             [
                 Markup.button.callback("📊 Проверить кэш", "check_cache"),
                 Markup.button.callback("📚 Просмотр датасета", "view_dataset")
-            ]
+            ],
+            [Markup.button.callback("🔄 Запустить обработку кэша", "run_test_cache")]
         ])
     );
 });
@@ -623,5 +626,73 @@ bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
     } catch (err) {
         console.error('Ошибка при проверке ответа:', err);
         await ctx.reply('❌ Произошла ошибка при проверке ответа');
+    }
+});
+
+// Добавляем обработчик для запуска процесса обработки кэша
+bot.action("run_test_cache", async (ctx) => {
+    try {
+        // Send initial message
+        const statusMessage = await ctx.reply("🚀 Запуск обработки кэша...\n\n");
+        let output = "";
+
+        // Spawn test_cache.js process
+        const testCache = spawn('node', ['test_cache.js'], {
+            cwd: __dirname
+        });
+
+        // Handle process output
+        testCache.stdout.on('data', async (data) => {
+            const newOutput = data.toString();
+            output += newOutput;
+
+            // Update message with new output, keeping last 3000 characters
+            const truncatedOutput = output.slice(-3000);
+            await ctx.telegram.editMessageText(
+                ctx.chat.id,
+                statusMessage.message_id,
+                null,
+                `🔄 Процесс обработки кэша:\n\n${truncatedOutput}`,
+                { parse_mode: 'HTML' }
+            ).catch(console.error);
+        });
+
+        // Handle process errors
+        testCache.stderr.on('data', async (data) => {
+            console.error(`Test cache error: ${data}`);
+            const errorMsg = data.toString();
+            await ctx.telegram.editMessageText(
+                ctx.chat.id,
+                statusMessage.message_id,
+                null,
+                `❌ Ошибка:\n${errorMsg}`,
+                { parse_mode: 'HTML' }
+            ).catch(console.error);
+        });
+
+        // Handle process completion
+        testCache.on('close', async (code) => {
+            const finalMessage = code === 0
+                ? `✅ Процесс успешно завершен!\n\nПоследний вывод:\n${output.slice(-2000)}`
+                : `❌ Процесс завершился с ошибкой (код ${code})`;
+
+            await ctx.telegram.editMessageText(
+                ctx.chat.id,
+                statusMessage.message_id,
+                null,
+                finalMessage,
+                {
+                    parse_mode: 'HTML',
+                    reply_markup: Markup.inlineKeyboard([
+                        [Markup.button.callback("🔄 Запустить заново", "run_test_cache")],
+                        [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
+                    ])
+                }
+            ).catch(console.error);
+        });
+
+    } catch (err) {
+        console.error("❌ Ошибка при запуске test_cache.js:", err);
+        await ctx.reply("❌ Произошла ошибка при запуске процесса обработки кэша.");
     }
 });
