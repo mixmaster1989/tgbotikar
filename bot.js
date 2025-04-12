@@ -281,19 +281,32 @@ function parseTestResponse(response) {
 
 // Обработчики команд бота
 
-// Обновляем команду start с новой кнопкой
+// Добавляем кнопку в start меню
 bot.start(async (ctx) => {
+    const buttonRows = [
+        [Markup.button.callback("📂 Просмотреть материалы", "open_materials")],
+        [Markup.button.callback("📝 Сгенерировать тест", "generate_test")],
+        [
+            Markup.button.callback("📊 Проверить кэш", "check_cache"),
+            Markup.button.callback("📚 Просмотр датасета", "view_dataset")
+        ]
+    ];
+
+    // Добавляем кнопку остановки только если есть активный процесс
+    if (activeTestCacheProcess) {
+        buttonRows.push([
+            Markup.button.callback("🔄 Запустить обработку", "run_test_cache"),
+            Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")
+        ]);
+    } else {
+        buttonRows.push([
+            Markup.button.callback("🔄 Запустить обработку", "run_test_cache")
+        ]);
+    }
+
     await ctx.reply(
         "Добро пожаловать! Этот бот поможет вам просматривать материалы.",
-        Markup.inlineKeyboard([
-            [Markup.button.callback("📂 Просмотреть материалы", "open_materials")],
-            [Markup.button.callback("📝 Сгенерировать тест", "generate_test")],
-            [
-                Markup.button.callback("📊 Проверить кэш", "check_cache"),
-                Markup.button.callback("📚 Просмотр датасета", "view_dataset")
-            ],
-            [Markup.button.callback("🔄 Запустить обработку кэша", "run_test_cache")] // New button
-        ])
+        Markup.inlineKeyboard(buttonRows)
     );
 });
 
@@ -690,28 +703,24 @@ bot.action("run_test_cache", async (ctx) => {
     }
 });
 
-// Добавляем обработчик для остановки процесса обработки кэша
+// Обновляем обработчик stop_test_cache
 bot.action("stop_test_cache", async (ctx) => {
     try {
         if (activeTestCacheProcess) {
-            // Kill the process
             activeTestCacheProcess.kill('SIGTERM');
+            activeTestCacheProcess = null;
 
-            // Update message
-            await ctx.editMessageText(
-                "🛑 Процесс остановлен пользователем",
-                {
-                    reply_markup: Markup.inlineKeyboard([
-                        [Markup.button.callback("🔄 Запустить заново", "run_test_cache")],
-                        [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
-                    ])
-                }
+            await ctx.reply("🛑 Обработка остановлена",
+                Markup.inlineKeyboard([
+                    [Markup.button.callback("🔄 Запустить заново", "run_test_cache")],
+                    [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
+                ])
             );
         } else {
             await ctx.reply("❓ Нет активного процесса генерации");
         }
     } catch (err) {
         console.error("❌ Ошибка при остановке процесса:", err);
-        await ctx.reply("❌ Произошла ошибка при попытке остановить процесс.");
+        await ctx.reply("❌ Не удалось остановить процесс.");
     }
 });
