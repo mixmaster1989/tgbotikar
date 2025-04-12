@@ -366,6 +366,8 @@ function updateProgress(current, total) {
     readline.clearLine(process.stdout, 0);
     readline.cursorTo(process.stdout, 0);
     process.stdout.write(`⏳ Генерация: [${new Array(Math.floor(percentage / 5)).fill('█').join('')}${new Array(20 - Math.floor(percentage / 5)).fill('▒').join('')}] ${percentage}%`);
+    // Явный вывод в stdout для телеграм-бота
+    process.stdout.write(`PROGRESS: ${current}%\n`);
 }
 
 // Генерация промпта на основе контекста
@@ -497,31 +499,38 @@ async function main() {
             const randomFile = files[Math.floor(Math.random() * files.length)];
             const filePath = path.join(materialsPath, randomFile);
             console.log(`\n📄 Обработка файла: ${randomFile}`);
+            process.stdout.write(`FILE: ${randomFile}\n`);
 
             const text = await parseDocxToText(filePath);
             if (!text) {
                 console.error("❌ Не удалось извлечь текст из файла");
+                process.stdout.write(`ERROR: Не удалось извлечь текст\n`);
                 continue;
             }
 
             // Генерируем промпт на основе контекста
             const generatedPrompt = await generatePromptFromContext(gptModel, text);
+            process.stdout.write(`PROMPT: ${generatedPrompt.slice(0, 100)}...\n`);
 
             // Проверяем кэш
             console.log("🔍 Проверяем кэш на схожесть...");
+            process.stdout.write(`CACHE_CHECK: Поиск похожих промптов\n`);
             const similarPrompt = await findSimilarPrompt(generatedPrompt);
             if (similarPrompt) {
                 console.log("✅ Найдено в кэше:", similarPrompt.response);
+                process.stdout.write(`CACHE_HIT: ${similarPrompt.response.slice(0, 100)}...\n`);
                 await delay(10000);
                 continue;
             }
 
             // Получаем ответ на сгенерированный промпт
             console.log("🤖 Отправляем сгенерированный промпт модели...");
+            process.stdout.write(`MODEL_REQUEST: Генерация ответа\n`);
             const response = await generateAnswer(gptModel, text, generatedPrompt);
 
             if (!response) {
                 console.error("❌ Не удалось получить ответ от модели");
+                process.stdout.write(`ERROR: Не получен ответ от модели\n`);
                 continue;
             }
 
@@ -531,17 +540,21 @@ async function main() {
                 response.toLowerCase().includes('выполните') ||
                 response.toLowerCase().includes('откройте')) {
                 console.log("⚠️ Обнаружена потенциальная отсебятина в ответе, пропускаем...");
+                process.stdout.write(`SKIP: Потенциальная отсебятина\n`);
                 continue;
             }
 
             console.log("📨 Ответ от модели:", response);
-            await cacheResponse(generatedPrompt, response, text);  // Передаем text
+            process.stdout.write(`RESPONSE: ${response.slice(0, 200)}...\n`);
+            await cacheResponse(generatedPrompt, response, text);
 
             console.log("😴 Ждем 10 секунд перед следующей итерацией...\n");
+            process.stdout.write(`WAIT: Следующая итерация через 10 сек\n`);
             await delay(10000);
 
         } catch (error) {
             console.error("❌ Ошибка в итерации:", error);
+            process.stdout.write(`CRITICAL_ERROR: ${error.message}\n`);
             await delay(5000);
         }
     }
