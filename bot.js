@@ -167,6 +167,9 @@ let gpt4allModel = null;
 // Добавляем глобальный объект для хранения правильных ответов
 const activeTests = new Map();
 
+// Глобальная переменная для хранения активного процесса обработки кэша
+let activeTestCacheProcess = null;
+
 /**
  * Инициализирует модель GPT4All
  * @returns {Promise<Object|null>} объект модели с методом generate или null при ошибке
@@ -632,17 +635,21 @@ bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
 // Добавляем обработчик для запуска процесса обработки кэша
 bot.action("run_test_cache", async (ctx) => {
     try {
-        // Send initial message
-        const statusMessage = await ctx.reply("🚀 Запуск обработки кэша...\n\n");
+        // Send initial message with stop button
+        const statusMessage = await ctx.reply(
+            "🚀 Запуск обработки кэша...\n\n",
+            Markup.inlineKeyboard([[Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")]])
+        );
+
         let output = "";
 
-        // Spawn test_cache.js process
-        const testCache = spawn('node', ['test_cache.js'], {
+        // Store process reference
+        activeTestCacheProcess = spawn('node', ['test_cache.js'], {
             cwd: __dirname
         });
 
         // Handle process output
-        testCache.stdout.on('data', async (data) => {
+        activeTestCacheProcess.stdout.on('data', async (data) => {
             const newOutput = data.toString();
             output += newOutput;
 
@@ -653,25 +660,17 @@ bot.action("run_test_cache", async (ctx) => {
                 statusMessage.message_id,
                 null,
                 `🔄 Процесс обработки кэша:\n\n${truncatedOutput}`,
-                { parse_mode: 'HTML' }
-            ).catch(console.error);
-        });
-
-        // Handle process errors
-        testCache.stderr.on('data', async (data) => {
-            console.error(`Test cache error: ${data}`);
-            const errorMsg = data.toString();
-            await ctx.telegram.editMessageText(
-                ctx.chat.id,
-                statusMessage.message_id,
-                null,
-                `❌ Ошибка:\n${errorMsg}`,
-                { parse_mode: 'HTML' }
+                {
+                    parse_mode: 'HTML',
+                    reply_markup: Markup.inlineKeyboard([[Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")]])
+                }
             ).catch(console.error);
         });
 
         // Handle process completion
-        testCache.on('close', async (code) => {
+        activeTestCacheProcess.on('close', async (code) => {
+            activeTestCacheProcess = null; // Clear reference
+
             const finalMessage = code === 0
                 ? `✅ Процесс успешно завершен!\n\nПоследний вывод:\n${output.slice(-2000)}`
                 : `❌ Процесс завершился с ошибкой (код ${code})`;
@@ -694,5 +693,31 @@ bot.action("run_test_cache", async (ctx) => {
     } catch (err) {
         console.error("❌ Ошибка при запуске test_cache.js:", err);
         await ctx.reply("❌ Произошла ошибка при запуске процесса обработки кэша.");
+    }
+});
+
+// Добавляем обработчик для остановки процесса обработки кэша
+bot.action("stop_test_cache", async (ctx) => {
+    try {
+        if (activeTestCacheProcess) {
+            // Kill the process
+            activeTestCacheProcess.kill('SIGTERM');
+
+            // Update message
+            await ctx.editMessageText(
+                "🛑 Процесс остановлен пользователем",
+                {
+                    reply_markup: Markup.inlineKeyboard([
+                        [Markup.button.callback("🔄 Запустить заново", "run_test_cache")],
+                        [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
+                    ])
+                }
+            );
+        } else {
+            await ctx.reply("❓ Нет активного процесса генерации");
+        }
+    } catch (err) {
+        console.error("❌ Ошибка при остановке процесса:", err);
+        await ctx.reply("❌ Произошла ошибка при попытке остановить процесс.");
     }
 });
