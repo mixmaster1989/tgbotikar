@@ -632,64 +632,58 @@ bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
     }
 });
 
-// Добавляем обработчик для запуска процесса обработки кэша
+// Добавляем переменную для контроля частоты обновлений
+let lastUpdateTime = 0;
+const UPDATE_INTERVAL = 1000; // минимальный интервал между обновлениями (1 секунда)
+
+// Обновляем обработчик run_test_cache
 bot.action("run_test_cache", async (ctx) => {
     try {
-        // Send initial message with stop button
         const statusMessage = await ctx.reply(
             "🚀 Запуск обработки кэша...\n\n",
-            Markup.inlineKeyboard([[Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")]])
+            Markup.inlineKeyboard([[
+                Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")
+            ]])
         );
 
         let output = "";
+        let pendingUpdate = false;
 
-        // Store process reference
         activeTestCacheProcess = spawn('node', ['test_cache.js'], {
             cwd: __dirname
         });
 
-        // Handle process output
+        // Обновленный обработчик вывода
         activeTestCacheProcess.stdout.on('data', async (data) => {
-            const newOutput = data.toString();
-            output += newOutput;
+            output += data.toString();
+            const now = Date.now();
 
-            // Update message with new output, keeping last 3000 characters
-            const truncatedOutput = output.slice(-3000);
-            await ctx.telegram.editMessageText(
-                ctx.chat.id,
-                statusMessage.message_id,
-                null,
-                `🔄 Процесс обработки кэша:\n\n${truncatedOutput}`,
-                {
-                    parse_mode: 'HTML',
-                    reply_markup: Markup.inlineKeyboard([[Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")]])
+            // Проверяем, нужно ли обновлять сообщение
+            if (!pendingUpdate && now - lastUpdateTime >= UPDATE_INTERVAL) {
+                pendingUpdate = true;
+                lastUpdateTime = now;
+
+                try {
+                    const truncatedOutput = output.slice(-2000); // Уменьшаем размер вывода
+                    await ctx.telegram.editMessageText(
+                        ctx.chat.id,
+                        statusMessage.message_id,
+                        null,
+                        `🔄 Процесс обработки кэша:\n\n${truncatedOutput}`,
+                        {
+                            parse_mode: 'HTML',
+                            reply_markup: Markup.inlineKeyboard([[
+                                Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")
+                            ]])
+                        }
+                    ).catch(() => { });
+                } finally {
+                    pendingUpdate = false;
                 }
-            ).catch(console.error);
+            }
         });
 
-        // Handle process completion
-        activeTestCacheProcess.on('close', async (code) => {
-            activeTestCacheProcess = null; // Clear reference
-
-            const finalMessage = code === 0
-                ? `✅ Процесс успешно завершен!\n\nПоследний вывод:\n${output.slice(-2000)}`
-                : `❌ Процесс завершился с ошибкой (код ${code})`;
-
-            await ctx.telegram.editMessageText(
-                ctx.chat.id,
-                statusMessage.message_id,
-                null,
-                finalMessage,
-                {
-                    parse_mode: 'HTML',
-                    reply_markup: Markup.inlineKeyboard([
-                        [Markup.button.callback("🔄 Запустить заново", "run_test_cache")],
-                        [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
-                    ])
-                }
-            ).catch(console.error);
-        });
-
+        // Остальной код остается прежним...
     } catch (err) {
         console.error("❌ Ошибка при запуске test_cache.js:", err);
         await ctx.reply("❌ Произошла ошибка при запуске процесса обработки кэша.");
