@@ -7,9 +7,12 @@ module.exports = {
     env: {
       NODE_ENV: 'production'
     },
-    node_args: '-r dotenv/config', // Загрузка .env
+    node_args: '-r dotenv/config', 
     exec_mode: 'fork',
     instances: 1,
-    max_memory_restart: '500M'
+    max_memory_restart: '500M',
+    error_file: './pm2_error.log',
+    out_file: './pm2_out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss'
   }]
 }
