@@ -11,8 +11,8 @@ module.exports = {
     exec_mode: 'fork',
     instances: 1,
     max_memory_restart: '500M',
-    error_file: './pm2_error.log',
-    out_file: './pm2_out.log',
+    error_file: '/home/user1/.ssh/tgbotikar/pm2_error.log',
+    out_file: '/home/user1/.ssh/tgbotikar/pm2_out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss'
   }]
 }
