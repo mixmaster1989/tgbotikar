@@ -143,16 +143,39 @@ async function findSimilarPrompt(prompt) {
                 let bestMatch = null;
                 let highestSimilarity = 0;
 
+                // Очищаем промпты от общих частей и приводим к нижнему регистру
+                const cleanPrompt = prompt
+                    .replace(/\\n\\n.*$/s, '') // Удаляем текст после \n\n
+                    .toLowerCase()
+                    .trim();
+
                 rows.forEach((row) => {
-                    const similarity = levenshteinDistance(prompt, row.prompt);
-                    if (similarity > highestSimilarity) {
-                        highestSimilarity = similarity;
+                    const cleanRowPrompt = row.prompt
+                        .replace(/\\n\\n.*$/s, '')
+                        .toLowerCase()
+                        .trim();
+
+                    // Вычисляем схожесть строк
+                    const similarity = levenshteinDistance(cleanPrompt, cleanRowPrompt);
+
+                    // Проверяем наличие одинаковых ключевых слов
+                    const promptWords = new Set(cleanPrompt.split(/\s+/));
+                    const rowWords = new Set(cleanRowPrompt.split(/\s+/));
+                    const commonWords = [...promptWords].filter(word => rowWords.has(word));
+                    const wordSimilarity = commonWords.length / Math.max(promptWords.size, rowWords.size);
+
+                    // Общая схожесть - среднее между Левенштейном и схожестью слов
+                    const totalSimilarity = (similarity + wordSimilarity) / 2;
+
+                    if (totalSimilarity > highestSimilarity) {
+                        highestSimilarity = totalSimilarity;
                         bestMatch = row;
                     }
                 });
 
-                if (highestSimilarity > 0.8) { // Порог схожести
-                    console.log(`✅ Найден похожий промпт с коэффициентом схожести ${highestSimilarity}`);
+                // Увеличиваем порог схожести до 0.95 (95%)
+                if (highestSimilarity > 0.95) {
+                    console.log(`✅ Найден похожий промпт с коэффициентом схожести ${highestSimilarity.toFixed(3)}`);
                     resolve(bestMatch);
                 } else {
                     resolve(null);
