@@ -178,6 +178,53 @@ async function getAllDocxFiles() {
     });
 }
 
+// Функция для экспорта кэша в датасет
+async function exportCacheToDataset() {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT prompt, response FROM gpt_cache", async (err, rows) => {
+            if (err) {
+                console.error("❌ Ошибка при чтении кэша:", err);
+                reject(err);
+                return;
+            }
+
+            // Преобразуем данные в формат для обучения
+            const dataset = rows.map(row => ({
+                instruction: row.prompt,
+                input: "",  // Можно оставить пустым, так как контекст уже в instruction
+                output: row.response,
+                history: [] // История диалога (пустая для однократных запросов)
+            }));
+
+            try {
+                // Создаем папку для датасета, если её нет
+                const datasetDir = path.join(__dirname, "dataset");
+                if (!fs.existsSync(datasetDir)) {
+                    fs.mkdirSync(datasetDir);
+                }
+
+                // Сохраняем датасет в JSON файл
+                const timestamp = new Date().toISOString().replace(/[:]/g, '-');
+                const filename = path.join(datasetDir, `dataset_${timestamp}.json`);
+
+                fs.writeFileSync(
+                    filename,
+                    JSON.stringify(dataset, null, 2),
+                    'utf8'
+                );
+
+                console.log(`✅ Датасет сохранен в файл: ${filename}`);
+                console.log(`📊 Количество примеров: ${dataset.length}`);
+
+                resolve(filename);
+            } catch (error) {
+                console.error("❌ Ошибка при сохранении датасета:", error);
+                reject(error);
+            }
+        });
+    });
+}
+
 // Функция задержки
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -255,11 +302,23 @@ async function main() {
     }
 }
 
-// Добавляем обработчик для корректного завершения
+// Обновленный обработчик SIGINT
 process.on('SIGINT', async () => {
-    console.log('\n👋 Получен сигнал завершения, закрываем соединение с БД...');
-    db.close();
-    process.exit(0);
+    console.log('\n👋 Получен сигнал завершения...');
+
+    try {
+        console.log('📥 Экспортируем кэш в датасет...');
+        await exportCacheToDataset();
+
+        console.log('🔒 Закрываем соединение с БД...');
+        db.close();
+
+        console.log('✅ Завершение работы');
+        process.exit(0);
+    } catch (error) {
+        console.error('❌ Ошибка при завершении работы:', error);
+        process.exit(1);
+    }
 });
 
 // Запускаем процесс
