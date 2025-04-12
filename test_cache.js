@@ -49,9 +49,9 @@ async function initGPT4AllModel() {
         console.log("Инициализация GPT4All модели...");
         const model = await gpt4all.loadModel(modelName);
         return {
-            generate: async (prompt) => {
+            generate: async (prompt, options = {}) => {
                 try {
-                    const answer = await model.generate(prompt);
+                    const answer = await model.generate(prompt, options);
                     return answer.text;
                 } catch (error) {
                     console.error("Ошибка при генерации:", error);
@@ -253,15 +253,19 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Генерация промпта на основе контекста
 async function generatePromptFromContext(model, text) {
-    const metaPrompt = `Проанализируй текст и создай конкретный вопрос или задание для дальнейшего анализа. 
-Вопрос должен быть направлен на углубленное понимание материала.
-Формат ответа: только текст вопроса/задания без пояснений.
+    const metaPrompt = `На основе приведённого текста сформулируй вопрос, на который можно дать точный ответ, используя только информацию из этого текста. Не добавляй внешние сведения и не фантазируй. Ответ должен быть строго внутри текста.
 
 Текст для анализа:
-${text}`;
+${text}
+
+Сформулируй вопрос:`;
 
     console.log("🤖 Генерируем промпт на основе контекста...");
-    const generatedPrompt = await model.generate(metaPrompt);
+    const generatedPrompt = await model.generate(metaPrompt, {
+        temperature: 0.3,
+        top_p: 0.9,
+        repeat_penalty: 1.15
+    });
 
     if (!generatedPrompt) {
         throw new Error("Не удалось сгенерировать промпт");
