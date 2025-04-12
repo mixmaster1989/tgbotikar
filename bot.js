@@ -104,181 +104,6 @@ async function startApp() {
     }
 }
 
-// Запуск приложения
-startApp().catch((err) => {
-    console.error("❌ Критическая ошибка:", err);
-    process.exit(1);
-});
-
-/**
- * Извлекает текст из DOCX файла
- * @param {string} filePath - путь к DOCX файлу
- * @returns {Promise<string>} текст из файла
- */
-async function parseDocxToText(filePath) {
-    try {
-        console.log(`Извлечение текста из файла: ${filePath}`);
-        const result = await mammoth.extractRawText({ path: filePath });
-        console.log(`Текст успешно извлечен (длина: ${result.value.length})`);
-        return result.value.trim();
-    } catch (err) {
-        console.error(`Ошибка при парсинге файла ${filePath}:`, err);
-        return "";
-    }
-}
-
-/**
- * Конвертирует DOCX в HTML
- * @param {string} filePath - путь к DOCX файлу
- * @returns {Promise<string>} HTML разметка
- */
-async function parseDocxToHtml(filePath) {
-    try {
-        const result = await mammoth.convertToHtml({ path: filePath });
-        return result.value.trim();
-    } catch (err) {
-        console.error(`Ошибка при парсинге файла ${filePath}:`, err);
-        return "<p>Ошибка при обработке файла.</p>";
-    }
-}
-
-/**
- * Получает список всех DOCX файлов из папки материалов
- * @returns {Promise<string[]>} массив имен файлов
- */
-async function getFilesFromRoot() {
-    try {
-        console.log('Чтение папки materials...');
-        const items = await fs.readdir(materialsPath);
-        console.log(`Найдено элементов: ${items.length}`);
-        const files = items.filter((item) => item.endsWith(".docx"));
-        console.log(`Найдено .docx файлов: ${files.length}`);
-        console.log(`Файлы: ${files.join(', ')}`);
-        return files;
-    } catch (err) {
-        console.error("Ошибка при получении списка файлов:", err);
-        return [];
-    }
-}
-
-// Глобальная переменная для хранения инициализированной модели
-let gpt4allModel = null;
-
-// Добавляем глобальный объект для хранения правильных ответов
-const activeTests = new Map();
-
-// Глобальная переменная для хранения активного процесса обработки кэша
-let activeTestCacheProcess = null;
-
-/**
- * Инициализирует модель GPT4All
- * @returns {Promise<Object|null>} объект модели с методом generate или null при ошибке
- */
-async function initGPT4AllModel() {
-    try {
-        console.log("Инициализация GPT4All модели...");
-        const model = await gpt4all.loadModel(modelName);
-
-        return {
-            generate: async (prompt, ctx = null) => {
-                try {
-                    const answer = await model.generate(prompt);
-                    return answer.text;
-                } catch (error) {
-                    console.error("Ошибка при генерации:", error);
-                    return null;
-                }
-            }
-        };
-    } catch (error) {
-        console.error("Ошибка при инициализации GPT4All:", error);
-        return null;
-    }
-}
-
-/**
- * Обрезает текст до безопасного размера
- * @param {string} text - исходный текст
- * @returns {string} обрезанный текст
- */
-function trimText(text) {
-    // Примерно 1500 символов должно уложиться в лимит токенов
-    const MAX_LENGTH = 1500;
-    if (text.length <= MAX_LENGTH) return text;
-
-    // Берем первую часть текста
-    const firstPart = text.substring(0, MAX_LENGTH);
-
-    // Находим последнюю точку для красивого обрезания
-    const lastDot = firstPart.lastIndexOf('.');
-    return lastDot > 0 ? firstPart.substring(0, lastDot + 1) : firstPart;
-}
-
-/**
- * Генерирует вопросы на основе текста используя AI
- * @param {string} text - исходный текст
- * @param {Object} ctx - контекст Telegram
- * @returns {Promise<string>} сгенерированные вопросы
- */
-async function generateAIQuestions(text, ctx) {
-    try {
-        console.log("Начинаем генерацию вопросов...");
-
-        if (!gpt4allModel) {
-            console.log("Модель не инициализирована, запускаем инициализацию...");
-            gpt4allModel = await initGPT4AllModel();
-        }
-
-        if (!gpt4allModel) {
-            console.log("Ошибка: Модель не удалось инициализировать");
-            throw new Error("Модель GPT4All не инициализирована.");
-        }
-
-        // Обрезаем текст до безопасного размера
-        const trimmedText = trimText(text);
-        console.log(`Исходный размер текста: ${text.length}, обрезанный: ${trimmedText.length}`);
-
-        console.log("Подготовка промпта для генерации...");
-        const prompt = `Создай 1 вопрос с 4 вариантами ответа по тексту. 
-        Формат ответа строго такой:
-        ВОПРОС: [текст вопроса]
-        А) [вариант ответа]
-        Б) [вариант ответа]
-        В) [вариант ответа]
-        Г) [вариант ответа]
-        ПРАВИЛЬНЫЙ: [буква правильного ответа]
-
-        Текст: ${trimmedText}`;
-
-        console.log("Отправляем запрос к модели...");
-        const result = await gpt4allModel.generate(prompt, ctx);
-        console.log("Ответ от модели получен");
-        return result;
-    } catch (err) {
-        console.error("Ошибка при генерации вопросов через AI:", err);
-        throw err;
-    }
-}
-
-/**
- * Функция для парсинга ответа модели
- * @param {string} response - ответ модели
- * @returns {Object} объект с вопросом, вариантами ответов и правильным ответом
- */
-function parseTestResponse(response) {
-    const lines = response.split('\n');
-    const question = lines[0].replace('ВОПРОС:', '').trim();
-    const answers = {
-        'А': lines[1].replace('А)', '').trim(),
-        'Б': lines[2].replace('Б)', '').trim(),
-        'В': lines[3].replace('В)', '').trim(),
-        'Г': lines[4].replace('Г)', '').trim()
-    };
-    const correct = lines[5].replace('ПРАВИЛЬНЫЙ:', '').trim();
-
-    return { question, answers, correct };
-}
-
 // Обработчики команд бота
 
 // Добавляем кнопку в start меню
@@ -751,6 +576,175 @@ process.on('SIGTERM', () => {
     process.exit(0);
 });
 
+// Глобальная переменная для хранения инициализированной модели
+let gpt4allModel = null;
+
+// Добавляем глобальный объект для хранения правильных ответов
+const activeTests = new Map();
+
+// Глобальная переменная для хранения активного процесса обработки кэша
+let activeTestCacheProcess = null;
+
+/**
+ * Инициализирует модель GPT4All
+ * @returns {Promise<Object|null>} объект модели с методом generate или null при ошибке
+ */
+async function initGPT4AllModel() {
+    try {
+        console.log("Инициализация GPT4All модели...");
+        const model = await gpt4all.loadModel(modelName);
+
+        return {
+            generate: async (prompt, ctx = null) => {
+                try {
+                    const answer = await model.generate(prompt);
+                    return answer.text;
+                } catch (error) {
+                    console.error("Ошибка при генерации:", error);
+                    return null;
+                }
+            }
+        };
+    } catch (error) {
+        console.error("Ошибка при инициализации GPT4All:", error);
+        return null;
+    }
+}
+
+/**
+ * Обрезает текст до безопасного размера
+ * @param {string} text - исходный текст
+ * @returns {string} обрезанный текст
+ */
+function trimText(text) {
+    // Примерно 1500 символов должно уложиться в лимит токенов
+    const MAX_LENGTH = 1500;
+    if (text.length <= MAX_LENGTH) return text;
+
+    // Берем первую часть текста
+    const firstPart = text.substring(0, MAX_LENGTH);
+
+    // Находим последнюю точку для красивого обрезания
+    const lastDot = firstPart.lastIndexOf('.');
+    return lastDot > 0 ? firstPart.substring(0, lastDot + 1) : firstPart;
+}
+
+/**
+ * Генерирует вопросы на основе текста используя AI
+ * @param {string} text - исходный текст
+ * @param {Object} ctx - контекст Telegram
+ * @returns {Promise<string>} сгенерированные вопросы
+ */
+async function generateAIQuestions(text, ctx) {
+    try {
+        console.log("Начинаем генерацию вопросов...");
+
+        if (!gpt4allModel) {
+            console.log("Модель не инициализирована, запускаем инициализацию...");
+            gpt4allModel = await initGPT4AllModel();
+        }
+
+        if (!gpt4allModel) {
+            console.log("Ошибка: Модель не удалось инициализировать");
+            throw new Error("Модель GPT4All не инициализирована.");
+        }
+
+        // Обрезаем текст до безопасного размера
+        const trimmedText = trimText(text);
+        console.log(`Исходный размер текста: ${text.length}, обрезанный: ${trimmedText.length}`);
+
+        console.log("Подготовка промпта для генерации...");
+        const prompt = `Создай 1 вопрос с 4 вариантами ответа по тексту. 
+        Формат ответа строго такой:
+        ВОПРОС: [текст вопроса]
+        А) [вариант ответа]
+        Б) [вариант ответа]
+        В) [вариант ответа]
+        Г) [вариант ответа]
+        ПРАВИЛЬНЫЙ: [буква правильного ответа]
+
+        Текст: ${trimmedText}`;
+
+        console.log("Отправляем запрос к модели...");
+        const result = await gpt4allModel.generate(prompt, ctx);
+        console.log("Ответ от модели получен");
+        return result;
+    } catch (err) {
+        console.error("Ошибка при генерации вопросов через AI:", err);
+        throw err;
+    }
+}
+
+/**
+ * Функция для парсинга ответа модели
+ * @param {string} response - ответ модели
+ * @returns {Object} объект с вопросом, вариантами ответов и правильным ответом
+ */
+function parseTestResponse(response) {
+    const lines = response.split('\n');
+    const question = lines[0].replace('ВОПРОС:', '').trim();
+    const answers = {
+        'А': lines[1].replace('А)', '').trim(),
+        'Б': lines[2].replace('Б)', '').trim(),
+        'В': lines[3].replace('В)', '').trim(),
+        'Г': lines[4].replace('Г)', '').trim()
+    };
+    const correct = lines[5].replace('ПРАВИЛЬНЫЙ:', '').trim();
+
+    return { question, answers, correct };
+}
+
+/**
+ * Извлекает текст из DOCX файла
+ * @param {string} filePath - путь к DOCX файлу
+ * @returns {Promise<string>} текст из файла
+ */
+async function parseDocxToText(filePath) {
+    try {
+        console.log(`Извлечение текста из файла: ${filePath}`);
+        const result = await mammoth.extractRawText({ path: filePath });
+        console.log(`Текст успешно извлечен (длина: ${result.value.length})`);
+        return result.value.trim();
+    } catch (err) {
+        console.error(`Ошибка при парсинге файла ${filePath}:`, err);
+        return "";
+    }
+}
+
+/**
+ * Конвертирует DOCX в HTML
+ * @param {string} filePath - путь к DOCX файлу
+ * @returns {Promise<string>} HTML разметка
+ */
+async function parseDocxToHtml(filePath) {
+    try {
+        const result = await mammoth.convertToHtml({ path: filePath });
+        return result.value.trim();
+    } catch (err) {
+        console.error(`Ошибка при парсинге файла ${filePath}:`, err);
+        return "<p>Ошибка при обработке файла.</p>";
+    }
+}
+
+/**
+ * Получает список всех DOCX файлов из папки материалов
+ * @returns {Promise<string[]>} массив имен файлов
+ */
+async function getFilesFromRoot() {
+    try {
+        console.log('Чтение папки materials...');
+        const items = await fs.readdir(materialsPath);
+        console.log(`Найдено элементов: ${items.length}`);
+        const files = items.filter((item) => item.endsWith(".docx"));
+        console.log(`Найдено .docx файлов: ${files.length}`);
+        console.log(`Файлы: ${files.join(', ')}`);
+        return files;
+    } catch (err) {
+        console.error("Ошибка при получении списка файлов:", err);
+        return [];
+    }
+}
+
 // Главное меню
 const mainMenuKeyboard = Markup.keyboard([
     ['📚 Кэш', '🤖 Генерация'],
@@ -814,4 +808,12 @@ bot.hears('⚙️ Настройки', (ctx) => {
 // Возврат в главное меню
 bot.hears('🔙 Главное меню', (ctx) => {
     ctx.reply('Главное меню', mainMenuKeyboard);
+});
+
+// Существующие обработчики сигналов
+
+// Запуск приложения
+startApp().catch((err) => {
+    console.error("❌ Критическая ошибка:", err);
+    process.exit(1);
 });
