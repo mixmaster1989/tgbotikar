@@ -277,22 +277,34 @@ function parseTestResponse(response) {
 
 // Обработчики команд бота
 
-// Команда /start - точка входа для пользователя
+// Обновляем команду start с новой кнопкой
 bot.start(async (ctx) => {
     await ctx.reply(
         "Добро пожаловать! Этот бот поможет вам просматривать материалы.",
         Markup.inlineKeyboard([
-            Markup.button.callback("📂 Просмотреть материалы", "open_materials"),
-            Markup.button.callback("📝 Сгенерировать тест", "generate_test"),
-            Markup.button.callback("📊 Проверить кэш", "check_cache") // Новая кнопка
+            [Markup.button.callback("📂 Просмотреть материалы", "open_materials")],
+            [Markup.button.callback("📝 Сгенерировать тест", "generate_test")],
+            [
+                Markup.button.callback("📊 Проверить кэш", "check_cache"),
+                Markup.button.callback("📚 Просмотр датасета", "view_dataset")
+            ]
         ])
     );
 });
 
-// Обработчик кнопки "Проверить кэш"
+// Улучшенный обработчик кнопки "Проверить кэш"
 bot.action("check_cache", async (ctx) => {
     try {
-        db.all("SELECT prompt, response, created_at FROM gpt_cache", (err, rows) => {
+        db.all(`
+            SELECT 
+                prompt, 
+                response, 
+                created_at,
+                (SELECT COUNT(*) FROM gpt_cache) as total_entries
+            FROM gpt_cache 
+            ORDER BY created_at DESC 
+            LIMIT 5
+        `, async (err, rows) => {
             if (err) {
                 console.error("❌ Ошибка при запросе кэша:", err);
                 return ctx.reply("❌ Ошибка при запросе кэша.");
@@ -302,19 +314,101 @@ bot.action("check_cache", async (ctx) => {
                 return ctx.reply("📂 Кэш пуст.");
             }
 
-            let message = "📊 Содержимое кэша:\n\n";
+            let message = `📊 <b>Статистика кэша</b>\n`;
+            message += `\nВсего записей: ${rows[0].total_entries}\n`;
+            message += `\n<b>Последние 5 запросов:</b>\n\n`;
+
             rows.forEach((row, index) => {
-                message += `${index + 1}. [${row.created_at}]\n`;
-                message += `Промпт: ${row.prompt.slice(0, 50)}...\n`;
-                message += `Ответ: ${row.response.slice(0, 50)}...\n\n`;
+                const date = new Date(row.created_at).toLocaleString('ru-RU');
+                message += `${index + 1}. <b>Дата:</b> ${date}\n`;
+                message += `📝 <b>Вопрос:</b>\n${row.prompt.slice(0, 100)}${row.prompt.length > 100 ? '...' : ''}\n`;
+                message += `💡 <b>Ответ:</b>\n${row.response.slice(0, 100)}${row.response.length > 100 ? '...' : ''}\n\n`;
             });
 
-            ctx.reply(message);
+            message += `\nДля полного списка используйте команду /cache`;
+
+            await ctx.reply(message, {
+                parse_mode: 'HTML',
+                reply_markup: Markup.inlineKeyboard([
+                    [Markup.button.callback("🔄 Обновить", "check_cache")],
+                    [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
+                ])
+            });
         });
     } catch (err) {
         console.error("❌ Ошибка при обработке кнопки 'Проверить кэш':", err);
         ctx.reply("❌ Произошла ошибка при обработке кнопки.");
     }
+});
+
+// Новый обработчик для просмотра датасета
+bot.action("view_dataset", async (ctx) => {
+    try {
+        const datasetDir = path.join(__dirname, "dataset");
+
+        if (!fs.existsSync(datasetDir)) {
+            return ctx.reply("📂 Папка с датасетами не найдена.");
+        }
+
+        const files = fs.readdirSync(datasetDir)
+            .filter(file => file.endsWith('.json'))
+            .sort((a, b) => {
+                return fs.statSync(path.join(datasetDir, b)).mtime.getTime() -
+                    fs.statSync(path.join(datasetDir, a)).mtime.getTime();
+            });
+
+        if (files.length === 0) {
+            return ctx.reply("📂 Датасеты не найдены.");
+        }
+
+        // Берем самый свежий датасет
+        const latestDataset = JSON.parse(
+            fs.readFileSync(path.join(datasetDir, files[0]), 'utf8')
+        );
+
+        let message = `📚 <b>Информация о последнем датасете:</b>\n\n`;
+        message += `📅 Дата создания: ${new Date(latestDataset.created_at).toLocaleString('ru-RU')}\n`;
+        message += `📊 Всего примеров: ${latestDataset.total_examples}\n`;
+        message += `🤖 Модель: ${latestDataset.model}\n\n`;
+
+        message += `<b>Статистика ответов:</b>\n`;
+        const factualCount = latestDataset.examples.filter(ex => ex.metadata.is_factual).length;
+        message += `✅ Фактологических: ${factualCount}\n`;
+        message += `📏 Средняя длина: ${Math.round(latestDataset.examples.reduce((acc, ex) => acc + ex.metadata.response_length, 0) / latestDataset.total_examples)}\n\n`;
+
+        message += `<b>Последние 3 примера:</b>\n\n`;
+        latestDataset.examples.slice(0, 3).forEach((example, i) => {
+            message += `${i + 1}. <b>Вопрос:</b>\n${example.instruction.slice(0, 100)}${example.instruction.length > 100 ? '...' : ''}\n`;
+            message += `<b>Ответ:</b>\n${example.output.slice(0, 100)}${example.output.length > 100 ? '...' : ''}\n\n`;
+        });
+
+        await ctx.reply(message, {
+            parse_mode: 'HTML',
+            reply_markup: Markup.inlineKeyboard([
+                [Markup.button.callback("🔄 Обновить", "view_dataset")],
+                [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
+            ])
+        });
+
+    } catch (err) {
+        console.error("❌ Ошибка при просмотре датасета:", err);
+        ctx.reply("❌ Произошла ошибка при просмотре датасета.");
+    }
+});
+
+// Обработчик кнопки возврата в главное меню
+bot.action("back_to_menu", async (ctx) => {
+    await ctx.editMessageText(
+        "Выберите действие:",
+        Markup.inlineKeyboard([
+            [Markup.button.callback("📂 Просмотреть материалы", "open_materials")],
+            [Markup.button.callback("📝 Сгенерировать тест", "generate_test")],
+            [
+                Markup.button.callback("📊 Проверить кэш", "check_cache"),
+                Markup.button.callback("📚 Просмотр датасета", "view_dataset")
+            ]
+        ])
+    );
 });
 
 // Команда /cache - проверка содержимого кэша
