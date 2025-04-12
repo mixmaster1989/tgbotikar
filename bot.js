@@ -668,11 +668,20 @@ bot.action("run_test_cache", async (ctx) => {
 
         // Обновленный обработчик вывода
         activeTestCacheProcess.stdout.on('data', async (data) => {
-            output += data.toString();
+            const message = data.toString().trim();
+            output += message + '\n';
             const now = Date.now();
 
-            // Проверяем, нужно ли обновлять сообщение
-            if (!pendingUpdate && now - lastUpdateTime >= UPDATE_INTERVAL) {
+            // Новые префиксы для обновления
+            const updatePrefixes = [
+                'FILE:', 'PROMPT:', 'CACHE_CHECK:', 'CACHE_HIT:', 
+                'MODEL_REQUEST:', 'RESPONSE:', 'WAIT:', 'ERROR:', 
+                'SKIP:', 'CRITICAL_ERROR:', 'PROGRESS:'
+            ];
+
+            const shouldUpdate = updatePrefixes.some(prefix => message.startsWith(prefix));
+
+            if (!pendingUpdate && (shouldUpdate || now - lastUpdateTime >= UPDATE_INTERVAL)) {
                 pendingUpdate = true;
                 lastUpdateTime = now;
 
@@ -682,12 +691,12 @@ bot.action("run_test_cache", async (ctx) => {
                         ctx.chat.id,
                         statusMessage.message_id,
                         null,
-                        `🔄 Процесс обработки кэша:\n\n${truncatedOutput}`,
+                        `🚀 Запуск обработки кэша...\n\n<pre>${truncatedOutput}</pre>`,
                         {
                             parse_mode: 'HTML',
-                            reply_markup: Markup.inlineKeyboard([[
-                                Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")
-                            ]])
+                            reply_markup: Markup.inlineKeyboard([
+                                [Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")]
+                            ])
                         }
                     ).catch(() => { });
                 } finally {
