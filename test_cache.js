@@ -118,35 +118,44 @@ async function initGPT4AllModel() {
 }
 
 // Сохранение результата в кэш
-async function cacheResponse(prompt, response) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            "INSERT INTO gpt_cache (prompt, response) VALUES (?, ?)",
-            [prompt, response],
-            (err) => {
-                if (err) {
-                    console.error("❌ Ошибка при сохранении в кэш:", err);
-                    reject(err);
-                } else {
-                    console.log("✅ Результат сохранен в кэш");
-                    resolve();
+async function cacheResponse(prompt, response, text) {  // Добавляем параметр text
+    try {
+        // Сначала сохраняем в БД
+        await new Promise((resolve, reject) => {
+            db.run(
+                "INSERT INTO gpt_cache (prompt, response) VALUES (?, ?)",
+                [prompt, response],
+                (err) => {
+                    if (err) {
+                        console.error("❌ Ошибка при сохранении в кэш:", err);
+                        reject(err);
+                    } else {
+                        console.log("✅ Результат сохранен в кэш");
+                        resolve();
+                    }
                 }
-            }
+            );
+        });
+
+        // Затем сохраняем в JSONL лог
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            text_length: text ? text.length : 0,
+            question: prompt,
+            answer: response,
+            is_procedural: response.toLowerCase().includes('шаг') ||
+                response.toLowerCase().includes('команд')
+        };
+
+        fs.appendFileSync(
+            path.join(__dirname, 'generation_log.jsonl'),
+            JSON.stringify(logEntry) + '\n'
         );
-    });
 
-    const logEntry = {
-        timestamp: new Date().toISOString(),
-        text_length: text.length,
-        question: prompt,
-        answer: response,
-        is_procedural: response.toLowerCase().includes('шаг') || response.toLowerCase().includes('команд')
-    };
-
-    fs.appendFileSync(
-        path.join(__dirname, 'generation_log.jsonl'),
-        JSON.stringify(logEntry) + '\n'
-    );
+    } catch (error) {
+        console.error("❌ Ошибка при сохранении:", error);
+        throw error;
+    }
 }
 
 // Получение результата из кэша
@@ -269,40 +278,67 @@ async function getAllDocxFiles() {
 // Функция для экспорта кэша в датасет
 async function exportCacheToDataset() {
     return new Promise((resolve, reject) => {
-        db.all("SELECT prompt, response FROM gpt_cache", async (err, rows) => {
+        db.all(`
+            SELECT 
+                prompt,
+                response,
+                created_at,
+                (SELECT COUNT(*) FROM gpt_cache WHERE response LIKE '%' || gc.response || '%') as response_frequency
+            FROM gpt_cache gc
+        `, async (err, rows) => {
             if (err) {
                 console.error("❌ Ошибка при чтении кэша:", err);
                 reject(err);
                 return;
             }
 
-            // Преобразуем данные в формат для обучения
+            // Улучшенный формат для файнтюнинга
             const dataset = rows.map(row => ({
+                // Основные поля для обучения
                 instruction: row.prompt,
-                input: "",  // Можно оставить пустым, так как контекст уже в instruction
+                input: "",  // Пустой, так как контекст уже в instruction
                 output: row.response,
-                history: [] // История диалога (пустая для однократных запросов)
+
+                // Метаданные для анализа качества
+                metadata: {
+                    created_at: row.created_at,
+                    response_frequency: row.response_frequency,
+                    is_factual: !row.response.toLowerCase().includes('как') &&
+                        !row.response.toLowerCase().includes('шаг'),
+                    response_length: row.response.length,
+                    response_type: detectResponseType(row.response)
+                }
             }));
 
             try {
-                // Создаем папку для датасета, если её нет
                 const datasetDir = path.join(__dirname, "dataset");
                 if (!fs.existsSync(datasetDir)) {
                     fs.mkdirSync(datasetDir);
                 }
 
-                // Сохраняем датасет в JSON файл
+                // Добавляем метаинформацию о датасете
+                const datasetInfo = {
+                    model: modelName,
+                    total_examples: dataset.length,
+                    created_at: new Date().toISOString(),
+                    format_version: "1.0",
+                    examples: dataset
+                };
+
                 const timestamp = new Date().toISOString().replace(/[:]/g, '-');
-                const filename = path.join(datasetDir, `dataset_${timestamp}.json`);
+                const filename = path.join(datasetDir, `finetune_dataset_${timestamp}.json`);
 
                 fs.writeFileSync(
                     filename,
-                    JSON.stringify(dataset, null, 2),
+                    JSON.stringify(datasetInfo, null, 2),
                     'utf8'
                 );
 
-                console.log(`✅ Датасет сохранен в файл: ${filename}`);
-                console.log(`📊 Количество примеров: ${dataset.length}`);
+                console.log(`✅ Датасет для файнтюнинга сохранен: ${filename}`);
+                console.log(`📊 Статистика:`);
+                console.log(`   - Всего примеров: ${dataset.length}`);
+                console.log(`   - Фактологических ответов: ${dataset.filter(d => d.metadata.is_factual).length}`);
+                console.log(`   - Средняя длина ответа: ${Math.round(dataset.reduce((acc, d) => acc + d.metadata.response_length, 0) / dataset.length)}`);
 
                 resolve(filename);
             } catch (error) {
@@ -311,6 +347,14 @@ async function exportCacheToDataset() {
             }
         });
     });
+}
+
+// Вспомогательная функция для определения типа ответа
+function detectResponseType(response) {
+    if (response.includes('В тексте нет точного ответа')) return 'no_answer';
+    if (/\d+/.test(response)) return 'numeric';
+    if (response.length < 50) return 'short_factual';
+    return 'descriptive';
 }
 
 // Функция задержки
@@ -491,7 +535,7 @@ async function main() {
             }
 
             console.log("📨 Ответ от модели:", response);
-            await cacheResponse(generatedPrompt, response);
+            await cacheResponse(generatedPrompt, response, text);  // Передаем text
 
             console.log("😴 Ждем 10 секунд перед следующей итерацией...\n");
             await delay(10000);
