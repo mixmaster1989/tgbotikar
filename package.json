@@ -1,21 +1,27 @@
 {
-  "name": "my-telegram-bot",
+  "name": "telegram-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Telegram Bot with AI functionality",
+  "main": "bot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node bot.js",
+    "dev": "nodemon bot.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:restart": "pm2 restart telegram-bot",
+    "pm2:stop": "pm2 stop telegram-bot"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "fs-extra": "^11.3.0",
-    "mammoth": "^1.9.0",
-    "node-fetch": "^3.3.2",
-    "sqlite3": "^5.1.7",
-    "telegraf": "^4.16.3"
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "gpt4all": "^1.1.0",
+    "telegraf": "^4.12.2",
+    "winston": "^3.8.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22",
+    "pm2": "^5.3.0"
   }
 }

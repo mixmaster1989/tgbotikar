@@ -10,6 +10,7 @@ const database = require("./modules/database");
 const gptModel = require("./modules/gpt");
 const docxProcessor = require("./modules/docx");
 const BotHandlers = require("./modules/handlers");
+const logger = require("./modules/logger");
 
 // Основные константы
 const PORT = process.env.PORT || 3000;
@@ -22,30 +23,37 @@ const bot = new Telegraf(process.env.BOT_TOKEN, {
 let activeTestCacheProcess = null;
 
 async function startApp() {
-    // Инициализация сервисов
-    database.initCache();
-    await gptModel.init();
+    try {
+        logger.info('Начало инициализации приложения');
 
-    // Настройка Express
-    app.use("/static", express.static(path.join(__dirname, "static")));
+        // Инициализация сервисов
+        database.initCache();
+        await gptModel.init();
 
-    // Настройка обработчиков бота
-    BotHandlers.setupMainMenu(bot);
+        // Настройка Express
+        app.use("/static", express.static(path.join(__dirname, "static")));
 
-    // Запуск сервисов
-    app.listen(PORT, () => {
-        console.log(`🌐 Express-сервер запущен на порту ${PORT}`);
-    });
+        // Настройка обработчиков бота
+        BotHandlers.setupMainMenu(bot);
 
-    bot.launch();
-    console.log("🤖 Запуск Telegram бота...");
+        // Запуск сервисов
+        app.listen(PORT, () => {
+            logger.info(`Express-сервер запущен на порту ${PORT}`);
+        });
+
+        bot.launch();
+        logger.info('Telegram бот успешно запущен');
+    } catch (error) {
+        logger.error('Критическая ошибка при запуске приложения', { error });
+        process.exit(1);
+    }
 }
 
 // Команда просмотра кэша
 bot.command('cache', (ctx) => {
     database.db.all("SELECT * FROM gpt_cache ORDER BY created_at DESC LIMIT 10", (err, rows) => {
         if (err) {
-            console.error("❌ Ошибка при запросе кэша:", err);
+            logger.error('Ошибка при запросе кэша', { error: err });
             return ctx.reply("❌ Ошибка при запросе кэша.");
         }
 
@@ -81,17 +89,19 @@ bot.action("open_materials", async (ctx) => {
 
 // Обработчики завершения
 process.once('SIGINT', () => {
+    logger.info('Получен сигнал SIGINT, остановка бота');
     bot.stop('SIGINT');
     database.close();
 });
 
 process.once('SIGTERM', () => {
+    logger.info('Получен сигнал SIGTERM, остановка бота');
     bot.stop('SIGTERM');
     database.close();
 });
 
 // Запуск приложения
 startApp().catch((err) => {
-    console.error("❌ Критическая ошибка:", err);
+    logger.error('Критическая ошибка при запуске приложения', { error: err });
     process.exit(1);
 });
