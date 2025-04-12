@@ -251,11 +251,31 @@ async function exportCacheToDataset() {
 // Функция задержки
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// Генерация промпта на основе контекста
+async function generatePromptFromContext(model, text) {
+    const metaPrompt = `Проанализируй текст и создай конкретный вопрос или задание для дальнейшего анализа. 
+Вопрос должен быть направлен на углубленное понимание материала.
+Формат ответа: только текст вопроса/задания без пояснений.
+
+Текст для анализа:
+${text}`;
+
+    console.log("🤖 Генерируем промпт на основе контекста...");
+    const generatedPrompt = await model.generate(metaPrompt);
+
+    if (!generatedPrompt) {
+        throw new Error("Не удалось сгенерировать промпт");
+    }
+
+    console.log("📝 Сгенерированный промпт:", generatedPrompt);
+    return generatedPrompt;
+}
+
 // Основной процесс
 async function main() {
     initDatabase();
 
-    while (true) { // Бесконечный цикл
+    while (true) {
         try {
             const files = await getAllDocxFiles();
             if (files.length === 0) {
@@ -263,7 +283,6 @@ async function main() {
                 return;
             }
 
-            // Случайный выбор файла
             const randomFile = files[Math.floor(Math.random() * files.length)];
             const filePath = path.join(materialsPath, randomFile);
             console.log(`\n📄 Обработка файла: ${randomFile}`);
@@ -280,31 +299,21 @@ async function main() {
                 continue;
             }
 
-            // Генерируем различные типы промптов
-            const prompts = [
-                `обьясни, о чем тут на русском языке:\n\n${text}`,
-                `Какова основная мысль текста?:\n\n${text}`,
-                `Объясни используемые в тексте термины:\n\n${text}`,
-                `Создай концепцию на основе тескта:\n\n${text}`,
-                `Расскажи о ККТ в целом:\n\n${text}`
-            ];
-
-            // Выбираем случайный промпт
-            const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
-            console.log("\n📝 Выбран промпт:", randomPrompt.split('\n')[0]);
+            // Генерируем промпт на основе контекста
+            const generatedPrompt = await generatePromptFromContext(gptModel, text);
 
             // Проверяем кэш
             console.log("🔍 Проверяем кэш на схожесть...");
-            const similarPrompt = await findSimilarPrompt(randomPrompt);
+            const similarPrompt = await findSimilarPrompt(generatedPrompt);
             if (similarPrompt) {
                 console.log("✅ Найдено в кэше:", similarPrompt.response);
-                // Делаем паузу перед следующей итерацией
-                await delay(10000); // 10 секунд
+                await delay(10000);
                 continue;
             }
 
-            console.log("🤖 Отправляем запрос к модели...");
-            const response = await gptModel.generate(randomPrompt);
+            // Получаем ответ на сгенерированный промпт
+            console.log("🤖 Отправляем сгенерированный промпт модели...");
+            const response = await gptModel.generate(generatedPrompt);
 
             if (!response) {
                 console.error("❌ Не удалось получить ответ от модели");
@@ -312,15 +321,14 @@ async function main() {
             }
 
             console.log("📨 Ответ от модели:", response);
-            await cacheResponse(randomPrompt, response);
+            await cacheResponse(generatedPrompt, response);
 
-            // Делаем паузу перед следующей итерацией
             console.log("😴 Ждем 10 секунд перед следующей итерацией...\n");
-            await delay(10000); // 10 секунд
+            await delay(10000);
 
         } catch (error) {
             console.error("❌ Ошибка в итерации:", error);
-            await delay(5000); // 5 секунд паузы при ошибке
+            await delay(5000);
         }
     }
 }
