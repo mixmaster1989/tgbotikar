@@ -41,7 +41,6 @@ class YaDiskService {
             for (const file of files) {
                 const localPath = path.join(this.materialsPath, file.name);
 
-                // Check if file needs updating
                 const needsUpdate = !(await fs.pathExists(localPath)) ||
                     (await fs.stat(localPath)).mtime < new Date(file.modified);
 
@@ -60,12 +59,10 @@ class YaDiskService {
 
     async downloadFile(file) {
         try {
-            // Get download link
             const downloadResponse = await this.api.get('/download', {
                 params: { path: file.path }
             });
 
-            // Download file
             const response = await axios({
                 method: 'GET',
                 url: downloadResponse.data.href,

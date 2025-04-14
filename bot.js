@@ -9,7 +9,7 @@ require("dotenv").config(); // Загрузка переменных окруж�
 const os = require("os"); // Работа с системными путями
 const sqlite3 = require("sqlite3").verbose(); // Подключаем SQLite
 const { spawn } = require('child_process'); // Для запуска внешних процессов
-const YaDiskService = require('./services/yadisk-service');
+const YaDiskService = require('./services/yadisk_service');
 const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 
 // Основные константы и пути
