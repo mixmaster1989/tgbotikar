@@ -10,8 +10,9 @@ class YaDiskService {
         }
 
         this.token = token;
+        // Изменяем базовый URL
         this.api = axios.create({
-            baseURL: 'https://cloud-api.yandex.net/v1/disk/resources',
+            baseURL: 'https://cloud-api.yandex.net/v1/disk',
             headers: {
                 'Authorization': `OAuth ${token}`
             }
@@ -55,31 +56,26 @@ class YaDiskService {
         try {
             this.log('info', 'checkAccess', 'Проверка всех прав доступа к Яндекс.Диску...');
 
-            // 1. Проверка доступа к информации о диске (исправленный URL)
-            const diskInfo = await axios.get('https://cloud-api.yandex.net/v1/disk', {
-                headers: {
-                    'Authorization': `OAuth ${this.token}`
-                }
-            });
-
+            // 1. Проверка доступа к информации о диске
+            const diskInfo = await this.api.get('/');
             const totalGb = (diskInfo.data.total_space / 1024 / 1024 / 1024).toFixed(2);
             this.log('info', 'checkAccess', `✓ Доступ к информации о диске. Всего: ${totalGb} GB`);
 
             // 2. Проверка чтения диска (корневая директория)
-            const rootContent = await this.api.get('resources', {
+            const rootContent = await this.api.get('/resources', {
                 params: { path: '/' }
             });
             this.log('info', 'checkAccess', '✓ Чтение диска работает');
 
             // 3. Проверка возможности записи (создаем временную папку)
             const testFolderName = `test_${Date.now()}`;
-            await this.api.put('resources', {
+            await this.api.put('/resources', {
                 params: { path: `/${testFolderName}` }
             });
             this.log('info', 'checkAccess', '✓ Запись на диск работает');
 
             // Удаляем тестовую папку
-            await this.api.delete('resources', {
+            await this.api.delete('/resources', {
                 params: { path: `/${testFolderName}` }
             });
 
@@ -99,7 +95,7 @@ class YaDiskService {
     async getAllDocxFiles(path = '/') {
         try {
             this.log('info', 'scan', `Сканирование директории: ${path}`);
-            const response = await this.api.get('', {
+            const response = await this.api.get('/resources', {
                 params: {
                     path: path,
                     limit: 100
@@ -168,7 +164,7 @@ class YaDiskService {
     async downloadFile(file) {
         try {
             this.log('info', 'download', `Получение ссылки для скачивания ${file.name}...`);
-            const downloadResponse = await this.api.get('/download', {
+            const downloadResponse = await this.api.get('/resources/download', {
                 params: { path: file.path }
             });
 
