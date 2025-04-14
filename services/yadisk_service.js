@@ -5,7 +5,7 @@ const path = require('path');
 class YaDiskService {
     constructor(token) {
         if (!token) {
-            throw new Error('YANDEX_DISK_TOKEN is not provided');
+            throw new Error('Не указан токен Яндекс.Диска');
         }
 
         this.token = token;
@@ -20,10 +20,10 @@ class YaDiskService {
 
     async syncMaterials() {
         try {
-            // Ensure materials directory exists
+            // Создаем папку materials если её нет
             await fs.ensureDir(this.materialsPath);
 
-            // Get files list from Yandex.Disk
+            // Получаем список файлов с Яндекс.Диска
             const response = await this.api.get('', {
                 params: {
                     path: '/materials',
@@ -35,34 +35,37 @@ class YaDiskService {
                 item => item.type === 'file' && item.name.endsWith('.docx')
             );
 
-            console.log(`📚 Found ${files.length} .docx files on Yandex.Disk`);
+            console.log(`📚 Найдено ${files.length} docx файлов на Яндекс.Диске`);
 
-            // Download each file
+            // Скачиваем каждый файл
             for (const file of files) {
                 const localPath = path.join(this.materialsPath, file.name);
 
+                // Проверяем нужно ли обновлять файл
                 const needsUpdate = !(await fs.pathExists(localPath)) ||
                     (await fs.stat(localPath)).mtime < new Date(file.modified);
 
                 if (needsUpdate) {
-                    console.log(`📥 Downloading ${file.name}...`);
+                    console.log(`📥 Скачивание ${file.name}...`);
                     await this.downloadFile(file);
                 }
             }
 
             return files.map(f => f.name);
         } catch (error) {
-            console.error('❌ Sync error:', error.message);
+            console.error('❌ Ошибка синхронизации:', error.message);
             throw error;
         }
     }
 
     async downloadFile(file) {
         try {
+            // Получаем ссылку на скачивание
             const downloadResponse = await this.api.get('/download', {
                 params: { path: file.path }
             });
 
+            // Скачиваем файл
             const response = await axios({
                 method: 'GET',
                 url: downloadResponse.data.href,
@@ -76,13 +79,13 @@ class YaDiskService {
 
             return new Promise((resolve, reject) => {
                 writer.on('finish', () => {
-                    console.log(`✅ Downloaded ${file.name}`);
+                    console.log(`✅ Файл ${file.name} успешно скачан`);
                     resolve(localPath);
                 });
                 writer.on('error', reject);
             });
         } catch (error) {
-            console.error(`❌ Download error for ${file.name}:`, error.message);
+            console.error(`❌ Ошибка при скачивании ${file.name}:`, error.message);
             throw error;
         }
     }
