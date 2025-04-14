@@ -24,8 +24,9 @@
     "axios": "^1.6.7",
     "glob": "^10.3.10",
     "rimraf": "^5.0.5",
-    "lru-cache": "^10.1.0",
-    "@npmcli/fs": "^3.1.0"
+    "mammoth": "^1.6.0",
+    "sqlite3": "^5.1.7",
+    "fs-extra": "^11.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
@@ -33,13 +34,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "overrides": {
-    "glob": "^10.3.10",
-    "rimraf": "^5.0.5",
-    "axios": "^1.6.7"
-  },
-  "resolutions": {
-    "axios": "^1.6.7"
   }
 }
