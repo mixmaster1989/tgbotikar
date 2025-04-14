@@ -1,13 +1,13 @@
 const axios = require('axios');
-const fs = require('fs');
+const fs = require('fs-extra');
 const path = require('path');
 
 class YaDiskService {
     constructor(token) {
         if (!token) {
-            throw new Error('Не указан токен Яндекс.Диска');
+            throw new Error('YANDEX_DISK_TOKEN is not provided');
         }
-        
+
         this.token = token;
         this.api = axios.create({
             baseURL: 'https://cloud-api.yandex.net/v1/disk/resources',
@@ -18,78 +18,74 @@ class YaDiskService {
         this.materialsPath = path.join(__dirname, '..', 'materials');
     }
 
-    async listDocxFiles(folderPath = '/materials') {
+    async syncMaterials() {
         try {
+            // Ensure materials directory exists
+            await fs.ensureDir(this.materialsPath);
+
+            // Get files list from Yandex.Disk
             const response = await this.api.get('', {
                 params: {
-                    path: folderPath,
+                    path: '/materials',
                     limit: 100
                 }
             });
-            
-            console.log('📂 Получен список файлов с Яндекс.Диска');
-            return response.data._embedded.items.filter(item => 
-                item.type === 'file' && item.name.toLowerCase().endsWith('.docx')
+
+            const files = response.data._embedded.items.filter(
+                item => item.type === 'file' && item.name.endsWith('.docx')
             );
-        } catch (error) {
-            console.error('❌ Ошибка при получении списка файлов:', error.message);
-            throw error;
-        }
-    }
 
-    async downloadFile(file) {
-        try {
-            const downloadResponse = await this.api.get('/download', {
-                params: { path: file.path }
-            });
+            console.log(`📚 Found ${files.length} .docx files on Yandex.Disk`);
 
-            const localPath = path.join(this.materialsPath, file.name);
-            const writer = fs.createWriteStream(localPath);
-
-            const response = await axios({
-                method: 'GET',
-                url: downloadResponse.data.href,
-                responseType: 'stream'
-            });
-
-            response.data.pipe(writer);
-
-            return new Promise((resolve, reject) => {
-                writer.on('finish', () => {
-                    console.log(`✅ Файл ${file.name} успешно скачан`);
-                    resolve(localPath);
-                });
-                writer.on('error', reject);
-            });
-        } catch (error) {
-            console.error(`❌ Ошибка при скачивании ${file.name}:`, error.message);
-            throw error;
-        }
-    }
-
-    async syncMaterials() {
-        try {
-            if (!fs.existsSync(this.materialsPath)) {
-                fs.mkdirSync(this.materialsPath, { recursive: true });
-            }
-
-            const files = await this.listDocxFiles();
-            console.log(`📚 Найдено ${files.length} docx файлов на Яндекс.Диске`);
-
+            // Download each file
             for (const file of files) {
                 const localPath = path.join(this.materialsPath, file.name);
-                const needsUpdate = !fs.existsSync(localPath) || 
-                    new Date(file.modified) > fs.statSync(localPath).mtime;
+
+                // Check if file needs updating
+                const needsUpdate = !(await fs.pathExists(localPath)) ||
+                    (await fs.stat(localPath)).mtime < new Date(file.modified);
 
                 if (needsUpdate) {
-                    console.log(`📥 Скачивание ${file.name}...`);
+                    console.log(`📥 Downloading ${file.name}...`);
                     await this.downloadFile(file);
                 }
             }
 
             return files.map(f => f.name);
         } catch (error) {
-            console.error('❌ Ошибка синхронизации:', error.message);
+            console.error('❌ Sync error:', error.message);
+            throw error;
+        }
+    }
+
+    async downloadFile(file) {
+        try {
+            // Get download link
+            const downloadResponse = await this.api.get('/download', {
+                params: { path: file.path }
+            });
+
+            // Download file
+            const response = await axios({
+                method: 'GET',
+                url: downloadResponse.data.href,
+                responseType: 'stream'
+            });
+
+            const localPath = path.join(this.materialsPath, file.name);
+            const writer = fs.createWriteStream(localPath);
+
+            response.data.pipe(writer);
+
+            return new Promise((resolve, reject) => {
+                writer.on('finish', () => {
+                    console.log(`✅ Downloaded ${file.name}`);
+                    resolve(localPath);
+                });
+                writer.on('error', reject);
+            });
+        } catch (error) {
+            console.error(`❌ Download error for ${file.name}:`, error.message);
             throw error;
         }
     }
