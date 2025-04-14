@@ -15,13 +15,14 @@ async function testGPT4All() {
             maxTokens: 50, // Ограничиваем длину генерации
             temp: 0.7,     // Температура
             on_token: (token) => {
+                console.log("Получен токен:", token); // Логируем каждый токен
                 generatedText += token;
                 process.stdout.write(token); // Выводим токены в реальном времени
             }
         });
 
         console.log("\nГенерация завершена.");
-        console.log("Сгенерированный текст:", generatedText);
+        console.log("Сгенерированный текст:", generatedText || "Текст отсутствует");
     } catch (error) {
         console.error("Ошибка при работе с GPT4All:", error);
     }
