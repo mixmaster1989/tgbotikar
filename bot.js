@@ -9,6 +9,8 @@ require("dotenv").config(); // Загрузка переменных окруж�
 const os = require("os"); // Работа с системными путями
 const sqlite3 = require("sqlite3").verbose(); // Подключаем SQLite
 const { spawn } = require('child_process'); // Для запуска внешних процессов
+const YaDiskService = require('./services/yadisk-service');
+const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 
 // Основные константы и пути
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -148,15 +150,11 @@ async function parseDocxToHtml(filePath) {
  */
 async function getFilesFromRoot() {
     try {
-        console.log('Чтение папки materials...');
-        const items = await fs.readdir(materialsPath);
-        console.log(`Найдено элементов: ${items.length}`);
-        const files = items.filter((item) => item.endsWith(".docx"));
-        console.log(`Найдено .docx файлов: ${files.length}`);
-        console.log(`Файлы: ${files.join(', ')}`);
+        const files = await yadisk.syncMaterials();
+        console.log(`📚 Доступно ${files.length} .docx файлов`);
         return files;
     } catch (err) {
-        console.error("Ошибка при получении списка файлов:", err);
+        console.error("❌ Ошибка при получении списка файлов:", err);
         return [];
     }
 }
@@ -674,8 +672,8 @@ bot.action("run_test_cache", async (ctx) => {
 
             // Новые префиксы для обновления
             const updatePrefixes = [
-                'FILE:', 'PROMPT:', 'CACHE_CHECK:', 'CACHE_HIT:', 
-                'MODEL_REQUEST:', 'RESPONSE:', 'WAIT:', 'ERROR:', 
+                'FILE:', 'PROMPT:', 'CACHE_CHECK:', 'CACHE_HIT:',
+                'MODEL_REQUEST:', 'RESPONSE:', 'WAIT:', 'ERROR:',
                 'SKIP:', 'CRITICAL_ERROR:', 'PROGRESS:'
             ];
 
@@ -814,4 +812,16 @@ bot.hears('⚙️ Настройки', (ctx) => {
 // Возврат в главное меню
 bot.hears('🔙 Главное меню', (ctx) => {
     ctx.reply('Главное меню', mainMenuKeyboard);
+});
+
+// Добавляем новую команду для ручной синхронизации:
+bot.command('sync', async (ctx) => {
+    try {
+        await ctx.reply('🔄 Начинаю синхронизацию с Яндекс.Диском...');
+        const files = await yadisk.syncMaterials();
+        await ctx.reply(`✅ Синхронизация завершена!\nОбновлено файлов: ${files.length}`);
+    } catch (error) {
+        console.error('Ошибка синхронизации:', error);
+        await ctx.reply('❌ Ошибка при синхронизации с Яндекс.Диском');
+    }
 });
