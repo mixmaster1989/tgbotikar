@@ -279,368 +279,85 @@ function parseTestResponse(response) {
 
 // Обработчики команд бота
 
-// Создаем главное меню с обычными кнопками
+// Определяем константы для меню
+const MENU_MATERIALS = '📂 Материалы';
+const MENU_TESTS = '📝 Тесты';
+const MENU_CACHE = '📊 Кэш';
+const MENU_SETTINGS = '⚙️ Настройки';
+const MENU_BACK = '🔙 Назад';
+
+// Создаем клавиатуры для разных меню
 const mainMenuKeyboard = Markup.keyboard([
-    ["📂 Просмотреть материалы", "📝 Сгенерировать тест"],
-    ["📊 Проверить кэш", "📚 Просмотр датасета"],
-    ["🔄 Запустить обработку кэша"]
-]).resize(); // resize делает кнопки компактнее
+    [MENU_MATERIALS, MENU_TESTS],
+    [MENU_CACHE, MENU_SETTINGS]
+]).resize();
 
-// Обновляем команду старта
-bot.command('start', (ctx) => {
-    return ctx.reply('Добро пожаловать! Этот бот поможет вам просматривать материалы.', mainMenuKeyboard);
+const backKeyboard = Markup.keyboard([
+    [MENU_BACK]
+]).resize();
+
+// Обработчик команды /start
+bot.command('start', async (ctx) => {
+    return ctx.reply('Добро пожаловать! Выберите раздел:', mainMenuKeyboard);
 });
 
-// Обработчик возврата в главное меню
-bot.action("back_to_menu", async (ctx) => {
-    await ctx.reply("Выберите действие:", mainMenuKeyboard);
+// Обработчик кнопки "Назад"
+bot.hears(MENU_BACK, async (ctx) => {
+    return ctx.reply('Выберите раздел:', mainMenuKeyboard);
 });
 
-// Добавляем обработчики для каждой кнопки
-bot.hears("📂 Просмотреть материалы", (ctx) => {
-    // Existing open_materials logic
-    ctx.reply("Загружаю список материалов...", mainMenuKeyboard);
-});
-
-bot.hears("📝 Сгенерировать тест", (ctx) => {
-    // Existing generate_test logic
-    ctx.reply("Подготовка к генерации теста...", mainMenuKeyboard);
-});
-
-bot.hears("📊 Проверить кэш", (ctx) => {
-    // Existing check_cache logic
-    ctx.reply("Проверяю кэш...", mainMenuKeyboard);
-});
-
-bot.hears("📚 Просмотр датасета", (ctx) => {
-    // Existing view_dataset logic
-    ctx.reply("Загружаю информацию о датасете...", mainMenuKeyboard);
-});
-
-bot.hears("🔄 Запустить обработку кэша", (ctx) => {
-    // Existing run_test_cache logic
-    ctx.reply("Запускаю обработку кэша...", mainMenuKeyboard);
-});
-
-// Команда /cache - проверка содержимого кэша
-bot.command("cache", async (ctx) => {
-    try {
-        db.all("SELECT prompt, response, created_at FROM gpt_cache", (err, rows) => {
-            if (err) {
-                console.error("❌ Ошибка при запросе кэша:", err);
-                return ctx.reply("❌ Ошибка при запросе кэша.");
-            }
-
-            if (rows.length === 0) {
-                return ctx.reply("📂 Кэш пуст.");
-            }
-
-            let message = "📊 Содержимое кэша:\n\n";
-            rows.forEach((row, index) => {
-                message += `${index + 1}. [${row.created_at}]\n`;
-                message += `Промпт: ${row.prompt.slice(0, 50)}...\n`;
-                message += `Ответ: ${row.response.slice(0, 50)}...\n\n`;
-            });
-
-            ctx.reply(message);
-        });
-    } catch (err) {
-        console.error("❌ Ошибка при обработке команды /cache:", err);
-        ctx.reply("❌ Произошла ошибка при обработке команды.");
-    }
-});
-
-// Обработка кнопки "Просмотреть материалы" - показывает список доступных файлов
-bot.action("open_materials", async (ctx) => {
+// Обработчик раздела "Материалы"
+bot.hears(MENU_MATERIALS, async (ctx) => {
     const files = await getFilesFromRoot();
-
     if (files.length === 0) {
-        return ctx.reply("Нет доступных файлов.");
+        return ctx.reply('Нет доступных файлов.', mainMenuKeyboard);
     }
 
-    const buttons = files.map((file) => [
-        Markup.button.callback(file, `material:${file}`),
-    ]);
-
-    await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
-});
-
-// Обработка выбора конкретного файла - показывает ссылку на веб-просмотр
-bot.action(/^material:(.+)$/, async (ctx) => {
-    const fileName = ctx.match[1];
-    const filePath = path.join(materialsPath, fileName);
-
-    if (!fs.existsSync(filePath)) {
-        return ctx.reply("Файл не найден.");
-    }
-
-    const url = `${webAppUrl}/article/${encodeURIComponent(fileName)}`;
-
-    await ctx.reply(
-        `Откройте файл "${fileName}" через Web App:`,
-        Markup.inlineKeyboard([
-            Markup.button.url("Открыть файл", url),
-            Markup.button.callback("🔙 Назад", "open_materials"),
-        ])
-    );
-});
-
-// Обработка кнопки "Сгенерировать тест"
-bot.action("generate_test", async (ctx) => {
-    try {
-        const files = await getFilesFromRoot();
-        if (files.length === 0) {
-            return ctx.reply("Нет доступных материалов для генерации теста.");
-        }
-
-        // Создаем кнопки для выбора файла
-        const buttons = files.map((file) => [
-            Markup.button.callback(`📄 ${file}`, `test:${file}`),
-        ]);
-
-        // Добавляем кнопку случайного выбора
-        buttons.push([Markup.button.callback("🎲 Случайный материал", "test:random")]);
-
-        await ctx.reply(
-            "Выберите материал для генерации теста:",
-            Markup.inlineKeyboard(buttons)
-        );
-    } catch (err) {
-        console.error("Ошибка при подготовке списка:", err);
-        await ctx.reply("Произошла ошибка. Попробуйте позже.");
-    }
-});
-
-// Добавляем обработчик выбора файла для теста
-bot.action(/^test:(.+)$/, async (ctx) => {
-    console.log("Запущена генерация теста");
-    const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Operation Timeout")), 300000);
+    let message = '📚 Доступные материалы:\n\n';
+    files.forEach((file, i) => {
+        message += `${i + 1}. ${file}\n`;
     });
+    message += '\nВведите номер материала для просмотра';
 
-    try {
-        const files = await getFilesFromRoot();
-        let selectedFile;
-
-        if (ctx.match[1] === 'random') {
-            console.log("Выбираем случайный файл...");
-            selectedFile = files[Math.floor(Math.random() * files.length)];
-        } else {
-            selectedFile = ctx.match[1];
-        }
-
-        console.log(`Выбран файл: ${selectedFile}`);
-        await ctx.reply(
-            `📝 Начинаю генерацию теста по материалу "${selectedFile}"\n\n` +
-            `⏳ Процесс займет около 3-5 минут\n` +
-            `❗️ Пожалуйста, дождитесь окончания всех этапов`
-        );
-
-        await Promise.race([
-            (async () => {
-                const filePath = path.join(materialsPath, selectedFile);
-                console.log("Начинаем обработку материала...");
-                await ctx.reply("🔄 Этап 1/3: Обработка материала...");
-
-                const result = await parseDocxToText(filePath);
-                if (!result) {
-                    throw new Error("Не удалось прочитать материал для теста.");
-                }
-
-                console.log("Материал обработан, начинаем генерацию вопросов...");
-                await ctx.reply(
-                    "✅ Материал обработан\n" +
-                    "🤖 Этап 2/3: Запуск AI модели"
-                );
-
-                const test = await generateAIQuestions(result, ctx);
-                console.log("Вопросы сгенерированы, форматируем результат...");
-
-                // Парсим ответ модели
-                const parsedTest = parseTestResponse(test);
-
-                // Сохраняем правильный ответ
-                const testId = Date.now().toString();
-                activeTests.set(testId, parsedTest.correct);
-
-                // Формируем сообщение с вопросом
-                const message = `🎯 <b>Вопрос:</b>\n\n${parsedTest.question}\n\n` +
-                    `<i>Выберите правильный вариант ответа:</i>`;
-
-                // Создаем клавиатуру с вариантами ответов
-                const keyboard = [
-                    [
-                        Markup.button.callback('А) ' + parsedTest.answers['А'], `answer:${testId}:А`),
-                        Markup.button.callback('Б) ' + parsedTest.answers['Б'], `answer:${testId}:Б`)
-                    ],
-                    [
-                        Markup.button.callback('В) ' + parsedTest.answers['В'], `answer:${testId}:В`),
-                        Markup.button.callback('Г) ' + parsedTest.answers['Г'], `answer:${testId}:Г`)
-                    ]
-                ];
-
-                // Отправляем вопрос с вариантами ответов
-                await ctx.reply(message, {
-                    parse_mode: 'HTML',
-                    ...Markup.inlineKeyboard(keyboard)
-                });
-
-            })(),
-            timeoutPromise,
-        ]);
-    } catch (err) {
-        console.error("Ошибка при генерации теста:", err);
-        await ctx.reply(
-            "❌ Произошла ошибка при генерации теста\n" +
-            "🔄 Пожалуйста, попробуйте позже"
-        );
-    }
+    return ctx.reply(message, backKeyboard);
 });
 
-// Добавляем обработчик ответов на вопросы
-bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
-    try {
-        const testId = ctx.match[1];
-        const userAnswer = ctx.match[2];
-        const correctAnswer = activeTests.get(testId);
-
-        if (!correctAnswer) {
-            await ctx.reply('⚠️ Тест устарел. Пожалуйста, сгенерируйте новый.');
-            return;
-        }
-
-        // Удаляем тест из активных
-        activeTests.delete(testId);
-
-        // Проверяем ответ
-        const isCorrect = userAnswer === correctAnswer;
-
-        // Отправляем результат
-        await ctx.reply(
-            isCorrect
-                ? '✅ <b>Правильно!</b>\n\nОтличная работа!'
-                : `❌ <b>Неправильно</b>\n\nПравильный ответ: ${correctAnswer}`,
-            {
-                parse_mode: 'HTML',
-                reply_markup: Markup.inlineKeyboard([
-                    [Markup.button.callback('🔄 Новый тест', 'generate_test')]
-                ])
-            }
-        );
-
-        // Редактируем оригинальное сообщение, чтобы показать, что тест завершен
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-
-    } catch (err) {
-        console.error('Ошибка при проверке ответа:', err);
-        await ctx.reply('❌ Произошла ошибка при проверке ответа');
+// Обработчик раздела "Тесты"
+bot.hears(MENU_TESTS, async (ctx) => {
+    const files = await getFilesFromRoot();
+    if (files.length === 0) {
+        return ctx.reply('Нет материалов для генерации теста.', mainMenuKeyboard);
     }
+
+    let message = '📝 Выберите материал для теста:\n\n';
+    files.forEach((file, i) => {
+        message += `${i + 1}. ${file}\n`;
+    });
+    message += '\n0. 🎲 Случайный материал\nВведите номер:';
+
+    return ctx.reply(message, backKeyboard);
 });
 
-// Добавляем переменную для контроля частоты обновлений
-let lastUpdateTime = 0;
-const UPDATE_INTERVAL = 1000; // минимальный интервал между обновлениями (1 секунда)
+// Обработчик раздела "Кэш"
+bot.hears(MENU_CACHE, async (ctx) => {
+    let message = '📊 Операции с кэшем:\n\n';
+    message += '1. Просмотреть кэш\n';
+    message += '2. Запустить обработку\n';
+    message += '3. Очистить кэш\n\n';
+    message += 'Введите номер операции:';
 
-// Обновляем обработчик run_test_cache
-bot.action("run_test_cache", async (ctx) => {
-    try {
-        const statusMessage = await ctx.reply(
-            "🚀 Запуск обработки кэша...\n\n",
-            Markup.inlineKeyboard([[
-                Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")
-            ]])
-        );
-
-        let output = "";
-        let pendingUpdate = false;
-
-        activeTestCacheProcess = spawn('node', ['test_cache.js'], {
-            cwd: __dirname
-        });
-
-        // Обновленный обработчик вывода
-        activeTestCacheProcess.stdout.on('data', async (data) => {
-            const message = data.toString().trim();
-            output += message + '\n';
-            const now = Date.now();
-
-            // Новые префиксы для обновления
-            const updatePrefixes = [
-                'FILE:', 'PROMPT:', 'CACHE_CHECK:', 'CACHE_HIT:',
-                'MODEL_REQUEST:', 'RESPONSE:', 'WAIT:', 'ERROR:',
-                'SKIP:', 'CRITICAL_ERROR:', 'PROGRESS:'
-            ];
-
-            const shouldUpdate = updatePrefixes.some(prefix => message.startsWith(prefix));
-
-            if (!pendingUpdate && (shouldUpdate || now - lastUpdateTime >= UPDATE_INTERVAL)) {
-                pendingUpdate = true;
-                lastUpdateTime = now;
-
-                try {
-                    const truncatedOutput = output.slice(-2000); // Уменьшаем размер вывода
-                    await ctx.telegram.editMessageText(
-                        ctx.chat.id,
-                        statusMessage.message_id,
-                        null,
-                        `🚀 Запуск обработки кэша...\n\n<pre>${truncatedOutput}</pre>`,
-                        {
-                            parse_mode: 'HTML',
-                            reply_markup: Markup.inlineKeyboard([
-                                [Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")]
-                            ])
-                        }
-                    ).catch(() => { });
-                } finally {
-                    pendingUpdate = false;
-                }
-            }
-        });
-
-        // Остальной код остается прежним...
-    } catch (err) {
-        console.error("❌ Ошибка при запуске test_cache.js:", err);
-        await ctx.reply("❌ Произошла ошибка при запуске процесса обработки кэша.");
-    }
+    return ctx.reply(message, backKeyboard);
 });
 
-// Обновляем обработчик stop_test_cache
-bot.action("stop_test_cache", async (ctx) => {
-    try {
-        if (activeTestCacheProcess) {
-            activeTestCacheProcess.kill('SIGTERM');
-            activeTestCacheProcess = null;
+// Обработчик раздела "Настройки"
+bot.hears(MENU_SETTINGS, async (ctx) => {
+    let message = '⚙️ Настройки:\n\n';
+    message += '1. Проверить Яндекс.Диск\n';
+    message += '2. Синхронизировать файлы\n';
+    message += '3. Проверить модель AI\n\n';
+    message += 'Введите номер настройки:';
 
-            await ctx.reply("🛑 Обработка остановлена",
-                Markup.inlineKeyboard([
-                    [Markup.button.callback("🔄 Запустить заново", "run_test_cache")],
-                    [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
-                ])
-            );
-        } else {
-            await ctx.reply("❓ Нет активного процесса генерации");
-        }
-    } catch (err) {
-        console.error("❌ Ошибка при остановке процесса:", err);
-        await ctx.reply("❌ Не удалось остановить процесс.");
-    }
-});
-
-// Добавим обработку завершения процесса
-process.on('SIGINT', () => {
-    if (activeTestCacheProcess) {
-        console.log('Завершение дочернего процесса test_cache.js');
-        activeTestCacheProcess.kill('SIGTERM');
-    }
-    process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-    if (activeTestCacheProcess) {
-        console.log('Завершение дочернего процесса test_cache.js');
-        activeTestCacheProcess.kill('SIGTERM');
-    }
-    process.exit(0);
+    return ctx.reply(message, backKeyboard);
 });
 
 // Добавляем новую команду для ручной синхронизации:
