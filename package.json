@@ -9,7 +9,8 @@
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:restart": "pm2 restart telegram-bot",
     "pm2:stop": "pm2 stop telegram-bot",
-    "audit": "npm audit fix --force"
+    "audit": "npm audit fix --force",
+    "clean": "rimraf node_modules package-lock.json && npm cache clean --force"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +24,9 @@
     "@yandex-cloud/nodejs-sdk": "^2.5.0",
     "axios": "^1.6.7",
     "glob": "^10.3.10",
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.5",
+    "lru-cache": "^10.1.0",
+    "@npmcli/fs": "^3.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
@@ -31,5 +34,9 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "overrides": {
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.5"
   }
 }
