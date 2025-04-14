@@ -5,6 +5,7 @@ const path = require('path');
 class YaDiskService {
     constructor(token) {
         if (!token) {
+            this.log('error', 'init', 'Не указан токен Яндекс.Диска');
             throw new Error('Не указан токен Яндекс.Диска');
         }
 
@@ -16,74 +17,134 @@ class YaDiskService {
             }
         });
         this.materialsPath = path.join(__dirname, '..', 'materials');
+        this.log('info', 'init', `Инициализация сервиса. Локальная папка: ${this.materialsPath}`);
+    }
+
+    // Вспомогательный метод для логирования
+    log(level, operation, message, error = null) {
+        const timestamp = new Date().toISOString();
+        const logEntry = {
+            timestamp,
+            level,
+            service: 'YaDisk',
+            operation,
+            message
+        };
+
+        if (error) {
+            logEntry.error = {
+                message: error.message,
+                code: error.response?.status,
+                details: error.response?.data
+            };
+        }
+
+        // Форматируем для консоли
+        const emoji = {
+            info: 'ℹ️',
+            error: '❌',
+            warn: '⚠️',
+            success: '✅'
+        };
+
+        console.log(`${emoji[level] || '🔄'} [${timestamp}] [YaDisk/${operation}] ${message}${error ? `\n  Error: ${JSON.stringify(logEntry.error, null, 2)}` : ''
+            }`);
     }
 
     async checkAccess() {
         try {
+            this.log('info', 'checkAccess', 'Проверка доступа к Яндекс.Диску...');
             const response = await this.api.get('/disk');
-            console.log('✅ Доступ к Яндекс.Диску подтвержден');
+
+            this.log('success', 'checkAccess', `Доступ подтвержден. Доступно: ${response.data.total_space} байт`);
             return true;
         } catch (error) {
             if (error.response?.status === 403) {
-                console.error('❌ Ошибка доступа: недостаточно прав');
-                console.error('👉 Проверьте права доступа токена в настройках приложения Яндекс.OAuth');
+                this.log('error', 'checkAccess', 'Недостаточно прав для доступа', error);
                 throw new Error('Недостаточно прав для доступа к Яндекс.Диску');
             }
+            this.log('error', 'checkAccess', 'Ошибка при проверке доступа', error);
+            throw error;
+        }
+    }
+
+    async getAllDocxFiles(path = '/') {
+        try {
+            this.log('info', 'scan', `Сканирование директории: ${path}`);
+            const response = await this.api.get('', {
+                params: {
+                    path: path,
+                    limit: 100
+                }
+            });
+
+            let files = [];
+            const items = response.data._embedded.items;
+
+            // Находим все docx файлы в текущей директории
+            const docxFiles = items.filter(item =>
+                item.type === 'file' && item.name.endsWith('.docx')
+            );
+            files.push(...docxFiles);
+
+            // Рекурсивно обходим все поддиректории
+            const folders = items.filter(item => item.type === 'dir');
+            for (const folder of folders) {
+                this.log('info', 'scan', `Переход в папку: ${folder.path}`);
+                const subFiles = await this.getAllDocxFiles(folder.path);
+                files.push(...subFiles);
+            }
+
+            return files;
+        } catch (error) {
+            this.log('error', 'scan', `Ошибка при сканировании ${path}`, error);
             throw error;
         }
     }
 
     async syncMaterials() {
         try {
-            // Проверяем доступ перед синхронизацией
+            this.log('info', 'sync', 'Начало синхронизации материалов...');
             await this.checkAccess();
 
-            // Создаем папку materials если её нет
+            // Создаём локальную папку если её нет
             await fs.ensureDir(this.materialsPath);
+            this.log('info', 'sync', `Локальная папка готова: ${this.materialsPath}`);
 
-            // Получаем список файлов с Яндекс.Диска
-            const response = await this.api.get('', {
-                params: {
-                    path: '/materials',
-                    limit: 100
-                }
-            });
+            // Получаем все .docx файлы со всего диска
+            const files = await this.getAllDocxFiles();
+            this.log('info', 'sync', `Всего найдено .docx файлов: ${files.length}`);
 
-            const files = response.data._embedded.items.filter(
-                item => item.type === 'file' && item.name.endsWith('.docx')
-            );
-
-            console.log(`📚 Найдено ${files.length} docx файлов на Яндекс.Диске`);
-
-            // Скачиваем каждый файл
+            let updated = 0;
             for (const file of files) {
                 const localPath = path.join(this.materialsPath, file.name);
-
-                // Проверяем нужно ли обновлять файл
                 const needsUpdate = !(await fs.pathExists(localPath)) ||
                     (await fs.stat(localPath)).mtime < new Date(file.modified);
 
                 if (needsUpdate) {
-                    console.log(`📥 Скачивание ${file.name}...`);
                     await this.downloadFile(file);
+                    updated++;
+                } else {
+                    this.log('info', 'sync', `Пропуск ${file.name} - актуальная версия`);
                 }
             }
 
+            this.log('success', 'sync', `Синхронизация завершена. Обновлено файлов: ${updated}/${files.length}`);
             return files.map(f => f.name);
         } catch (error) {
-            console.error('❌ Ошибка синхронизации:', error.message);
+            this.log('error', 'sync', 'Ошибка при синхронизации', error);
             throw error;
         }
     }
 
     async downloadFile(file) {
         try {
-            // Получаем ссылку на скачивание
+            this.log('info', 'download', `Получение ссылки для скачивания ${file.name}...`);
             const downloadResponse = await this.api.get('/download', {
                 params: { path: file.path }
             });
 
-            // Скачиваем файл
+            this.log('info', 'download', `Начало скачивания ${file.name}`);
             const response = await axios({
                 method: 'GET',
                 url: downloadResponse.data.href,
@@ -97,13 +158,16 @@ class YaDiskService {
 
             return new Promise((resolve, reject) => {
                 writer.on('finish', () => {
-                    console.log(`✅ Файл ${file.name} успешно скачан`);
+                    this.log('success', 'download', `Файл ${file.name} успешно скачан в ${localPath}`);
                     resolve(localPath);
                 });
-                writer.on('error', reject);
+                writer.on('error', (err) => {
+                    this.log('error', 'download', `Ошибка записи файла ${file.name}`, err);
+                    reject(err);
+                });
             });
         } catch (error) {
-            console.error(`❌ Ошибка при скачивании ${file.name}:`, error.message);
+            this.log('error', 'download', `Ошибка при скачивании ${file.name}`, error);
             throw error;
         }
     }
