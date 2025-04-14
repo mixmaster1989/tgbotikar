@@ -18,7 +18,7 @@ const modelDir = path.join(os.homedir(), ".cache", "gpt4all"); // Директо
 const finalModelPath = path.join(modelDir, modelName); // Путь к файлу модели. Возможно не нужен.
 const materialsPath = path.join(__dirname, "materials"); // Путь к папке с материалами
 const PORT = process.env.PORT || 3000; // Порт для веб-сервера
-const webAppUrl = `http://89.169.131.216:${PORT}`; // URL веб-приложения
+const webAppUrl = `http://89.232.176.215:${PORT}`; // URL веб-приложения
 
 // Инициализация основных сервисов
 const bot = new Telegraf(process.env.BOT_TOKEN, {
