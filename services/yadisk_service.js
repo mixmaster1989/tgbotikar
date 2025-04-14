@@ -10,7 +10,6 @@ class YaDiskService {
         }
 
         this.token = token;
-        // Изменяем базовый URL
         this.api = axios.create({
             baseURL: 'https://cloud-api.yandex.net/v1/disk',
             headers: {
@@ -21,7 +20,6 @@ class YaDiskService {
         this.log('info', 'init', `Инициализация сервиса. Локальная папка: ${this.materialsPath}`);
     }
 
-    // Вспомогательный метод для логирования
     log(level, operation, message, error = null) {
         const timestamp = new Date().toISOString();
         const logEntry = {
@@ -40,7 +38,6 @@ class YaDiskService {
             };
         }
 
-        // Форматируем для консоли
         const emoji = {
             info: 'ℹ️',
             error: '❌',
@@ -48,33 +45,28 @@ class YaDiskService {
             success: '✅'
         };
 
-        console.log(`${emoji[level] || '🔄'} [${timestamp}] [YaDisk/${operation}] ${message}${error ? `\n  Error: ${JSON.stringify(logEntry.error, null, 2)}` : ''
-            }`);
+        console.log(`${emoji[level] || '🔄'} [${timestamp}] [YaDisk/${operation}] ${message}${error ? `\n  Error: ${JSON.stringify(logEntry.error, null, 2)}` : ''}`);
     }
 
     async checkAccess() {
         try {
             this.log('info', 'checkAccess', 'Проверка всех прав доступа к Яндекс.Диску...');
 
-            // 1. Проверка доступа к информации о диске
             const diskInfo = await this.api.get('/');
             const totalGb = (diskInfo.data.total_space / 1024 / 1024 / 1024).toFixed(2);
             this.log('info', 'checkAccess', `✓ Доступ к информации о диске. Всего: ${totalGb} GB`);
 
-            // 2. Проверка чтения диска (корневая директория)
             const rootContent = await this.api.get('/resources', {
                 params: { path: '/' }
             });
             this.log('info', 'checkAccess', '✓ Чтение диска работает');
 
-            // 3. Проверка возможности записи (создаем временную папку)
             const testFolderName = `test_${Date.now()}`;
-            await this.api.put('/resources', {
+            await this.api.put('/resources', null, {
                 params: { path: `/${testFolderName}` }
             });
             this.log('info', 'checkAccess', '✓ Запись на диск работает');
 
-            // Удаляем тестовую папку
             await this.api.delete('/resources', {
                 params: { path: `/${testFolderName}` }
             });
@@ -105,13 +97,11 @@ class YaDiskService {
             let files = [];
             const items = response.data._embedded.items;
 
-            // Находим все docx файлы в текущей директории
             const docxFiles = items.filter(item =>
                 item.type === 'file' && item.name.endsWith('.docx')
             );
             files.push(...docxFiles);
 
-            // Рекурсивно обходим все поддиректории
             const folders = items.filter(item => item.type === 'dir');
             for (const folder of folders) {
                 this.log('info', 'scan', `Переход в папку: ${folder.path}`);
@@ -131,11 +121,9 @@ class YaDiskService {
             this.log('info', 'sync', 'Начало синхронизации материалов...');
             await this.checkAccess();
 
-            // Создаём локальную папку если её нет
             await fs.ensureDir(this.materialsPath);
             this.log('info', 'sync', `Локальная папка готова: ${this.materialsPath}`);
 
-            // Получаем все .docx файлы со всего диска
             const files = await this.getAllDocxFiles();
             this.log('info', 'sync', `Всего найдено .docx файлов: ${files.length}`);
 
