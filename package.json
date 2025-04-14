@@ -8,22 +8,28 @@
     "dev": "nodemon bot.js",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:restart": "pm2 restart telegram-bot",
-    "pm2:stop": "pm2 stop telegram-bot"
+    "pm2:stop": "pm2 stop telegram-bot",
+    "audit": "npm audit fix --force"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^16.0.3",
+    "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "gpt4all": "^4.0.0",
-    "telegraf": "^4.12.2",
-    "winston": "^3.8.2",
+    "gpt4all": "^4.2.0",
+    "telegraf": "^4.15.3",
+    "winston": "^3.11.0",
     "@yandex-cloud/nodejs-sdk": "^2.5.0",
-    "axios": "^1.6.7"
+    "axios": "^1.6.7",
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.5"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22",
-    "pm2": "^5.3.0"
+    "nodemon": "^3.0.2",
+    "pm2": "^5.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
