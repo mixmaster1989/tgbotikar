@@ -53,17 +53,56 @@ class YaDiskService {
 
     async checkAccess() {
         try {
-            this.log('info', 'checkAccess', 'Проверка доступа к Яндекс.Диску...');
-            const response = await this.api.get('/disk');
+            this.log('info', 'checkAccess', 'Проверка всех прав доступа к Яндекс.Диску...');
 
-            this.log('success', 'checkAccess', `Доступ подтвержден. Доступно: ${response.data.total_space} байт`);
+            // 1. Проверка доступа к информации о диске
+            const diskInfo = await this.api.get('/disk');
+            const totalGb = (diskInfo.data.total_space / 1024 / 1024 / 1024).toFixed(2);
+            this.log('info', 'checkAccess', `✓ Доступ к информации о диске. Всего: ${totalGb} GB`);
+
+            // 2. Проверка чтения диска (корневая директория)
+            const rootContent = await this.api.get('', {
+                params: { path: '/' }
+            });
+            this.log('info', 'checkAccess', '✓ Чтение диска работает');
+
+            // 3. Проверка доступа к папке приложения
+            const appFolder = await this.api.get('', {
+                params: { path: '/app:/' }
+            });
+            this.log('info', 'checkAccess', '✓ Доступ к папке приложения есть');
+
+            // 4. Проверка возможности записи (создаем временную папку)
+            const testFolderName = `test_${Date.now()}`;
+            await this.api.put('', {
+                params: { path: `/app:/${testFolderName}` }
+            });
+            this.log('info', 'checkAccess', '✓ Запись на диск работает');
+
+            // Удаляем тестовую папку
+            await this.api.delete('', {
+                params: { path: `/app:/${testFolderName}` }
+            });
+
+            this.log('success', 'checkAccess', 'Все права доступа подтверждены ✓');
             return true;
+
         } catch (error) {
             if (error.response?.status === 403) {
-                this.log('error', 'checkAccess', 'Недостаточно прав для доступа', error);
+                this.log('error', 'checkAccess', `
+❌ Ошибка прав доступа
+Текущие права:
+✓ Доступ к папке приложения
+✓ Чтение всего Диска
+✓ Запись на Диск
+✓ Доступ к информации
+✓ Чтение аудит лога
+
+Ответ сервера: ${error.response.data.message}`, error);
                 throw new Error('Недостаточно прав для доступа к Яндекс.Диску');
             }
-            this.log('error', 'checkAccess', 'Ошибка при проверке доступа', error);
+
+            this.log('error', 'checkAccess', 'Неизвестная ошибка при проверке доступа', error);
             throw error;
         }
     }
