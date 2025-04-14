@@ -18,8 +18,26 @@ class YaDiskService {
         this.materialsPath = path.join(__dirname, '..', 'materials');
     }
 
+    async checkAccess() {
+        try {
+            const response = await this.api.get('/disk');
+            console.log('✅ Доступ к Яндекс.Диску подтвержден');
+            return true;
+        } catch (error) {
+            if (error.response?.status === 403) {
+                console.error('❌ Ошибка доступа: недостаточно прав');
+                console.error('👉 Проверьте права доступа токена в настройках приложения Яндекс.OAuth');
+                throw new Error('Недостаточно прав для доступа к Яндекс.Диску');
+            }
+            throw error;
+        }
+    }
+
     async syncMaterials() {
         try {
+            // Проверяем доступ перед синхронизацией
+            await this.checkAccess();
+
             // Создаем папку materials если её нет
             await fs.ensureDir(this.materialsPath);
 
