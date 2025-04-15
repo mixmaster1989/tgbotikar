@@ -1,4 +1,4 @@
-// bot.js — Полный ребилд с инлайн-меню и поддержкой PDF
+// bot.js — Полный ребилд с инлайн-меню и поддержкой PDF + улучшенная генерация тестов
 
 const { Telegraf, Markup } = require("telegraf");
 const express = require("express");
@@ -45,12 +45,12 @@ async function initGPT4AllModel() {
   return {
     generate: async (prompt) => {
       const options = {
-        maxTokens: 256,
-        temp: 0.7,
-        topK: 40,
-        topP: 0.4,
-        repeatPenalty: 1.18,
-        batchSize: 8,
+        maxTokens: 192,
+        temp: 0.65,
+        topK: 30,
+        topP: 0.35,
+        repeatPenalty: 1.2,
+        batchSize: 6,
       };
       return (await model.generate(prompt, options)).text;
     },
@@ -63,20 +63,18 @@ async function parseDocxToText(filePath) {
 }
 
 async function generateAIQuestions(text) {
-  const maxInputLength = 1000;
+  const maxInputLength = 700;
   const truncatedText = text.length > maxInputLength ? text.substring(0, maxInputLength) + "..." : text;
-  const prompt = `По тексту создай короткий тестовый вопрос.
-ВОПРОС: краткий вопрос
-А) ответ
-Б) ответ
-В) ответ
-Г) ответ
-ПРАВИЛЬНЫЙ: буква
-
-Текст: ${truncatedText}`;
+  const prompt = `Сформулируй один короткий вопрос с 4 вариантами ответов по тексту ниже. Отметь правильный вариант.
+ВОПРОС: 
+А)
+Б)
+В)
+Г)
+ПРАВИЛЬНЫЙ:`;
 
   if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-  return await gpt4allModel.generate(prompt);
+  return await gpt4allModel.generate(`${prompt}\n\n${truncatedText}`);
 }
 
 function parseTestResponse(response) {
@@ -112,7 +110,6 @@ bot.action("reset", async (ctx) => {
 bot.action("materials", async (ctx) => {
   const files = await yadisk.syncMaterials();
   if (!files.length) return ctx.reply("Файлы не найдены.");
-
   const buttons = files.map((f) => [Markup.button.callback(f, `open_${f}`)]);
   buttons.push([Markup.button.callback("🔄 Резет", "reset")]);
   await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
@@ -123,7 +120,6 @@ bot.action(/open_(.+)/, async (ctx) => {
   const fullPath = path.join(materialsPath, fileName);
   const pdfFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.pdf`;
   const pdfPath = path.join(__dirname, 'static', 'previews', pdfFile);
-
   try {
     await convertDocxToPdf(fullPath, pdfPath);
     await ctx.replyWithDocument({ source: pdfPath, filename: fileName.replace(/\.[^.]+$/, '') + '.pdf' });
@@ -134,12 +130,13 @@ bot.action(/open_(.+)/, async (ctx) => {
 });
 
 bot.action("generate_test", async (ctx) => {
+  await ctx.reply("🧠 Генерация теста началась, подождите... это может занять 1–2 минуты.");
   const files = await yadisk.syncMaterials();
   if (!files.length) return ctx.reply("Нет материалов для генерации теста.");
 
   const random = files[Math.floor(Math.random() * files.length)];
   const filePath = path.join(materialsPath, random);
-  await ctx.reply(`📚 Используется: ${random}`);
+  await ctx.reply(`📚 Используется материал: ${random}`);
 
   const content = await parseDocxToText(filePath);
   const test = await generateAIQuestions(content);
