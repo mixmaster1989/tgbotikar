@@ -13,3 +13,5 @@ async function convertDocxToPdf(inputPath, outputPath) {
     });
     await fs.outputFile(outputPath, pdfBuf);
 }
+
+module.exports = { convertDocxToPdf };
