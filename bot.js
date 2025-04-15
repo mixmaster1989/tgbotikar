@@ -1,4 +1,4 @@
-// bot.js — Исправленный вариант с инлайн-меню без синтаксических ошибок
+// bot.js — Полный ребилд с инлайн-меню и поддержкой PDF
 
 const { Telegraf, Markup } = require("telegraf");
 const express = require("express");
@@ -11,6 +11,8 @@ const gpt4all = require("gpt4all");
 require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
+const { convertDocxToPdf } = require("./modules/docx2pdf");
+
 const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 
 const PORT = process.env.PORT || 3000;
@@ -24,103 +26,167 @@ const app = express();
 app.use("/static", express.static(path.join(__dirname, "static")));
 
 const db = new sqlite3.Database("database.sqlite", (err) => {
-    if (err) console.error("DB Error:", err);
-    else initDatabase();
+  if (err) console.error("DB Error:", err);
+  else initDatabase();
 });
 
 function initDatabase() {
-    db.run(`CREATE TABLE IF NOT EXISTS gpt_cache (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      prompt TEXT UNIQUE,
-      response TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`);
+  db.run(`CREATE TABLE IF NOT EXISTS gpt_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prompt TEXT UNIQUE,
+    response TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
 }
 
 let gpt4allModel = null;
 async function initGPT4AllModel() {
-    const model = await gpt4all.loadModel(modelName);
-    return {
-        generate: async (prompt) => {
-            const options = {
-                maxTokens: 256,
-                temp: 0.7,
-                topK: 40,
-                topP: 0.4,
-                repeatPenalty: 1.18,
-                batchSize: 8
-            };
-            return (await model.generate(prompt, options)).text;
-        }
-    };
+  const model = await gpt4all.loadModel(modelName);
+  return {
+    generate: async (prompt) => {
+      const options = {
+        maxTokens: 256,
+        temp: 0.7,
+        topK: 40,
+        topP: 0.4,
+        repeatPenalty: 1.18,
+        batchSize: 8,
+      };
+      return (await model.generate(prompt, options)).text;
+    },
+  };
 }
 
 async function parseDocxToText(filePath) {
-    const result = await mammoth.extractRawText({ path: filePath });
-    return result.value.trim();
+  const result = await mammoth.extractRawText({ path: filePath });
+  return result.value.trim();
+}
+
+async function generateAIQuestions(text) {
+  const maxInputLength = 1000;
+  const truncatedText = text.length > maxInputLength ? text.substring(0, maxInputLength) + "..." : text;
+  const prompt = `По тексту создай короткий тестовый вопрос.
+ВОПРОС: краткий вопрос
+А) ответ
+Б) ответ
+В) ответ
+Г) ответ
+ПРАВИЛЬНЫЙ: буква
+
+Текст: ${truncatedText}`;
+
+  if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+  return await gpt4allModel.generate(prompt);
+}
+
+function parseTestResponse(response) {
+  const lines = response.split("\n");
+  return {
+    question: lines[0].replace("ВОПРОС:", "").trim(),
+    answers: {
+      А: lines[1]?.slice(3).trim(),
+      Б: lines[2]?.slice(3).trim(),
+      В: lines[3]?.slice(3).trim(),
+      Г: lines[4]?.slice(3).trim(),
+    },
+    correct: lines[5]?.replace("ПРАВИЛЬНЫЙ:", "").trim(),
+  };
 }
 
 function mainMenuKeyboard() {
-    return Markup.inlineKeyboard([
-        [Markup.button.callback("\uD83D\uDCC2 Материалы", "materials")],
-        [Markup.button.callback("\uD83D\uDCDD Генерация Теста", "generate_test")],
-        [Markup.button.callback("\uD83D\uDCCA Кэш", "cache_ops")],
-        [Markup.button.callback("\u2699\uFE0F Настройки", "settings")],
-        [Markup.button.callback("\uD83D\uDD04 Резет", "reset")]
-    ]);
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("📂 Материалы", "materials")],
+    [Markup.button.callback("📝 Генерация Теста", "generate_test")],
+    [Markup.button.callback("📊 Кэш", "cache_ops")],
+    [Markup.button.callback("⚙️ Настройки", "settings")],
+    [Markup.button.callback("🔄 Резет", "reset")],
+  ]);
 }
 
-bot.start(async (ctx) => {
-    return ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard());
-});
+bot.start((ctx) => ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()));
 
 bot.action("reset", async (ctx) => {
-    await ctx.reply("История сброшена. Выберите раздел:", mainMenuKeyboard());
+  await ctx.reply("История сброшена.", mainMenuKeyboard());
 });
 
 bot.action("materials", async (ctx) => {
-    const files = await yadisk.syncMaterials();
-    if (!files.length) return ctx.reply("Файлы не найдены.");
+  const files = await yadisk.syncMaterials();
+  if (!files.length) return ctx.reply("Файлы не найдены.");
 
-    const buttons = files.map((f) => [Markup.button.callback(f, `open_${f}`)]);
-    buttons.push([Markup.button.callback('\uD83D\uDD04 Резет', 'reset')]);
-    await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
+  const buttons = files.map((f) => [Markup.button.callback(f, `open_${f}`)]);
+  buttons.push([Markup.button.callback("🔄 Резет", "reset")]);
+  await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
+});
+
+bot.action(/open_(.+)/, async (ctx) => {
+  const fileName = ctx.match[1];
+  const fullPath = path.join(materialsPath, fileName);
+  const pdfFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.pdf`;
+  const pdfPath = path.join(__dirname, 'static', 'previews', pdfFile);
+
+  try {
+    await convertDocxToPdf(fullPath, pdfPath);
+    await ctx.replyWithDocument({ source: pdfPath, filename: fileName.replace(/\.[^.]+$/, '') + '.pdf' });
+  } catch (err) {
+    console.error('Ошибка при конвертации DOCX в PDF:', err);
+    await ctx.reply('❌ Не удалось сконвертировать файл.');
+  }
+});
+
+bot.action("generate_test", async (ctx) => {
+  const files = await yadisk.syncMaterials();
+  if (!files.length) return ctx.reply("Нет материалов для генерации теста.");
+
+  const random = files[Math.floor(Math.random() * files.length)];
+  const filePath = path.join(materialsPath, random);
+  await ctx.reply(`📚 Используется: ${random}`);
+
+  const content = await parseDocxToText(filePath);
+  const test = await generateAIQuestions(content);
+  const parsed = parseTestResponse(test);
+
+  let message = `❓ <b>${parsed.question}</b>\n`;
+  for (const key in parsed.answers) {
+    message += `\n${key}) ${parsed.answers[key]}`;
+  }
+  message += `\n\n✅ Правильный ответ: ${parsed.correct}`;
+
+  await ctx.replyWithHTML(message);
+  await ctx.reply("Выберите действие:", mainMenuKeyboard());
 });
 
 bot.action("cache_ops", async (ctx) => {
-    ctx.reply("\uD83D\uDCCA Кэш:", Markup.inlineKeyboard([
-        [Markup.button.callback("Очистить кэш", "clear_cache")],
-        [Markup.button.callback("Назад", "start")],
-        [Markup.button.callback("\uD83D\uDD04 Резет", "reset")]
-    ]));
-});
-
-bot.action("settings", async (ctx) => {
-    ctx.reply("\u2699\uFE0F Настройки:", Markup.inlineKeyboard([
-        [Markup.button.callback("\uD83D\uDD01 Синхронизация", "sync_disk")],
-        [Markup.button.callback("\uD83D\uDD0D Проверка модели", "check_model")],
-        [Markup.button.callback("\u2B05\uFE0F Назад", "start")],
-        [Markup.button.callback("\uD83D\uDD04 Резет", "reset")]
-    ]));
+  ctx.reply("📊 Кэш:", Markup.inlineKeyboard([
+    [Markup.button.callback("Очистить кэш", "clear_cache")],
+    [Markup.button.callback("Назад", "start")],
+    [Markup.button.callback("🔄 Резет", "reset")],
+  ]));
 });
 
 bot.action("clear_cache", async (ctx) => {
-    db.run("DELETE FROM gpt_cache", () => ctx.reply("\uD83E\uDEC3 Кэш очищен"));
+  db.run("DELETE FROM gpt_cache", () => ctx.reply("🧹 Кэш очищен"));
+});
+
+bot.action("settings", async (ctx) => {
+  ctx.reply("⚙️ Настройки:", Markup.inlineKeyboard([
+    [Markup.button.callback("🔁 Синхронизация", "sync_disk")],
+    [Markup.button.callback("🔍 Проверка модели", "check_model")],
+    [Markup.button.callback("⬅️ Назад", "start")],
+  ]));
 });
 
 bot.action("sync_disk", async (ctx) => {
-    const files = await yadisk.syncMaterials();
-    ctx.reply(`✅ Синхронизация завершена: ${files.length} файлов`);
+  const files = await yadisk.syncMaterials();
+  ctx.reply(`✅ Синхронизация завершена: ${files.length} файлов`);
 });
 
 bot.action("check_model", async (ctx) => {
-    if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-    ctx.reply("✅ Модель загружена и готова к работе.");
+  if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+  ctx.reply("✅ Модель загружена и готова к работе.");
 });
 
-// === Запуск ===
 (async () => {
-    app.listen(PORT, () => console.log(`🌍 Web App: http://localhost:${PORT}`));
-    await bot.launch();
-    console.log("🤖 Бот запущен!");
+  app.listen(PORT, () => console.log(`🌍 Web App: http://localhost:${PORT}`));
+  await bot.launch();
+  console.log("🤖 Бот запущен!");
 })();
