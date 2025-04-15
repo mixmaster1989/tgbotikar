@@ -61,8 +61,8 @@ async function initGPT4AllModel() {
     };
 }
 
-async function parseDocxToText(filePath) {
-    const result = await mammoth.extractRawText({ path: filePath });
+async function parseDocxToHtml(filePath) {
+    const result = await mammoth.convertToHtml({ path: filePath });
     return result.value.trim();
 }
 
@@ -124,8 +124,40 @@ bot.action("materials", async (ctx) => {
 bot.action(/open_(.+)/, async (ctx) => {
     const fileName = ctx.match[1];
     const fullPath = path.join(materialsPath, fileName);
-    const content = await parseDocxToText(fullPath);
-    ctx.replyWithHTML(`<b>Содержимое:</b>\n\n${content.substring(0, 1500)}...`);
+    const htmlContent = await parseDocxToHtml(fullPath);
+
+    // Генерируем имя файла для превью
+    const previewFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.html`;
+    const previewPath = path.join(__dirname, 'static', 'previews', previewFile);
+
+    // Оборачиваем в полноценный HTML-документ
+    const fullHtml = `<!DOCTYPE html>
+<html lang=\"ru\">
+<head>
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <title>Материал: ${fileName}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 16px; background: #fafbfc; }
+        .docx-content { background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 2px 8px #0001; }
+    </style>
+</head>
+<body>
+    <div class=\"docx-content\">${htmlContent}</div>
+</body>
+</html>`;
+
+    // Сохраняем превью
+    await fs.outputFile(previewPath, fullHtml);
+
+    // Формируем ссылку
+    const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
+    const fileUrl = `${baseUrl}/static/previews/${previewFile}`;
+
+    // Отправляем web_app кнопку
+    await ctx.reply('Открыть материал с оформлением:', Markup.inlineKeyboard([
+        [Markup.button.webApp('Открыть', fileUrl)]
+    ]));
 });
 
 // Обновляем обработчик кнопки генерации теста
