@@ -104,8 +104,27 @@ function parseTestResponse(response) {
 }
 
 // === Меню и Обработчики ===
+function mainMenuKeyboard() {
+    return Markup.inlineKeyboard([
+        [Markup.button.callback("📂 Материалы", "materials")],
+        [Markup.button.callback("📝 Генерация Теста", "generate_test")],
+        [Markup.button.callback("📊 Кэш", "cache_ops")],
+        [Markup.button.callback("⚙️ Настройки", "settings")],
+        [Markup.button.callback("🔄 Резет", "reset")],
+    ]);
+} // оставляем только одну функцию
+
+// === КОММЕНТАРИЙ: начало главного меню ===
 bot.start(async (ctx) => {
-    return ctx.reply("Добро пожаловать! Выберите раздел:", Markup.inlineKeyboard([
+    return ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard());
+});
+
+bot.action('reset', async (ctx) => {
+    // Очистка кэша пользователя (если есть таблица user_cache, добавить сюда логику)
+    // await db.run("DELETE FROM user_cache WHERE user_id = ?", [ctx.from.id]);
+    await ctx.reply("История бота сброшена! Добро пожаловать! Выберите раздел:", mainMenuKeyboard());
+});
+    return ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()
         [Markup.button.callback("📂 Материалы", "materials")],
         [Markup.button.callback("📝 Генерация Теста", "generate_test")],
         [Markup.button.callback("📊 Кэш", "cache_ops")],
@@ -118,10 +137,17 @@ bot.action("materials", async (ctx) => {
     if (!files.length) return ctx.reply("Файлы не найдены.");
 
     const buttons = files.map((f) => [Markup.button.callback(f, `open_${f}`)]);
-    await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
+    buttons.push([Markup.button.callback('🔄 Резет', 'reset')]);
+await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
 });
 
 const { convertDocxToPdf } = require('./modules/docx2pdf');
+
+// Функция для парсинга docx в текст
+async function parseDocxToText(filePath) {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return result.value.trim();
+}
 
 bot.action(/open_(.+)/, async (ctx) => {
     const fileName = ctx.match[1];
@@ -169,12 +195,17 @@ bot.action("generate_test", async (ctx) => {
         await ctx.reply(`❌ ${error.message || 'Произошла ошибка при генерации теста.'}`);
     } finally {
         // Возвращаем главное меню
-        await ctx.reply("Выберите действие:", mainMenuKeyboard);
+        await ctx.reply("Выберите действие:", mainMenuKeyboard());
     }
 });
 
+// === КОММЕНТАРИЙ: начало меню кэша ===
 bot.action("cache_ops", async (ctx) => {
     ctx.reply("📊 Кэш:", Markup.inlineKeyboard([
+    [Markup.button.callback("Очистить кэш", "clear_cache")],
+    [Markup.button.callback("Назад", "start")],
+    [Markup.button.callback("🔄 Резет", "reset")],
+]));
         [Markup.button.callback("Очистить кэш", "clear_cache")],
         [Markup.button.callback("Назад", "start")],
     ]));
@@ -186,6 +217,11 @@ bot.action("clear_cache", async (ctx) => {
 
 bot.action("settings", async (ctx) => {
     ctx.reply("⚙️ Настройки:", Markup.inlineKeyboard([
+    [Markup.button.callback("🔁 Синхронизация", "sync_disk")],
+    [Markup.button.callback("🔍 Проверка модели", "check_model")],
+    [Markup.button.callback("⬅️ Назад", "start")],
+    [Markup.button.callback("🔄 Резет", "reset")],
+]));
         [Markup.button.callback("🔁 Синхронизация", "sync_disk")],
         [Markup.button.callback("🔍 Проверка модели", "check_model")],
         [Markup.button.callback("⬅️ Назад", "start")],
