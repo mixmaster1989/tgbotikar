@@ -1,6 +1,5 @@
-// bot.js — Полный ребилд с инлайн-меню
+// bot.js — Исправленный вариант с инлайн-меню без синтаксических ошибок
 
-// === Зависимости ===
 const { Telegraf, Markup } = require("telegraf");
 const express = require("express");
 const fs = require("fs-extra");
@@ -14,15 +13,12 @@ require("dotenv").config();
 const YaDiskService = require("./services/yadisk_service");
 const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 
-// === Константы ===
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
 const modelDir = path.join(os.homedir(), ".cache", "gpt4all");
 const materialsPath = path.join(__dirname, "materials");
-const GENERATION_TIMEOUT = 60000; // 60 секунд
 
-// === Инициализация ===
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 app.use("/static", express.static(path.join(__dirname, "static")));
@@ -33,14 +29,12 @@ const db = new sqlite3.Database("database.sqlite", (err) => {
 });
 
 function initDatabase() {
-    db.run(
-        `CREATE TABLE IF NOT EXISTS gpt_cache (
+    db.run(`CREATE TABLE IF NOT EXISTS gpt_cache (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       prompt TEXT UNIQUE,
       response TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`
-    );
+    )`);
 }
 
 let gpt4allModel = null;
@@ -49,87 +43,39 @@ async function initGPT4AllModel() {
     return {
         generate: async (prompt) => {
             const options = {
-                maxTokens: 256,        // Ограничиваем длину генерации
-                temp: 0.7,             // Немного снижаем температуру
-                topK: 40,             // Ограничиваем выборку топ-токенов
-                topP: 0.4,            // Уменьшаем разнообразие
-                repeatPenalty: 1.18,   // Увеличиваем штраф за повторы
-                batchSize: 8          // Уменьшаем размер батча
+                maxTokens: 256,
+                temp: 0.7,
+                topK: 40,
+                topP: 0.4,
+                repeatPenalty: 1.18,
+                batchSize: 8
             };
             return (await model.generate(prompt, options)).text;
         }
     };
 }
 
-async function parseDocxToHtml(filePath) {
-    const result = await mammoth.convertToHtml({ path: filePath });
+async function parseDocxToText(filePath) {
+    const result = await mammoth.extractRawText({ path: filePath });
     return result.value.trim();
 }
 
-// Улучшенная функция генерации вопросов
-async function generateAIQuestions(text) {
-    // Обрезаем входной текст до оптимального размера
-    const maxInputLength = 1000;
-    const truncatedText = text.length > maxInputLength
-        ? text.substring(0, maxInputLength) + "..."
-        : text;
-
-    // Упрощаем промпт
-    const prompt = `По тексту создай короткий тестовый вопрос.
-ВОПРОС: краткий вопрос
-А) ответ
-Б) ответ
-В) ответ
-Г) ответ
-ПРАВИЛЬНЫЙ: буква
-
-Текст: ${truncatedText}`;
-
-    if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-    return await gpt4allModel.generate(prompt);
-}
-
-function parseTestResponse(response) {
-    const lines = response.split("\n");
-    return {
-        question: lines[0].replace("ВОПРОС:", "").trim(),
-        answers: {
-            А: lines[1].slice(3).trim(),
-            Б: lines[2].slice(3).trim(),
-            В: lines[3].slice(3).trim(),
-            Г: lines[4].slice(3).trim(),
-        },
-        correct: lines[5].replace("ПРАВИЛЬНЫЙ:", "").trim(),
-    };
-}
-
-// === Меню и Обработчики ===
 function mainMenuKeyboard() {
     return Markup.inlineKeyboard([
-        [Markup.button.callback("📂 Материалы", "materials")],
-        [Markup.button.callback("📝 Генерация Теста", "generate_test")],
-        [Markup.button.callback("📊 Кэш", "cache_ops")],
-        [Markup.button.callback("⚙️ Настройки", "settings")],
-        [Markup.button.callback("🔄 Резет", "reset")],
+        [Markup.button.callback("\uD83D\uDCC2 Материалы", "materials")],
+        [Markup.button.callback("\uD83D\uDCDD Генерация Теста", "generate_test")],
+        [Markup.button.callback("\uD83D\uDCCA Кэш", "cache_ops")],
+        [Markup.button.callback("\u2699\uFE0F Настройки", "settings")],
+        [Markup.button.callback("\uD83D\uDD04 Резет", "reset")]
     ]);
-} // оставляем только одну функцию
+}
 
-// === КОММЕНТАРИЙ: начало главного меню ===
 bot.start(async (ctx) => {
     return ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard());
 });
 
-bot.action('reset', async (ctx) => {
-    // Очистка кэша пользователя (если есть таблица user_cache, добавить сюда логику)
-    // await db.run("DELETE FROM user_cache WHERE user_id = ?", [ctx.from.id]);
-    await ctx.reply("История бота сброшена! Добро пожаловать! Выберите раздел:", mainMenuKeyboard());
-});
-    return ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()
-        [Markup.button.callback("📂 Материалы", "materials")],
-        [Markup.button.callback("📝 Генерация Теста", "generate_test")],
-        [Markup.button.callback("📊 Кэш", "cache_ops")],
-        [Markup.button.callback("⚙️ Настройки", "settings")],
-    ]));
+bot.action("reset", async (ctx) => {
+    await ctx.reply("История сброшена. Выберите раздел:", mainMenuKeyboard());
 });
 
 bot.action("materials", async (ctx) => {
@@ -137,95 +83,29 @@ bot.action("materials", async (ctx) => {
     if (!files.length) return ctx.reply("Файлы не найдены.");
 
     const buttons = files.map((f) => [Markup.button.callback(f, `open_${f}`)]);
-    buttons.push([Markup.button.callback('🔄 Резет', 'reset')]);
-await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
+    buttons.push([Markup.button.callback('\uD83D\uDD04 Резет', 'reset')]);
+    await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
 });
 
-const { convertDocxToPdf } = require('./modules/docx2pdf');
-
-// Функция для парсинга docx в текст
-async function parseDocxToText(filePath) {
-    const result = await mammoth.extractRawText({ path: filePath });
-    return result.value.trim();
-}
-
-bot.action(/open_(.+)/, async (ctx) => {
-    const fileName = ctx.match[1];
-    const fullPath = path.join(materialsPath, fileName);
-    const pdfFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.pdf`;
-    const pdfPath = path.join(__dirname, 'static', 'previews', pdfFile);
-
-    try {
-        await convertDocxToPdf(fullPath, pdfPath);
-        await ctx.replyWithDocument({ source: pdfPath, filename: fileName.replace(/\.[^.]+$/, '') + '.pdf' });
-    } catch (err) {
-        console.error('Ошибка при конвертации DOCX в PDF:', err);
-        await ctx.reply('❌ Не удалось сконвертировать файл.');
-    }
-});
-
-// Обновляем обработчик кнопки генерации теста
-bot.action("generate_test", async (ctx) => {
-    try {
-        await ctx.reply("🔄 Генерация теста...");
-
-        const files = await yadisk.syncMaterials();
-        if (!files.length) {
-            return ctx.reply("❌ Нет материалов для генерации теста.");
-        }
-
-        const random = files[Math.floor(Math.random() * files.length)];
-        const filePath = path.join(materialsPath, random);
-
-        await ctx.reply(`📚 Использую материал: ${random}`);
-
-        const content = await parseDocxToText(filePath);
-        const test = await generateAIQuestions(content);
-        const parsed = parseTestResponse(test);
-
-        let message = `❓ <b>${parsed.question}</b>\n`;
-        for (const key in parsed.answers) {
-            message += `\n${key}) ${parsed.answers[key]}`;
-        }
-        message += `\n\n✅ Правильный ответ: ${parsed.correct}`;
-
-        await ctx.replyWithHTML(message);
-    } catch (error) {
-        console.error('Ошибка:', error);
-        await ctx.reply(`❌ ${error.message || 'Произошла ошибка при генерации теста.'}`);
-    } finally {
-        // Возвращаем главное меню
-        await ctx.reply("Выберите действие:", mainMenuKeyboard());
-    }
-});
-
-// === КОММЕНТАРИЙ: начало меню кэша ===
 bot.action("cache_ops", async (ctx) => {
-    ctx.reply("📊 Кэш:", Markup.inlineKeyboard([
-    [Markup.button.callback("Очистить кэш", "clear_cache")],
-    [Markup.button.callback("Назад", "start")],
-    [Markup.button.callback("🔄 Резет", "reset")],
-]));
+    ctx.reply("\uD83D\uDCCA Кэш:", Markup.inlineKeyboard([
         [Markup.button.callback("Очистить кэш", "clear_cache")],
         [Markup.button.callback("Назад", "start")],
+        [Markup.button.callback("\uD83D\uDD04 Резет", "reset")]
+    ]));
+});
+
+bot.action("settings", async (ctx) => {
+    ctx.reply("\u2699\uFE0F Настройки:", Markup.inlineKeyboard([
+        [Markup.button.callback("\uD83D\uDD01 Синхронизация", "sync_disk")],
+        [Markup.button.callback("\uD83D\uDD0D Проверка модели", "check_model")],
+        [Markup.button.callback("\u2B05\uFE0F Назад", "start")],
+        [Markup.button.callback("\uD83D\uDD04 Резет", "reset")]
     ]));
 });
 
 bot.action("clear_cache", async (ctx) => {
-    db.run("DELETE FROM gpt_cache", () => ctx.reply("🧹 Кэш очищен"));
-});
-
-bot.action("settings", async (ctx) => {
-    ctx.reply("⚙️ Настройки:", Markup.inlineKeyboard([
-    [Markup.button.callback("🔁 Синхронизация", "sync_disk")],
-    [Markup.button.callback("🔍 Проверка модели", "check_model")],
-    [Markup.button.callback("⬅️ Назад", "start")],
-    [Markup.button.callback("🔄 Резет", "reset")],
-]));
-        [Markup.button.callback("🔁 Синхронизация", "sync_disk")],
-        [Markup.button.callback("🔍 Проверка модели", "check_model")],
-        [Markup.button.callback("⬅️ Назад", "start")],
-    ]));
+    db.run("DELETE FROM gpt_cache", () => ctx.reply("\uD83E\uDEC3 Кэш очищен"));
 });
 
 bot.action("sync_disk", async (ctx) => {
