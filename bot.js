@@ -172,10 +172,7 @@ bot.action("generate_cache", async (ctx) => {
 
   // 2. Сохраняем в датасет
   const datasetFilePath = path.join(cachePath, "dataset.json");
-  if (!fs.existsSync(cachePath)) {
-    fs.mkdirSync(cachePath, { recursive: true });
-  }
-  
+
   let dataset = [];
   if (fs.existsSync(datasetFilePath)) {
     const existingData = fs.readFileSync(datasetFilePath, 'utf8');
@@ -191,7 +188,12 @@ bot.action("generate_cache", async (ctx) => {
   fs.writeFileSync(datasetFilePath, JSON.stringify(dataset, null, 2));
 
   // Загрузка на Я.Диск
-  await yadisk.uploadFile(datasetFilePath, `/dataset/${path.basename(datasetFilePath)}`);
+  try {
+    await yadisk.uploadFile(datasetFilePath, `/dataset/${path.basename(datasetFilePath)}`);
+    console.log(`Файл загружен на Я.Диск: /dataset/${path.basename(datasetFilePath)}`);
+  } catch (error) {
+    console.error("Ошибка загрузки на Я.Диск:", error);
+  }
 
   await ctx.reply("✅ Кэш и датасет обновлены.");
   await ctx.reply("Выберите действие:", mainMenuKeyboard());
