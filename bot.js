@@ -7,7 +7,6 @@ const sqlite3 = require("sqlite3").verbose();
 const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 require("dotenv").config();
-const timeout = require('p-timeout');  // Импортируем p-timeout для установки тайм-аутов
 
 const YaDiskService = require("./services/yadisk_service");
 const { convertDocxToPdf } = require("./modules/docx2pdf");
@@ -50,7 +49,7 @@ async function initGPT4AllModel() {
         topK: 30,
         topP: 0.35,
         repeatPenalty: 1.2,
-        batchSize: 6,
+        batchSize: 1,  // Уменьшаем batchSize для уменьшения времени генерации
       };
       return (await model.generate(prompt, options)).text;
     },
@@ -68,12 +67,7 @@ async function generateAIQuestions(text) {
   const prompt = `Сформулируй один короткий вопрос с 4 вариантами ответов по тексту ниже. Отметь правильный вариант.\nВОПРОС:\nА)\nБ)\nВ)\nГ)\nПРАВИЛЬНЫЙ:`;
   if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
   
-  // Используем p-timeout для увеличения тайм-аута до 120 секунд
-  return await timeout(
-    gpt4allModel.generate(`${prompt}\n\n${truncatedText}`),
-    120000, // 120 секунд
-    new Error('Генерация вопроса превысила время ожидания!')
-  );
+  return await gpt4allModel.generate(`${prompt}\n\n${truncatedText}`);
 }
 
 function parseTestResponse(response) {
@@ -138,9 +132,6 @@ bot.action("generate_test", async (ctx) => {
   const filePath = path.join(materialsPath, random);
   await ctx.reply(`📚 Используется материал: ${random}`);
   
-  // Логируем время начала обработки
-  console.log("Начало генерации теста:", new Date());
-  
   const content = await parseDocxToText(filePath);
   let test;
   try {
@@ -149,9 +140,6 @@ bot.action("generate_test", async (ctx) => {
     console.error("Ошибка генерации вопроса:", err);
     return ctx.reply("❌ Не удалось сгенерировать вопрос.");
   }
-
-  // Логируем время завершения обработки
-  console.log("Генерация теста завершена:", new Date());
 
   const parsed = parseTestResponse(test);
 
