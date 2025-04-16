@@ -172,7 +172,10 @@ bot.action("generate_cache", async (ctx) => {
 
   // 2. Сохраняем в датасет
   const datasetFilePath = path.join(cachePath, "dataset.json");
-
+  if (!fs.existsSync(cachePath)) {
+    fs.mkdirSync(cachePath, { recursive: true });
+  }
+  
   let dataset = [];
   if (fs.existsSync(datasetFilePath)) {
     const existingData = fs.readFileSync(datasetFilePath, 'utf8');
