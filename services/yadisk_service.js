@@ -115,7 +115,35 @@ class YaDiskService {
             throw error;
         }
     }
-
+    async uploadFile(localPath, remotePath) {
+        try {
+            this.log('info', 'upload', `Запрос ссылки для загрузки файла на Я.Диск: ${remotePath}`);
+            const uploadLinkResponse = await this.api.get('/resources/upload', {
+                params: {
+                    path: remotePath,
+                    overwrite: true
+                }
+            });
+    
+            const uploadUrl = uploadLinkResponse.data.href;
+            this.log('info', 'upload', `Начало загрузки файла ${localPath} → ${remotePath}`);
+    
+            const fileData = await fs.readFile(localPath);
+    
+            await axios.put(uploadUrl, fileData, {
+                headers: {
+                    'Content-Type': 'application/octet-stream'
+                }
+            });
+    
+            this.log('success', 'upload', `Файл успешно загружен: ${remotePath}`);
+            return true;
+        } catch (error) {
+            this.log('error', 'upload', `Ошибка при загрузке файла ${remotePath}`, error);
+            throw error;
+        }
+    }
+    
     async syncMaterials() {
         try {
             this.log('info', 'sync', 'Начало синхронизации материалов...');

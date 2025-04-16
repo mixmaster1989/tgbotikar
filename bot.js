@@ -189,7 +189,8 @@ bot.action("generate_cache", async (ctx) => {
 
   // Загрузка на Я.Диск
   try {
-    await yadisk.uploadFile(datasetFilePath, `/dataset/${path.basename(datasetFilePath)}`);
+    await yadisk.uploadFile('/local/path/to/file.docx', '/bot_cache/file.docx');
+    
     console.log(`Файл загружен на Я.Диск: /dataset/${path.basename(datasetFilePath)}`);
   } catch (error) {
     console.error("Ошибка загрузки на Я.Диск:", error);
