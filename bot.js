@@ -1,4 +1,4 @@
-/ bot.js — Гибридная версия: кэш + Я.Диск + PDF + генерация промтов/датасета
+// bot.js — Гибридная версия: кэш + Я.Диск + PDF + генерация промтов/датасета
 
 const { Telegraf, Markup } = require("telegraf");
 const express = require("express");
