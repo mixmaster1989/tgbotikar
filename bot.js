@@ -91,6 +91,13 @@ function saveToCache(question, response) {
   stmt.finalize();
 }
 
+// Логирование в консоль и в бот
+function logAndNotify(message, ctx = null) {
+  const logMessage = `[${new Date().toISOString()}] ${message}`;
+  console.log(logMessage); // Логируем в консоль
+  if (ctx) ctx.reply(message); // Отправляем в бот
+}
+
 // Основное меню
 function mainMenuKeyboard() {
   return Markup.inlineKeyboard([
@@ -105,69 +112,22 @@ function mainMenuKeyboard() {
 bot.start((ctx) => ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()));
 bot.action("reset", async (ctx) => ctx.reply("История сброшена.", mainMenuKeyboard()));
 
-// Загрузка материалов
-bot.action("materials", async (ctx) => {
-  const files = await yadisk.syncMaterials();
-  if (!files.length) return ctx.reply("Файлы не найдены.");
-  const buttons = files.map((f) => [Markup.button.callback(f, `open_${f}`)]);
-  buttons.push([Markup.button.callback("🔄 Резет", "reset")]);
-  await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
-});
-
-// Открытие файла
-bot.action(/open_(.+)/, async (ctx) => {
-  const fileName = ctx.match[1];
-  const fullPath = path.join(materialsPath, fileName);
-  const pdfFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.pdf`;
-  const pdfPath = path.join(__dirname, 'static', 'previews', pdfFile);
-  try {
-    await convertDocxToPdf(fullPath, pdfPath);
-    await ctx.replyWithDocument({ source: pdfPath, filename: fileName.replace(/\.[^.]+$/, '') + '.pdf' });
-  } catch (err) {
-    console.error('Ошибка при конвертации DOCX в PDF:', err);
-    await ctx.reply('❌ Не удалось сконвертировать файл.');
-  }
-});
-
-// Генерация теста
-bot.action("generate_test", async (ctx) => {
-  const files = await yadisk.syncMaterials();
-  if (!files.length) return ctx.reply("Нет материалов для генерации.");
-  const random = files[Math.floor(Math.random() * files.length)];
-  const filePath = path.join(materialsPath, random);
-  await ctx.reply(`📚 Используется материал: ${random}`);
-  
-  const content = await parseDocxToText(filePath);
-  let test;
-  try {
-    test = await generateAIQuestions(content);
-  } catch (err) {
-    console.error("Ошибка генерации вопроса:", err);
-    return ctx.reply("❌ Не удалось сгенерировать вопрос.");
-  }
-
-  const parsed = parseTestResponse(test);
-
-  let message = `❓ <b>${parsed.question}</b>\n`;
-  for (const key in parsed.answers) {
-    message += `\n${key}) ${parsed.answers[key]}`;
-  }
-  message += `\n\n✅ Правильный ответ: ${parsed.correct}`;
-  await ctx.replyWithHTML(message);
-  await ctx.reply("Выберите действие:", mainMenuKeyboard());
-});
-
 // Генерация кэша и датасета
 bot.action("generate_cache", async (ctx) => {
   await ctx.answerCbQuery("⏳ Генерация началась..."); // Быстрый ответ на callback (избегаем таймаута)
-  ctx.reply("🛠️ Генерация кэша и датасета запущена, подождите...");
+  logAndNotify("🛠️ Генерация кэша и датасета запущена, подождите...", ctx);
 
   setTimeout(async () => {
     try {
       const files = await yadisk.syncMaterials();
-      if (!files.length) return ctx.reply("Нет файлов для кэша.");
+      if (!files.length) {
+        logAndNotify("Нет файлов для кэша.", ctx);
+        return;
+      }
+
       const random = files[Math.floor(Math.random() * files.length)];
       const filePath = path.join(materialsPath, random);
+      logAndNotify(`Используется файл: ${random}`, ctx);
       const content = await parseDocxToText(filePath);
       const questionResponse = await generateAIQuestions(content);
       const parsed = parseTestResponse(questionResponse);
@@ -189,40 +149,19 @@ bot.action("generate_cache", async (ctx) => {
 
       try {
         await yadisk.uploadFile(datasetFilePath, `/bot_cache/${path.basename(datasetFilePath)}`);
-        console.log(`Файл загружен на Я.Диск: /bot_cache/${path.basename(datasetFilePath)}`);
+        logAndNotify(`Файл загружен на Я.Диск: /bot_cache/${path.basename(datasetFilePath)}`, ctx);
       } catch (error) {
-        console.error("Ошибка загрузки на Я.Диск:", error);
+        logAndNotify(`Ошибка загрузки на Я.Диск: ${error.message}`, ctx);
       }
 
-      await ctx.reply("✅ Кэш и датасет обновлены.");
+      logAndNotify("✅ Кэш и датасет обновлены.", ctx);
     } catch (err) {
-      console.error("Ошибка в генерации кэша:", err);
+      logAndNotify(`Ошибка в генерации кэша: ${err.message}`, ctx);
       await ctx.reply("❌ Ошибка при генерации.");
     }
 
     await ctx.reply("Выберите действие:", mainMenuKeyboard());
   }, 100); // Задержка в 100 мс, чтобы избежать телегиных ограничений
-});
-
-// Настройки
-bot.action("settings", async (ctx) => {
-  ctx.reply("⚙️ Настройки:", Markup.inlineKeyboard([
-    [Markup.button.callback("🔁 Синхронизация", "sync_disk")],
-    [Markup.button.callback("🔍 Проверка модели", "check_model")],
-    [Markup.button.callback("⬅️ Назад", "reset")],
-  ]));
-});
-
-// Синхронизация с Я.Диском
-bot.action("sync_disk", async (ctx) => {
-  const files = await yadisk.syncMaterials();
-  ctx.reply(`✅ Синхронизация завершена: ${files.length} файлов`);
-});
-
-// Проверка модели
-bot.action("check_model", async (ctx) => {
-  if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-  ctx.reply("✅ Модель загружена и готова к работе.");
 });
 
 (async () => {
