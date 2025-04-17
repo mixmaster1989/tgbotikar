@@ -515,6 +515,33 @@ bot.action("generate_test", async (ctx) => {
         const filePath = path.join(materialsPath, random);
         await ctx.reply(`📚 Используется: ${random}`);
 
+        // Отправляем сообщение с прогресс-баром
+        const progressMessage = await ctx.reply("⏳ Генерация теста началась...\n[                    ] 0%");
+
+        const statuses = [
+            "📖 Извлечение текста из файла...",
+            "🤖 Генерация вопросов...",
+            "📝 Форматирование результатов...",
+            "📦 Завершение процесса..."
+        ];
+
+        const totalSteps = statuses.length;
+        const totalTime = 200; // Общее время выполнения в секундах
+        const updateInterval = totalTime / totalSteps; // Интервал обновления в секундах
+
+        for (let i = 0; i < totalSteps; i++) {
+            await new Promise((resolve) => setTimeout(resolve, updateInterval * 1000)); // Ждем интервал
+            const progress = Math.round(((i + 1) / totalSteps) * 100);
+            const progressBar = `[${"=".repeat(progress / 5)}${" ".repeat(20 - progress / 5)}] ${progress}%`;
+
+            await ctx.telegram.editMessageText(
+                ctx.chat.id,
+                progressMessage.message_id,
+                null,
+                `${statuses[i]}\n${progressBar}`
+            );
+        }
+
         // Извлекаем текст из файла
         const content = await parseDocxToText(filePath);
 
