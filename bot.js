@@ -472,24 +472,24 @@ bot.action("open_materials", async (ctx) => {
     await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
 });
 
-// Обработка выбора конкретного файла - показывает ссылку на веб-просмотр
+// Обработка выбора конкретного файла - отправляет PDF вместо ссылки на Web App
 bot.action(/^material:(.+)$/, async (ctx) => {
     const fileName = ctx.match[1];
-    const filePath = path.join(materialsPath, fileName);
+    const fullPath = path.join(materialsPath, fileName);
+    const pdfFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.pdf`;
+    const pdfPath = path.join(__dirname, 'static', 'previews', pdfFile);
 
-    if (!fs.existsSync(filePath)) {
-        return ctx.reply("Файл не найден.");
+    try {
+        console.log(`Конвертация файла ${fileName} в PDF...`);
+        await convertDocxToPdf(fullPath, pdfPath); // Конвертация DOCX в PDF
+        console.log(`Файл ${fileName} успешно конвертирован в PDF: ${pdfPath}`);
+        
+        // Отправляем PDF-файл пользователю
+        await ctx.replyWithDocument({ source: pdfPath, filename: `${fileName.replace(/\.[^.]+$/, '')}.pdf` });
+    } catch (err) {
+        console.error('Ошибка при конвертации DOCX в PDF:', err);
+        await ctx.reply('❌ Не удалось сконвертировать файл.');
     }
-
-    const url = `${webAppUrl}/article/${encodeURIComponent(fileName)}`;
-
-    await ctx.reply(
-        `Откройте файл "${fileName}" через Web App:`,
-        Markup.inlineKeyboard([
-            Markup.button.url("Открыть файл", url),
-            Markup.button.callback("🔙 Назад", "open_materials"),
-        ])
-    );
 });
 
 // Обработка кнопки "Сгенерировать тест"
