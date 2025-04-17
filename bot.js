@@ -887,8 +887,17 @@ bot.action(/file_(.+)/, async (ctx) => {
         await convertDocxToPdf(fullPath, pdfPath); // Конвертация DOCX в PDF
         console.log(`Файл ${fileName} успешно конвертирован в PDF: ${pdfPath}`);
         
-        // Отправляем PDF-файл пользователю
-        await ctx.replyWithDocument({ source: pdfPath, filename: `${fileName.replace(/\.[^.]+$/, '')}.pdf` });
+        // Отправляем PDF-файл с явным указанием MIME-типа
+        await ctx.replyWithDocument(
+            {
+                source: pdfPath,
+                filename: `${fileName.replace(/\.[^.]+$/, '')}.pdf`,
+                contentType: 'application/pdf', // Явно указываем MIME-тип
+            },
+            {
+                caption: `📄 ${fileName.replace(/\.[^.]+$/, '')}`, // Описание файла
+            }
+        );
     } catch (err) {
         console.error('Ошибка при конвертации DOCX в PDF:', err);
         await ctx.reply('❌ Не удалось сконвертировать файл.');
