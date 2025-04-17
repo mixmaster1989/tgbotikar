@@ -11,6 +11,7 @@ const sqlite3 = require("sqlite3").verbose(); // Подключаем SQLite
 const { spawn } = require('child_process'); // Для запуска внешних процессов
 const YaDiskService = require('./services/yadisk_service');
 const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
+const { convertDocxToPdf } = require('./modules/docx2pdf'); // Конвертация DOCX в PDF
 
 // Основные константы и пути
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -835,5 +836,23 @@ bot.command('check_disk', async (ctx) => {
     } catch (error) {
         console.error('Ошибка при проверке доступа:', error);
         await ctx.reply(`❌ Ошибка доступа: ${error.message}`);
+    }
+});
+
+// Обработчик для отправки PDF
+bot.action(/file_(.+)/, async (ctx) => {
+    const fileName = ctx.match[1];
+    const fullPath = path.join(materialsPath, fileName);
+    const pdfFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.pdf`;
+    const pdfPath = path.join(__dirname, 'static', 'previews', pdfFile);
+
+    try {
+        console.log(`Конвертация файла ${fileName} в PDF...`);
+        await convertDocxToPdf(fullPath, pdfPath);
+        console.log(`Файл ${fileName} успешно конвертирован в PDF: ${pdfPath}`);
+        await ctx.replyWithDocument({ source: pdfPath, filename: fileName.replace(/\.[^.]+$/, '') + '.pdf' });
+    } catch (err) {
+        console.error('Ошибка при конвертации DOCX в PDF:', err);
+        await ctx.reply('❌ Не удалось сконвертировать файл.');
     }
 });
