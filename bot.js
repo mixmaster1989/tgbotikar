@@ -493,7 +493,7 @@ bot.action(/^material:(.+)$/, async (ctx) => {
     }
 });
 
-// Обработка кнопки "Сгенерировать тест"
+// Обновленный обработчик кнопки "Сгенерировать тест"
 bot.action("generate_test", async (ctx) => {
     try {
         const startTime = Date.now(); // Засекаем время начала
