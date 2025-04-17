@@ -12,6 +12,7 @@ const { spawn } = require('child_process'); // Для запуска внешн�
 const YaDiskService = require('./services/yadisk_service');
 const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 const { convertDocxToPdf } = require('./modules/docx2pdf'); // Конвертация DOCX в PDF
+const pTimeout = require('p-timeout'); // Убедитесь, что библиотека установлена: npm install p-timeout
 
 // Основные константы и пути
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -237,17 +238,8 @@ async function generateAIQuestions(text, ctx) {
         const trimmedText = trimText(text);
         console.log(`Исходный размер текста: ${text.length}, обрезанный: ${trimmedText.length}`);
 
-        console.log("Подготовка промпта для генерации...");
-        const prompt = `Создай 1 вопрос с 4 вариантами ответа по тексту. 
-        Формат ответа строго такой:
-        ВОПРОС: [текст вопроса]
-        А) [вариант ответа]
-        Б) [вариант ответа]
-        В) [вариант ответа]
-        Г) [вариант ответа]
-        ПРАВИЛЬНЫЙ: [буква правильного ответа]
-
-        Текст: ${trimmedText}`;
+        // Упрощенный промпт
+        const prompt = `Создай вопрос с 4 вариантами ответа по тексту: ${trimmedText}`;
 
         console.log("Отправляем запрос к модели...");
         const result = await gpt4allModel.generate(prompt, ctx);
@@ -543,10 +535,10 @@ bot.action("generate_test", async (ctx) => {
         }
 
         // Извлекаем текст из файла
-        const content = await parseDocxToText(filePath);
+        const content = await pTimeout(parseDocxToText(filePath), 300000, "Извлечение текста заняло слишком много времени");
 
         // Генерируем тест
-        const test = await generateAIQuestions(content);
+        const test = await pTimeout(generateAIQuestions(content), 300000, "Генерация вопросов заняла слишком много времени");
         const parsed = parseTestResponse(test);
 
         // Формируем сообщение с вопросом
@@ -568,7 +560,7 @@ bot.action("generate_test", async (ctx) => {
         await ctx.reply("Выберите действие:", mainMenuKeyboard);
     } catch (err) {
         console.error("Ошибка при генерации теста:", err);
-        await ctx.reply("❌ Произошла ошибка при генерации теста.");
+        await ctx.reply(`❌ Произошла ошибка: ${err.message}`);
     }
 });
 
