@@ -10,14 +10,15 @@ const os = require("os"); // Работа с системными путями
 const sqlite3 = require("sqlite3").verbose(); // Подключаем SQLite
 const { spawn } = require('child_process'); // Для запуска внешних процессов
 const YaDiskService = require('./services/yadisk_service');
-const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
+const LocalDirCRUD = require("./services/local_dir_CRUD");
 const { convertDocxToPdf } = require('./modules/docx2pdf'); // Конвертация DOCX в PDF
 
 // Основные константы и пути
+const materialsPath = path.join(__dirname, "materials"); // Путь к папке с материалами
+const materialsCRUD = process.env.YANDEX_DISK_TOKEN ? new YaDiskService(process.env.YANDEX_DISK_TOKEN) : new LocalDirCRUD(materialsPath);
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
 const modelDir = path.join(os.homedir(), ".cache", "gpt4all"); // Директория с AI моделью
 const finalModelPath = path.join(modelDir, modelName); // Путь к файлу модели. Возможно не нужен.
-const materialsPath = path.join(__dirname, "materials"); // Путь к папке с материалами
 const PORT = process.env.PORT || 3000; // Порт для веб-сервера
 const webAppUrl = `http://89.232.176.215:${PORT}`; // URL веб-приложения
 
@@ -151,7 +152,7 @@ async function parseDocxToHtml(filePath) {
  */
 async function getFilesFromRoot() {
     try {
-        const files = await yadisk.syncMaterials();
+        const files = await materialsCRUD.syncMaterials();
         console.log(`📚 Доступно ${files.length} .docx файлов`);
         return files;
     } catch (err) {
@@ -219,7 +220,7 @@ function trimText(text) {
  * @param {Object} ctx - контекст Telegram
  * @returns {Promise<string>} сгенерированные вопросы
  */
-async function generateAIQuestions(text, ctx) {
+async function generateAIQuestions(text, ctx, onComplete) {
     try {
         console.log("Начинаем генерацию вопросов...");
 
@@ -252,6 +253,7 @@ async function generateAIQuestions(text, ctx) {
         console.log("Отправляем запрос к модели...");
         const result = await gpt4allModel.generate(prompt, ctx);
         console.log("Ответ от модели получен");
+        onComplete(result);
         return result;
     } catch (err) {
         console.error("Ошибка при генерации вопросов через AI:", err);
@@ -515,57 +517,31 @@ bot.action("generate_test", async (ctx) => {
         const filePath = path.join(materialsPath, random);
         await ctx.reply(`📚 Используется: ${random}`);
 
-        // Отправляем сообщение с прогресс-баром
-        const progressMessage = await ctx.reply("⏳ Генерация теста началась...\n[                    ] 0%");
-
-        const statuses = [
-            "📖 Извлечение текста из файла...",
-            "🤖 Генерация вопросов...",
-            "📝 Форматирование результатов...",
-            "📦 Завершение процесса..."
-        ];
-
-        const totalSteps = statuses.length;
-        const totalTime = 200; // Общее время выполнения в секундах
-        const updateInterval = totalTime / totalSteps; // Интервал обновления в секундах
-
-        for (let i = 0; i < totalSteps; i++) {
-            await new Promise((resolve) => setTimeout(resolve, updateInterval * 1000)); // Ждем интервал
-            const progress = Math.round(((i + 1) / totalSteps) * 100);
-            const progressBar = `[${"=".repeat(progress / 5)}${" ".repeat(20 - progress / 5)}] ${progress}%`;
-
-            await ctx.telegram.editMessageText(
-                ctx.chat.id,
-                progressMessage.message_id,
-                null,
-                `${statuses[i]}\n${progressBar}`
-            );
-        }
-
         // Извлекаем текст из файла
         const content = await parseDocxToText(filePath);
 
         // Генерируем тест
-        const test = await generateAIQuestions(content);
-        const parsed = parseTestResponse(test);
+        generateAIQuestions(content,ctx,async (test) => {
+            const parsed = parseTestResponse(test);
 
-        // Формируем сообщение с вопросом
-        let message = `❓ <b>${parsed.question}</b>\n`;
-        for (const key in parsed.answers) {
-            message += `\n${key}) ${parsed.answers[key]}`;
-        }
-        message += `\n\n✅ Правильный ответ: ${parsed.correct}`;
-
-        // Отправляем тест
-        await ctx.replyWithHTML(message);
-
-        // Логируем время выполнения
-        const endTime = Date.now(); // Засекаем время окончания
-        const executionTime = ((endTime - startTime) / 1000).toFixed(2); // Время выполнения в секундах
-        await ctx.reply(`⏱️ Генерация теста завершена за ${executionTime} секунд.`);
-
-        // Возвращаем главное меню
-        await ctx.reply("Выберите действие:", mainMenuKeyboard);
+            // Формируем сообщение с вопросом
+            let message = `❓ <b>${parsed.question}</b>\n`;
+            for (const key in parsed.answers) {
+                message += `\n${key}) ${parsed.answers[key]}`;
+            }
+            message += `\n\n✅ Правильный ответ: ${parsed.correct}`;
+    
+            // Отправляем тест
+            await ctx.replyWithHTML(message);
+    
+            // Логируем время выполнения
+            const endTime = Date.now(); // Засекаем время окончания
+            const executionTime = ((endTime - startTime) / 1000).toFixed(2); // Время выполнения в секундах
+            await ctx.reply(`⏱️ Генерация теста завершена за ${executionTime} секунд.`);
+    
+            // Возвращаем главное меню
+            await ctx.reply("Выберите действие:", mainMenuKeyboard);
+        });
     } catch (err) {
         console.error("Ошибка при генерации теста:", err);
         await ctx.reply("❌ Произошла ошибка при генерации теста.");
@@ -758,7 +734,18 @@ bot.action("run_test_cache", async (ctx) => {
             }
         });
 
-        // Остальной код остается прежним...
+        activeTestCacheProcess.on('exit', () => {
+            activeTestCacheProcess = null;
+        });
+
+        activeTestCacheProcess.stderr.on('data', (data) => {
+            console.error(`Ошибка: ${data}`);
+        });
+        activeTestCacheProcess.on('error', (err) => {
+            console.error(`Ошибка запуска процесса: ${err}`);
+            pendingUpdate = false;
+        });
+
     } catch (err) {
         console.error("❌ Ошибка при запуске test_cache.js:", err);
         await ctx.reply("❌ Произошла ошибка при запуске процесса обработки кэша.");
@@ -804,76 +791,11 @@ process.on('SIGTERM', () => {
     process.exit(0);
 });
 
-// Главное меню
-const mainMenuKeyboard = Markup.keyboard([
-    ['📚 Кэш', '🤖 Генерация'],
-    ['📊 Статистика', '⚙️ Настройки']
-]).resize().oneTime(false);
-
-// Обновим команду старта
-bot.command('start', (ctx) => {
-    ctx.reply('👋 Привет! Выбери действие:', mainMenuKeyboard);
-});
-
-// Обработчики кнопок главного меню
-bot.hears('📚 Кэш', (ctx) => {
-    ctx.reply('Управление кэшем', {
-        reply_markup: {
-            keyboard: [
-                ['📋 Список кэша', '🗑️ Очистить кэш'],
-                ['🔙 Главное меню']
-            ],
-            resize_keyboard: true
-        }
-    });
-});
-
-bot.hears('🤖 Генерация', (ctx) => {
-    ctx.reply('Режимы генерации', {
-        reply_markup: {
-            keyboard: [
-                ['▶️ Запустить тест-кэш', '⏹️ Остановить тест-кэш'],
-                ['🔙 Главное меню']
-            ],
-            resize_keyboard: true
-        }
-    });
-});
-
-bot.hears('📊 Статистика', (ctx) => {
-    ctx.reply('Статистика работы бота', {
-        reply_markup: {
-            keyboard: [
-                ['📈 Кэш', '🤖 Генерация'],
-                ['🔙 Главное меню']
-            ],
-            resize_keyboard: true
-        }
-    });
-});
-
-bot.hears('⚙️ Настройки', (ctx) => {
-    ctx.reply('Настройки бота', {
-        reply_markup: {
-            keyboard: [
-                ['🔧 Параметры', '📝 Логи'],
-                ['🔙 Главное меню']
-            ],
-            resize_keyboard: true
-        }
-    });
-});
-
-// Возврат в главное меню
-bot.hears('🔙 Главное меню', (ctx) => {
-    ctx.reply('Главное меню', mainMenuKeyboard);
-});
-
 // Добавляем новую команду для ручной синхронизации:
 bot.command('sync', async (ctx) => {
     try {
         await ctx.reply('🔄 Начинаю синхронизацию с Яндекс.Диском...');
-        const files = await yadisk.syncMaterials();
+        const files = await materialsCRUD.syncMaterials();
         await ctx.reply(`✅ Синхронизация завершена!\nОбновлено файлов: ${files.length}`);
     } catch (error) {
         console.error('Ошибка синхронизации:', error);
@@ -885,7 +807,7 @@ bot.command('sync', async (ctx) => {
 bot.command('check_disk', async (ctx) => {
     try {
         await ctx.reply('🔍 Проверяю доступ к Яндекс.Диску...');
-        await yadisk.checkAccess();
+        await materialsCRUD.checkAccess();
         await ctx.reply('✅ Доступ к Яндекс.Диску подтвержден');
     } catch (error) {
         console.error('Ошибка при проверке доступа:', error);
