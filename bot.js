@@ -848,9 +848,11 @@ bot.action(/file_(.+)/, async (ctx) => {
 
     try {
         console.log(`Конвертация файла ${fileName} в PDF...`);
-        await convertDocxToPdf(fullPath, pdfPath);
+        await convertDocxToPdf(fullPath, pdfPath); // Конвертация DOCX в PDF
         console.log(`Файл ${fileName} успешно конвертирован в PDF: ${pdfPath}`);
-        await ctx.replyWithDocument({ source: pdfPath, filename: fileName.replace(/\.[^.]+$/, '') + '.pdf' });
+        
+        // Отправляем PDF-файл пользователю
+        await ctx.replyWithDocument({ source: pdfPath, filename: `${fileName.replace(/\.[^.]+$/, '')}.pdf` });
     } catch (err) {
         console.error('Ошибка при конвертации DOCX в PDF:', err);
         await ctx.reply('❌ Не удалось сконвертировать файл.');
