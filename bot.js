@@ -839,6 +839,33 @@ bot.command('check_disk', async (ctx) => {
     }
 });
 
+// Обработчик кнопки "Материалы"
+bot.action("materials", async (ctx) => {
+    try {
+        console.log("Обработчик 'Материалы' вызван.");
+        await ctx.answerCbQuery("📂 Загрузка материалов...");
+
+        const files = await getFilesFromRoot(); // Получаем список файлов из папки материалов
+        console.log("Список файлов:", files);
+
+        if (!files.length) {
+            await ctx.reply("❌ Нет доступных материалов.");
+            return;
+        }
+
+        const fileButtons = files.map((file) =>
+            Markup.button.callback(file, `file_${file}`)
+        );
+        await ctx.reply(
+            "📂 Доступные материалы:",
+            Markup.inlineKeyboard(fileButtons, { columns: 1 })
+        );
+    } catch (error) {
+        console.error("Ошибка в обработчике 'Материалы':", error.message);
+        await ctx.reply("❌ Произошла ошибка при загрузке материалов.");
+    }
+});
+
 // Обработчик для отправки PDF
 bot.action(/file_(.+)/, async (ctx) => {
     const fileName = ctx.match[1];
