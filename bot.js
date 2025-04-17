@@ -538,7 +538,7 @@ bot.action("generate_test", async (ctx) => {
         await ctx.reply(`⏱️ Генерация теста завершена за ${executionTime} секунд.`);
 
         // Возвращаем главное меню
-        await ctx.reply("Выберите действие:", mainMenuKeyboard());
+        await ctx.reply("Выберите действие:", mainMenuKeyboard);
     } catch (err) {
         console.error("Ошибка при генерации теста:", err);
         await ctx.reply("❌ Произошла ошибка при генерации теста.");
