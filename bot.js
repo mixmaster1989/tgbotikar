@@ -504,26 +504,44 @@ bot.action(/^material:(.+)$/, async (ctx) => {
 // Обработка кнопки "Сгенерировать тест"
 bot.action("generate_test", async (ctx) => {
     try {
+        const startTime = Date.now(); // Засекаем время начала
         const files = await getFilesFromRoot();
         if (files.length === 0) {
             return ctx.reply("Нет доступных материалов для генерации теста.");
         }
 
-        // Создаем кнопки для выбора файла
-        const buttons = files.map((file) => [
-            Markup.button.callback(`📄 ${file}`, `test:${file}`),
-        ]);
+        // Выбираем случайный файл
+        const random = files[Math.floor(Math.random() * files.length)];
+        const filePath = path.join(materialsPath, random);
+        await ctx.reply(`📚 Используется: ${random}`);
 
-        // Добавляем кнопку случайного выбора
-        buttons.push([Markup.button.callback("🎲 Случайный материал", "test:random")]);
+        // Извлекаем текст из файла
+        const content = await parseDocxToText(filePath);
 
-        await ctx.reply(
-            "Выберите материал для генерации теста:",
-            Markup.inlineKeyboard(buttons)
-        );
+        // Генерируем тест
+        const test = await generateAIQuestions(content);
+        const parsed = parseTestResponse(test);
+
+        // Формируем сообщение с вопросом
+        let message = `❓ <b>${parsed.question}</b>\n`;
+        for (const key in parsed.answers) {
+            message += `\n${key}) ${parsed.answers[key]}`;
+        }
+        message += `\n\n✅ Правильный ответ: ${parsed.correct}`;
+
+        // Отправляем тест
+        await ctx.replyWithHTML(message);
+
+        // Логируем время выполнения
+        const endTime = Date.now(); // Засекаем время окончания
+        const executionTime = ((endTime - startTime) / 1000).toFixed(2); // Время выполнения в секундах
+        await ctx.reply(`⏱️ Генерация теста завершена за ${executionTime} секунд.`);
+
+        // Возвращаем главное меню
+        await ctx.reply("Выберите действие:", mainMenuKeyboard());
     } catch (err) {
-        console.error("Ошибка при подготовке списка:", err);
-        await ctx.reply("Произошла ошибка. Попробуйте позже.");
+        console.error("Ошибка при генерации теста:", err);
+        await ctx.reply("❌ Произошла ошибка при генерации теста.");
     }
 });
 
