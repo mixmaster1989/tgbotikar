@@ -24,10 +24,18 @@ const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 app.use("/static", express.static(path.join(__dirname, "static")));
 
-// Создание базы данных SQLite
+// Улучшенная обработка ошибок при инициализации базы данных
 const db = new sqlite3.Database("database.sqlite", (err) => {
-  if (err) console.error("DB Error:", err);
-  else initDatabase();
+  if (err) {
+    console.error("DB Error:", err.message);
+    process.exit(1); // Завершаем процесс, если база данных не инициализируется
+  } else {
+    try {
+      initDatabase();
+    } catch (error) {
+      console.error("Ошибка при инициализации базы данных:", error.message);
+    }
+  }
 });
 
 function initDatabase() {
@@ -57,18 +65,30 @@ async function initGPT4AllModel() {
   };
 }
 
+// Обработка ошибок при работе с файлами
 async function parseDocxToText(filePath) {
-  const result = await mammoth.extractRawText({ path: filePath });
-  return result.value.trim();
+  try {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return result.value.trim();
+  } catch (error) {
+    console.error(`Ошибка при обработке файла ${filePath}:`, error.message);
+    throw new Error("Не удалось извлечь текст из файла.");
+  }
 }
 
+// Обработка ошибок при генерации вопросов
 async function generateAIQuestions(text) {
-  const maxInputLength = 700;
-  const truncatedText = text.length > maxInputLength ? text.substring(0, maxInputLength) + "..." : text;
-  const prompt = `Сформулируй один короткий вопрос с 4 вариантами ответов по тексту ниже. Отметь правильный вариант.\nВОПРОС:\nА)\nБ)\nВ)\nГ)\nПРАВИЛЬНЫЙ:`;
-  if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-  
-  return await gpt4allModel.generate(`${prompt}\n\n${truncatedText}`);
+  try {
+    const maxInputLength = 700;
+    const truncatedText = text.length > maxInputLength ? text.substring(0, maxInputLength) + "..." : text;
+    const prompt = `Сформулируй один короткий вопрос с 4 вариантами ответов по тексту ниже. Отметь правильный вариант.\nВОПРОС:\nА)\nБ)\nВ)\nГ)\nПРАВИЛЬНЫЙ:`;
+    if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+
+    return await gpt4allModel.generate(`${prompt}\n\n${truncatedText}`);
+  } catch (error) {
+    console.error("Ошибка при генерации вопросов:", error.message);
+    throw new Error("Не удалось сгенерировать вопросы.");
+  }
 }
 
 function parseTestResponse(response) {
@@ -148,8 +168,7 @@ bot.action("generate_cache", async (ctx) => {
       fs.writeFileSync(datasetFilePath, JSON.stringify(dataset, null, 2));
 
       try {
-        await yadisk.uploadFile(datasetFilePath, `/bot_cache/${path.basename(datasetFilePath)}`);
-        logAndNotify(`Файл загружен на Я.Диск: /bot_cache/${path.basename(datasetFilePath)}`, ctx);
+        await uploadToYandexDisk(datasetFilePath, `/bot_cache/${path.basename(datasetFilePath)}`, ctx);
       } catch (error) {
         logAndNotify(`Ошибка загрузки на Я.Диск: ${error.message}`, ctx);
       }
@@ -163,6 +182,18 @@ bot.action("generate_cache", async (ctx) => {
     await ctx.reply("Выберите действие:", mainMenuKeyboard());
   }, 100); // Задержка в 100 мс, чтобы избежать телегиных ограничений
 });
+
+// Обработка ошибок при загрузке на Яндекс.Диск
+async function uploadToYandexDisk(localFilePath, remoteFilePath, ctx) {
+  try {
+    await yadisk.uploadFile(localFilePath, remoteFilePath);
+    logAndNotify(`Файл загружен на Я.Диск: ${remoteFilePath}`, ctx);
+  } catch (error) {
+    console.error(`Ошибка загрузки файла на Я.Диск (${localFilePath}):`, error.message);
+    logAndNotify(`Ошибка загрузки на Я.Диск: ${error.message}`, ctx);
+    throw new Error("Не удалось загрузить файл на Яндекс.Диск.");
+  }
+}
 
 (async () => {
   app.listen(PORT, () => console.log(`🌍 Web App: http://localhost:${PORT}`));
