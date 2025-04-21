@@ -76,10 +76,8 @@ async function streamAIResponse(prompt, ctx) {
   let sentMessage = await ctx.reply("⏳ Генерация...");
   let lastEdit = Date.now();
 
-  // Загружаем модель напрямую для стриминга
   const model = await gpt4all.loadModel(modelName);
 
-  // Используем chat() с опцией stream
   const options = {
     stream: true,
     maxTokens: 192,
@@ -90,29 +88,48 @@ async function streamAIResponse(prompt, ctx) {
     batchSize: 1,
   };
 
-  // Формируем сообщения для chat()
-  const messages = [
-    { role: "user", content: prompt }
-  ];
-
-  // Стриминг через chat()
-  for await (const chunk of model.chat(messages, options)) {
-    message += chunk.content || chunk.completion || chunk.text || "";
-    if (Date.now() - lastEdit > 1200) {
-      try {
-        await ctx.telegram.editMessageText(
-          ctx.chat.id,
-          sentMessage.message_id,
-          undefined,
-          "⏳ Генерация...\n" + message
-        );
-        lastEdit = Date.now();
-      } catch (e) {
-        // Игнорируем ошибки Telegram editMessageText
+  // Попробуйте stream(), если есть
+  if (typeof model.stream === "function") {
+    for await (const chunk of model.stream(prompt, options)) {
+      message += chunk.completion || chunk.text || "";
+      if (Date.now() - lastEdit > 1200) {
+        try {
+          await ctx.telegram.editMessageText(
+            ctx.chat.id,
+            sentMessage.message_id,
+            undefined,
+            "⏳ Генерация...\n" + message
+          );
+          lastEdit = Date.now();
+        } catch (e) {}
       }
     }
+  } else if (typeof model.generate === "function") {
+    // Попробуйте generate() с {stream:true}
+    for await (const chunk of model.generate(prompt, options)) {
+      message += chunk.completion || chunk.text || "";
+      if (Date.now() - lastEdit > 1200) {
+        try {
+          await ctx.telegram.editMessageText(
+            ctx.chat.id,
+            sentMessage.message_id,
+            undefined,
+            "⏳ Генерация...\n" + message
+          );
+          lastEdit = Date.now();
+        } catch (e) {}
+      }
+    }
+  } else {
+    await ctx.telegram.editMessageText(
+      ctx.chat.id,
+      sentMessage.message_id,
+      undefined,
+      "❌ Модель не поддерживает стриминг."
+    );
+    return;
   }
-  // Финальное обновление
+
   await ctx.telegram.editMessageText(
     ctx.chat.id,
     sentMessage.message_id,
