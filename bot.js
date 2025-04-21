@@ -11,6 +11,7 @@ require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
 const { convertDocxToPdf } = require("./modules/docx2pdf");
+const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = require("./modules/cache");
 
 const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 
@@ -74,34 +75,6 @@ async function initGPT4AllModel() {
 // Асинхронная очередь задач для генерации кэша
 const cacheQueue = [];
 let isCacheProcessing = false;
-
-// История генераций для каждого файла
-function saveToCacheHistory(file, summary) {
-  const stmt = db.prepare("INSERT INTO gpt_cache (prompt, response) VALUES (?, ?)");
-  stmt.run(file, summary);
-  stmt.finalize();
-}
-
-// Получить все вопросы из кэша
-function getAllCacheQuestions(callback) {
-  db.all("SELECT prompt, response FROM gpt_cache", (err, rows) => {
-    if (err) return callback(err, []);
-    callback(null, rows);
-  });
-}
-
-// Fuzzy поиск по кэшу
-function fuzzyFindInCache(question, callback) {
-  getAllCacheQuestions((err, rows) => {
-    if (err) return callback(err, null);
-    const results = fuzzysort.go(question, rows, { key: 'prompt', threshold: -1000 });
-    if (results.length > 0 && results[0].score > -1000) {
-      callback(null, results[0].obj.response);
-    } else {
-      callback(null, null);
-    }
-  });
-}
 
 // Fuzzy поиск по кэшу на Яндекс.Диске
 async function fuzzyFindInYandexDisk(question) {
