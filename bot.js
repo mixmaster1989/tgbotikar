@@ -138,12 +138,14 @@ function logAndNotify(message, ctx = null) {
 function mainMenuKeyboard() {
   return Markup.inlineKeyboard([
     [Markup.button.callback("📂 Материалы", "materials")],
-    [Markup.button.callback("📝 Генерация Теста", "generate_test")],
+    [Markup.button.callback("🤖 Задать вопрос ИИ", "ask_ai")],
     [Markup.button.callback("📊 Генерация Кэша", "generate_cache")],
     [Markup.button.callback("⚙️ Настройки", "settings")],
     [Markup.button.callback("🔄 Резет", "reset")],
   ]);
 }
+
+const userStates = {};
 
 bot.start((ctx) => ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()));
 bot.action("reset", async (ctx) => ctx.reply("История сброшена.", mainMenuKeyboard()));
@@ -180,6 +182,26 @@ bot.action(/material_(.+)/, async (ctx) => {
     // Telegram автоматически покажет предпросмотр первой страницы PDF
   } catch (err) {
     await ctx.reply("Ошибка при конвертации или отправке PDF: " + err.message);
+  }
+});
+
+// Кнопка "Задать вопрос ИИ"
+bot.action("ask_ai", async (ctx) => {
+  userStates[ctx.from.id] = "awaiting_ai_prompt";
+  await ctx.reply("Введите ваш вопрос для ИИ:");
+});
+
+// Обработка текстового сообщения как вопроса для ИИ, если пользователь в нужном состоянии
+bot.on("text", async (ctx) => {
+  if (userStates[ctx.from.id] === "awaiting_ai_prompt") {
+    userStates[ctx.from.id] = null;
+    try {
+      if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+      const result = await gpt4allModel.generate(ctx.message.text);
+      await ctx.reply(result, mainMenuKeyboard());
+    } catch (error) {
+      await ctx.reply("❌ Ошибка генерации: " + error.message, mainMenuKeyboard());
+    }
   }
 });
 
