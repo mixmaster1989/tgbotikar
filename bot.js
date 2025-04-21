@@ -19,7 +19,9 @@ const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
 const modelDir = path.join(os.homedir(), ".cache", "gpt4all");
 const materialsPath = path.join(__dirname, "materials");
 const cachePath = path.join(__dirname, "cache");
-
+const tempPath = path.join(__dirname, "temp");
+const gpt4allPath = path.join(modelDir, modelName);
+const gpt4allCachePath = path.join(gpt4allPath, "cache");
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 app.use("/static", express.static(path.join(__dirname, "static")));
@@ -167,6 +169,28 @@ bot.action(/material_(.+)/, async (ctx) => {
     // Telegram автоматически покажет предпросмотр первой страницы PDF
   } catch (err) {
     await ctx.reply("Ошибка при конвертации или отправке PDF: " + err.message);
+  }
+});
+
+// Генерация теста по случайному материалу
+bot.action("generate_test", async (ctx) => {
+  try {
+    const files = await fs.readdir(materialsPath);
+    const docxFiles = files.filter(f => f.endsWith(".docx"));
+    if (!docxFiles.length) {
+      return ctx.reply("Нет доступных материалов для генерации теста.");
+    }
+    const randomFile = docxFiles[Math.floor(Math.random() * docxFiles.length)];
+    const filePath = path.join(materialsPath, randomFile);
+    await ctx.reply(`Генерирую тест по материалу: ${randomFile}...`);
+    const text = await parseDocxToText(filePath);
+    // Упрощённый промпт для быстрой генерации
+    const prompt = `Сделай 1 вопрос с 4 вариантами ответа по тексту. Формат:\nВОПРОС: ...\nА) ...\nБ) ...\nВ) ...\nГ) ...\nПРАВИЛЬНЫЙ: ...\nТекст: ${text.slice(0, 700)}`;
+    if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+    const result = await gpt4allModel.generate(prompt);
+    await ctx.reply(`Результат:\n${result}`);
+  } catch (err) {
+    await ctx.reply("Ошибка при генерации теста: " + err.message);
   }
 });
 
