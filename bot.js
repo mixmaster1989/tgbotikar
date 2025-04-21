@@ -103,6 +103,31 @@ function fuzzyFindInCache(question, callback) {
   });
 }
 
+// Fuzzy поиск по кэшу на Яндекс.Диске
+async function fuzzyFindInYandexDisk(question) {
+  try {
+    // Скачиваем файл кэша с Я.Диска (например, cache/dataset.json)
+    const remotePath = "/bot_cache/dataset.json";
+    const localPath = path.join(cachePath, "dataset.json");
+    await yadisk.downloadFile(remotePath, localPath);
+
+    if (!fs.existsSync(localPath)) return null;
+    const data = JSON.parse(fs.readFileSync(localPath, "utf8"));
+    if (!Array.isArray(data)) return null;
+
+    // data: [{ prompt, response }, ...]
+    const results = fuzzysort.go(question, data, { key: 'prompt', threshold: -1000 });
+    if (results.length > 0 && results[0].score > -1000) {
+      return results[0].obj.response;
+    }
+    return null;
+  } catch (err) {
+    console.error(`[YADISK CACHE] Ошибка поиска: ${err.message}`);
+    notifyAdmin(`[YADISK CACHE] Ошибка поиска: ${err.message}`);
+    return null;
+  }
+}
+
 // Логирование ошибок и отчётов для администратора (через ADMIN_ID)
 const ADMIN_ID = process.env.ADMIN_ID;
 function notifyAdmin(message) {
@@ -312,7 +337,7 @@ bot.action("ask_ai", async (ctx) => {
   await ctx.reply("Введите ваш вопрос для ИИ:");
 });
 
-// Подробное логирование процесса сверки при отправке запроса в кэш
+// Подробное логирование процесса сверки при отправке запроса в кэш и на Я.Диск
 bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
   if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
@@ -323,7 +348,7 @@ bot.on("text", async (ctx) => {
     console.log(`[${new Date().toISOString()}] [AI Q] Пользователь ${userId} задал вопрос: "${ctx.message.text}"`);
     notifyAdmin(`[AI Q] Пользователь ${userId} задал вопрос: "${ctx.message.text}"`);
 
-    // 1. Получаем все вопросы из кэша для логирования
+    // 1. Fuzzy поиск в локальном кэше
     getAllCacheQuestions((err, rows) => {
       if (err) {
         console.error(`[${new Date().toISOString()}] [CACHE] Ошибка получения кэша: ${err.message}`);
@@ -334,7 +359,6 @@ bot.on("text", async (ctx) => {
       console.log(`[${new Date().toISOString()}] [CACHE] В кэше ${rows.length} записей. Начинаем fuzzy поиск...`);
       notifyAdmin(`[CACHE] В кэше ${rows.length} записей. Начинаем fuzzy поиск...`);
 
-      // 2. Fuzzy поиск
       const results = fuzzysort.go(ctx.message.text, rows, { key: 'prompt', threshold: -1000 });
       if (results.length > 0) {
         console.log(`[${new Date().toISOString()}] [CACHE] Лучший результат: "${results[0].obj.prompt}" (score: ${results[0].score})`);
@@ -351,8 +375,18 @@ bot.on("text", async (ctx) => {
         return;
       }
 
-      // 3. Если нет в кэше — спрашиваем модель
+      // 2. Fuzzy поиск на Яндекс.Диске
       (async () => {
+        ctx.reply("⏳ Поиск ответа на Яндекс.Диске...");
+        const yadiskAnswer = await fuzzyFindInYandexDisk(ctx.message.text);
+        if (yadiskAnswer) {
+          ctx.reply("🔎 Ответ из кэша на Яндекс.Диске:\n" + yadiskAnswer);
+          console.log(`[${new Date().toISOString()}] [YADISK CACHE] Ответ отправлен из кэша на Я.Диске.`);
+          notifyAdmin(`[YADISK CACHE] Ответ отправлен из кэша на Я.Диске.`);
+          return;
+        }
+
+        // 3. Если нет ни в одном кэше — спрашиваем модель
         try {
           console.log(`[${new Date().toISOString()}] [AI] Ответа в кэше нет, обращаемся к модели...`);
           notifyAdmin(`[AI] Ответа в кэше нет, обращаемся к модели...`);
