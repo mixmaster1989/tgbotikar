@@ -58,11 +58,11 @@ async function initGPT4AllModel() {
   return {
     generate: async (prompt) => {
       const options = {
-        maxTokens: 192,
-        temp: 0.65,
-        topK: 30,
-        topP: 0.35,
-        repeatPenalty: 1.2,
+        maxTokens: 32,
+        temp: 1.5,
+        topK: 1,
+        topP: 0.1,
+        repeatPenalty: 1.0,
         batchSize: 1,
       };
       return (await model.generate(prompt, options)).text;
