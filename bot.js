@@ -6,6 +6,7 @@ const os = require("os");
 const sqlite3 = require("sqlite3").verbose();
 const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
+const fuzzysort = require('fuzzysort'); // Добавлено
 require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
@@ -79,6 +80,27 @@ function saveToCacheHistory(file, summary) {
   const stmt = db.prepare("INSERT INTO gpt_cache (prompt, response) VALUES (?, ?)");
   stmt.run(file, summary);
   stmt.finalize();
+}
+
+// Получить все вопросы из кэша
+function getAllCacheQuestions(callback) {
+  db.all("SELECT prompt, response FROM gpt_cache", (err, rows) => {
+    if (err) return callback(err, []);
+    callback(null, rows);
+  });
+}
+
+// Fuzzy поиск по кэшу
+function fuzzyFindInCache(question, callback) {
+  getAllCacheQuestions((err, rows) => {
+    if (err) return callback(err, null);
+    const results = fuzzysort.go(question, rows, { key: 'prompt', threshold: -1000 });
+    if (results.length > 0 && results[0].score > -1000) {
+      callback(null, results[0].obj.response);
+    } else {
+      callback(null, null);
+    }
+  });
 }
 
 // Логирование ошибок и отчётов для администратора (через ADMIN_ID)
@@ -299,23 +321,39 @@ bot.on("text", async (ctx) => {
     if (!userContexts[userId]) userContexts[userId] = [];
     userContexts[userId].push({ role: "user", content: ctx.message.text });
 
-    try {
-      if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+    // Сначала ищем ответ в кэше по fuzzy search
+    fuzzyFindInCache(ctx.message.text, async (err, cachedAnswer) => {
+      if (err) {
+        await ctx.reply("❌ Ошибка поиска в кэше.");
+        return;
+      }
+      if (cachedAnswer) {
+        await ctx.reply("🔎 Ответ из кэша (поиск по похожести):\n" + cachedAnswer);
+        return;
+      }
 
-      // Ограничиваем историю (например, 10 последних сообщений)
-      const contextWindow = 10;
-      const context = userContexts[userId].slice(-contextWindow);
+      // Если нет в кэше — спрашиваем модель
+      try {
+        if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
 
-      // Формируем промпт из истории
-      const prompt = context.map(m => (m.role === "user" ? `Пользователь: ${m.content}` : `ИИ: ${m.content}`)).join('\n') + "\nИИ:";
+        // Ограничиваем историю (например, 10 последних сообщений)
+        const contextWindow = 10;
+        const context = userContexts[userId].slice(-contextWindow);
 
-      const result = await gpt4allModel.generate(prompt);
-      userContexts[userId].push({ role: "assistant", content: result });
+        // Формируем промпт из истории
+        const prompt = context.map(m => (m.role === "user" ? `Пользователь: ${m.content}` : `ИИ: ${m.content}`)).join('\n') + "\nИИ:";
 
-      await ctx.reply(result || "Пустой ответ от модели.");
-    } catch (error) {
-      await ctx.reply("❌ Ошибка генерации: " + error.message);
-    }
+        const result = await gpt4allModel.generate(prompt);
+        userContexts[userId].push({ role: "assistant", content: result });
+
+        // Сохраняем новый вопрос и ответ в кэш
+        saveToCacheHistory(ctx.message.text, result);
+
+        await ctx.reply(result || "Пустой ответ от модели.");
+      } catch (error) {
+        await ctx.reply("❌ Ошибка генерации: " + error.message);
+      }
+    });
   }
 });
 
