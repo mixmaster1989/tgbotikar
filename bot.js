@@ -72,13 +72,14 @@ async function initGPT4AllModel() {
 
 // Новый метод для стриминга генерации и обновления сообщения
 async function streamAIResponse(prompt, ctx) {
-  if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
   let message = "";
   let sentMessage = await ctx.reply("⏳ Генерация...");
   let lastEdit = Date.now();
 
-  // Получаем модель напрямую для стриминга
+  // Загружаем модель напрямую для стриминга
   const model = await gpt4all.loadModel(modelName);
+
+  // Используем prompt() с опцией stream
   const options = {
     maxTokens: 192,
     temp: 0.65,
@@ -89,9 +90,8 @@ async function streamAIResponse(prompt, ctx) {
     stream: true,
   };
 
-  for await (const chunk of model.generate(prompt, options)) {
-    message += chunk.text;
-    // Обновляем сообщение не чаще раза в 1.2 секунды
+  for await (const chunk of model.prompt(prompt, options)) {
+    message += chunk.completion || chunk.text || "";
     if (Date.now() - lastEdit > 1200) {
       try {
         await ctx.telegram.editMessageText(
