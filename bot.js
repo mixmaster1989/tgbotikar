@@ -196,10 +196,14 @@ bot.on("text", async (ctx) => {
   if (userStates[ctx.from.id] === "awaiting_ai_prompt") {
     userStates[ctx.from.id] = null;
     try {
+      console.log("Получен вопрос для ИИ:", ctx.message.text);
       if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+      console.log("Модель инициализирована, отправляем промпт...");
       const result = await gpt4allModel.generate(ctx.message.text);
-      await ctx.reply(result, mainMenuKeyboard());
+      console.log("Ответ от модели:", result);
+      await ctx.reply(result || "Пустой ответ от модели.", mainMenuKeyboard());
     } catch (error) {
+      console.error("Ошибка генерации:", error);
       await ctx.reply("❌ Ошибка генерации: " + error.message, mainMenuKeyboard());
     }
   }
