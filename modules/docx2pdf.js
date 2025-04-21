@@ -19,7 +19,6 @@ async function convertDocxToPdf(inputPath, outputPath) {
 
 module.exports = { convertDocxToPdf };
 // Конвертация DOCX в PDF с помощью libreoffice-convert
-const libre = require('libreoffice-convert');
 
 async function convertDocxToPdf(inputPath, outputPath) {
     const fs = require('fs-extra');
