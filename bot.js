@@ -79,19 +79,25 @@ async function streamAIResponse(prompt, ctx) {
   // Загружаем модель напрямую для стриминга
   const model = await gpt4all.loadModel(modelName);
 
-  // Используем prompt() с опцией stream
+  // Используем chat() с опцией stream
   const options = {
+    stream: true,
     maxTokens: 192,
     temp: 0.65,
     topK: 30,
     topP: 0.35,
     repeatPenalty: 1.2,
     batchSize: 1,
-    stream: true,
   };
 
-  for await (const chunk of model.prompt(prompt, options)) {
-    message += chunk.completion || chunk.text || "";
+  // Формируем сообщения для chat()
+  const messages = [
+    { role: "user", content: prompt }
+  ];
+
+  // Стриминг через chat()
+  for await (const chunk of model.chat(messages, options)) {
+    message += chunk.content || chunk.completion || chunk.text || "";
     if (Date.now() - lastEdit > 1200) {
       try {
         await ctx.telegram.editMessageText(
