@@ -11,7 +11,7 @@ function saveToCacheHistory(file, summary) {
 }
 
 function getAllCacheQuestions(callback) {
-  db.all("SELECT prompt, response FROM gpt_cache", (err, rows) => {
+  db.all("SELECT id, prompt, response FROM gpt_cache", (err, rows) => {
     if (err) return callback(err, []);
     callback(null, rows);
   });

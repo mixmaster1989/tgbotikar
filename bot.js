@@ -293,13 +293,18 @@ bot.action(/material_(.+)/, async (ctx) => {
   const pdfPath = path.join(cachePath, pdfName);
 
   try {
+    await ctx.answerCbQuery(); // Подтверждаем получение callback
+    await ctx.editMessageReplyMarkup(null); // Удаляем клавиатуру
     await ctx.reply("⏳ Конвертация DOCX в PDF...");
+    
     await convertDocxToPdf(docxPath, pdfPath);
-
     await ctx.replyWithDocument({ source: pdfPath, filename: pdfName });
-    // Telegram автоматически покажет предпросмотр первой страницы PDF
+    
+    // Показываем главное меню после отправки файла
+    await ctx.reply("Выберите действие:", mainMenuKeyboard());
   } catch (err) {
     await ctx.reply("Ошибка при конвертации или отправке PDF: " + err.message);
+    await ctx.reply("Выберите действие:", mainMenuKeyboard());
   }
 });
 
