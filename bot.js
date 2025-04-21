@@ -145,7 +145,9 @@ function mainMenuKeyboard() {
   ]);
 }
 
+// Храним историю сообщений для каждого пользователя
 const userStates = {};
+const userContexts = {}; // userId: [ {role: "user"/"assistant", content: "..."} ]
 
 bot.start((ctx) => ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()));
 bot.action("reset", async (ctx) => ctx.reply("История сброшена.", mainMenuKeyboard()));
@@ -188,23 +190,34 @@ bot.action(/material_(.+)/, async (ctx) => {
 // Кнопка "Задать вопрос ИИ"
 bot.action("ask_ai", async (ctx) => {
   userStates[ctx.from.id] = "awaiting_ai_prompt";
+  if (!userContexts[ctx.from.id]) userContexts[ctx.from.id] = [];
   await ctx.reply("Введите ваш вопрос для ИИ:");
 });
 
 // Обработка текстового сообщения как вопроса для ИИ, если пользователь в нужном состоянии
 bot.on("text", async (ctx) => {
-  if (userStates[ctx.from.id] === "awaiting_ai_prompt") {
-    userStates[ctx.from.id] = null;
+  const userId = ctx.from.id;
+  if (userStates[userId] === "awaiting_ai_prompt") {
+    userStates[userId] = "chatting_ai";
+    if (!userContexts[userId]) userContexts[userId] = [];
+    userContexts[userId].push({ role: "user", content: ctx.message.text });
+
     try {
-      console.log("Получен вопрос для ИИ:", ctx.message.text);
       if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-      console.log("Модель инициализирована, отправляем промпт...");
-      const result = await gpt4allModel.generate(ctx.message.text);
-      console.log("Ответ от модели:", result);
-      await ctx.reply(result || "Пустой ответ от модели.", mainMenuKeyboard());
+
+      // Собираем контекст (историю), ограничиваем по длине (например, 10 последних сообщений)
+      const contextWindow = 10;
+      const context = userContexts[userId].slice(-contextWindow);
+
+      // Формируем промпт из истории
+      const prompt = context.map(m => (m.role === "user" ? `Пользователь: ${m.content}` : `ИИ: ${m.content}`)).join('\n') + "\nИИ:";
+
+      const result = await gpt4allModel.generate(prompt);
+      userContexts[userId].push({ role: "assistant", content: result });
+
+      await ctx.reply(result || "Пустой ответ от модели.");
     } catch (error) {
-      console.error("Ошибка генерации:", error);
-      await ctx.reply("❌ Ошибка генерации: " + error.message, mainMenuKeyboard());
+      await ctx.reply("❌ Ошибка генерации: " + error.message);
     }
   }
 });
