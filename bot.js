@@ -17,6 +17,7 @@ const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
 const modelDir = path.join(os.homedir(), ".cache", "gpt4all"); // Директория с AI моделью
 const finalModelPath = path.join(modelDir, modelName); // Путь к файлу модели. Возможно не нужен.
 const materialsPath = path.join(__dirname, "materials"); // Путь к папке с материалами
+const cachePath = path.join(__dirname, "cache"); // Путь к папке кэша
 const PORT = process.env.PORT || 3000; // Порт для веб-сервера
 const webAppUrl = `http://89.232.176.215:${PORT}`; // URL веб-приложения
 
@@ -92,19 +93,6 @@ async function startApp() {
 
         // 3. Лог успешного завершения запуска
         console.log("\n🎉 Приложение полностью готово к работе!");
-
-        // 4. Обработчики завершения
-        process.once('SIGINT', () => {
-            console.log('\n👋 Завершение работы по SIGINT');
-            bot.stop('SIGINT');
-            process.exit(0);
-        });
-
-        process.once('SIGTERM', () => {
-            console.log('\n👋 Завершение работы по SIGTERM');
-            bot.stop('SIGTERM');
-            process.exit(0);
-        });
 
     } catch (error) {
         console.error("❌ Ошибка при запуске приложения:", error);
@@ -671,3 +659,49 @@ bot.command('check_disk', async (ctx) => {
         await ctx.reply(`❌ Ошибка доступа: ${error.message}`);
     }
 });
+// Добавляем команду для получения информации о диске
+bot.command('disk_info', async (ctx) => {
+    try {
+        await ctx.reply('🔍 Получаю информацию о Яндекс.Диске...');
+        const diskInfo = await yadisk.getDiskInfo();
+        await ctx.reply(`✅ Информация о диске:\n\n${JSON.stringify(diskInfo, null, 2)}`);
+    } catch (error) {
+        console.error('Ошибка при получении информации о диске:', error);
+        await ctx.reply(`❌ Ошибка: ${error.message}`);
+    }
+});
+// Запуск бота
+bot.launch().then(() => {
+    console.log("🤖 Бот запущен и готов к работе!");
+}).catch((err) => {
+    console.error("❌ Ошибка при запуске бота:", err);
+    process.exit(1);
+});
+
+// Обработка ошибок
+process.on("unhandledRejection", (reason, promise) => {
+    console.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (error) => {
+    console.error("Uncaught Exception:", error);
+    process.exit(1); // Завершаем процесс при критической ошибке
+});
+
+// Закрытие базы данных и дочерних процессов при завершении
+function gracefulShutdown(signal) {
+    if (typeof activeTestCacheProcess !== 'undefined' && activeTestCacheProcess) {
+        console.log('Завершение дочернего процесса test_cache.js');
+        activeTestCacheProcess.kill('SIGTERM');
+    }
+    db.close((err) => {
+        if (err) {
+            console.error("Ошибка при закрытии базы данных:", err);
+        } else {
+            console.log("База данных закрыта");
+        }
+        process.exit(0);
+    });
+}
+
+process.on("SIGINT", () => gracefulShutdown('SIGINT'));
+process.on("SIGTERM", () => gracefulShutdown('SIGTERM'));
