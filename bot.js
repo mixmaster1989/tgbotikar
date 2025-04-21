@@ -129,7 +129,7 @@ async function processCacheQueue() {
     let allSummaries = [];
     for (let idx = 0; idx < parts.length; idx++) {
       await sendProgress(ctx, `🤖 Генерация тезисов по части ${idx + 1} из ${parts.length}...`);
-      const prompt = `${parts[idx]}\n\nИзучи материал, тезисно изложи, о чем он.`;
+      const prompt = `${parts[idx]}\n\nИзучи материал, тезисно изложи, о чем он. Выведи каждый тезис с новой строки.`;
       if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
       const summary = await gpt4allModel.generate(prompt);
       allSummaries.push(summary);
@@ -139,8 +139,17 @@ async function processCacheQueue() {
     // Сохраняем историю генераций (каждый запуск — новая запись)
     saveToCacheHistory(random, finalSummary);
 
-    await sendProgress(ctx, "✅ Краткое изложение сохранено в кэш.");
+    // Улучшение: разбиваем на тезисы и выводим пользователю
+    const thesisList = finalSummary
+      .split(/\n+/)
+      .map((t, i) => t.trim())
+      .filter(Boolean)
+      .map((t, i) => `${i + 1}. ${t}`)
+      .join('\n');
 
+    await ctx.reply("✅ Краткое изложение (тезисы):\n" + thesisList);
+
+    await sendProgress(ctx, "✅ Краткое изложение сохранено в кэш.");
     notifyAdmin(`Кэш сгенерирован для файла: ${random}`);
 
   } catch (err) {
@@ -148,7 +157,6 @@ async function processCacheQueue() {
     notifyAdmin(`Ошибка генерации кэша: ${err.message}`);
   } finally {
     isCacheProcessing = false;
-    // Запускаем следующую задачу из очереди, если есть
     if (cacheQueue.length > 0) processCacheQueue();
   }
 }
