@@ -184,8 +184,8 @@ bot.action("generate_test", async (ctx) => {
     const filePath = path.join(materialsPath, randomFile);
     await ctx.reply(`Генерирую тест по материалу: ${randomFile}...`);
     const text = await parseDocxToText(filePath);
-    // Упрощённый промпт для быстрой генерации
-    const prompt = `Сделай 1 вопрос с 4 вариантами ответа по тексту. Формат:\nВОПРОС: ...\nА) ...\nБ) ...\nВ) ...\nГ) ...\nПРАВИЛЬНЫЙ: ...\nТекст: ${text.slice(0, 700)}`;
+    // Урезаем запрос до 300 токенов (примерно 1200-1500 символов)
+    const prompt = `Сделай 1 вопрос с 4 вариантами ответа по тексту. Формат:\nВОПРОС: ...\nА) ...\nБ) ...\nВ) ...\nГ) ...\nПРАВИЛЬНЫЙ: ...\nТекст: ${text.slice(0, 1200)}`;
     if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
     const result = await gpt4allModel.generate(prompt);
     await ctx.reply(`Результат:\n${result}`);
