@@ -312,47 +312,70 @@ bot.action("ask_ai", async (ctx) => {
   await ctx.reply("Введите ваш вопрос для ИИ:");
 });
 
-// Обработка текстового сообщения как вопроса для ИИ, если пользователь в нужном состоянии
+// Подробное логирование процесса сверки при отправке запроса в кэш
 bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
-  // Обрабатываем оба состояния: ожидание первого и последующих вопросов
   if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
     userStates[userId] = "chatting_ai";
     if (!userContexts[userId]) userContexts[userId] = [];
     userContexts[userId].push({ role: "user", content: ctx.message.text });
 
-    // Сначала ищем ответ в кэше по fuzzy search
-    fuzzyFindInCache(ctx.message.text, async (err, cachedAnswer) => {
+    console.log(`[${new Date().toISOString()}] [AI Q] Пользователь ${userId} задал вопрос: "${ctx.message.text}"`);
+    notifyAdmin(`[AI Q] Пользователь ${userId} задал вопрос: "${ctx.message.text}"`);
+
+    // 1. Получаем все вопросы из кэша для логирования
+    getAllCacheQuestions((err, rows) => {
       if (err) {
-        await ctx.reply("❌ Ошибка поиска в кэше.");
+        console.error(`[${new Date().toISOString()}] [CACHE] Ошибка получения кэша: ${err.message}`);
+        notifyAdmin(`[CACHE] Ошибка получения кэша: ${err.message}`);
+        ctx.reply("❌ Ошибка поиска в кэше.");
         return;
       }
-      if (cachedAnswer) {
-        await ctx.reply("🔎 Ответ из кэша (поиск по похожести):\n" + cachedAnswer);
+      console.log(`[${new Date().toISOString()}] [CACHE] В кэше ${rows.length} записей. Начинаем fuzzy поиск...`);
+      notifyAdmin(`[CACHE] В кэше ${rows.length} записей. Начинаем fuzzy поиск...`);
+
+      // 2. Fuzzy поиск
+      const results = fuzzysort.go(ctx.message.text, rows, { key: 'prompt', threshold: -1000 });
+      if (results.length > 0) {
+        console.log(`[${new Date().toISOString()}] [CACHE] Лучший результат: "${results[0].obj.prompt}" (score: ${results[0].score})`);
+        notifyAdmin(`[CACHE] Лучший результат: "${results[0].obj.prompt}" (score: ${results[0].score})`);
+      } else {
+        console.log(`[${new Date().toISOString()}] [CACHE] Совпадений не найдено.`);
+        notifyAdmin(`[CACHE] Совпадений не найдено.`);
+      }
+
+      if (results.length > 0 && results[0].score > -1000) {
+        ctx.reply("🔎 Ответ из кэша (поиск по похожести):\n" + results[0].obj.response);
+        console.log(`[${new Date().toISOString()}] [CACHE] Ответ отправлен из кэша.`);
+        notifyAdmin(`[CACHE] Ответ отправлен из кэша.`);
         return;
       }
 
-      // Если нет в кэше — спрашиваем модель
-      try {
-        if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+      // 3. Если нет в кэше — спрашиваем модель
+      (async () => {
+        try {
+          console.log(`[${new Date().toISOString()}] [AI] Ответа в кэше нет, обращаемся к модели...`);
+          notifyAdmin(`[AI] Ответа в кэше нет, обращаемся к модели...`);
+          if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
 
-        // Ограничиваем историю (например, 10 последних сообщений)
-        const contextWindow = 10;
-        const context = userContexts[userId].slice(-contextWindow);
+          const contextWindow = 10;
+          const context = userContexts[userId].slice(-contextWindow);
+          const prompt = context.map(m => (m.role === "user" ? `Пользователь: ${m.content}` : `ИИ: ${m.content}`)).join('\n') + "\nИИ:";
 
-        // Формируем промпт из истории
-        const prompt = context.map(m => (m.role === "user" ? `Пользователь: ${m.content}` : `ИИ: ${m.content}`)).join('\n') + "\nИИ:";
+          const result = await gpt4allModel.generate(prompt);
+          userContexts[userId].push({ role: "assistant", content: result });
 
-        const result = await gpt4allModel.generate(prompt);
-        userContexts[userId].push({ role: "assistant", content: result });
+          saveToCacheHistory(ctx.message.text, result);
 
-        // Сохраняем новый вопрос и ответ в кэш
-        saveToCacheHistory(ctx.message.text, result);
-
-        await ctx.reply(result || "Пустой ответ от модели.");
-      } catch (error) {
-        await ctx.reply("❌ Ошибка генерации: " + error.message);
-      }
+          ctx.reply(result || "Пустой ответ от модели.");
+          console.log(`[${new Date().toISOString()}] [AI] Ответ модели отправлен и сохранён в кэш.`);
+          notifyAdmin(`[AI] Ответ модели отправлен и сохранён в кэш.`);
+        } catch (error) {
+          ctx.reply("❌ Ошибка генерации: " + error.message);
+          console.error(`[${new Date().toISOString()}] [AI] Ошибка генерации: ${error.message}`);
+          notifyAdmin(`[AI] Ошибка генерации: ${error.message}`);
+        }
+      })();
     });
   }
 });
