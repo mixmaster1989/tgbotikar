@@ -70,6 +70,51 @@ async function initGPT4AllModel() {
   };
 }
 
+// Новый метод для стриминга генерации и обновления сообщения
+async function streamAIResponse(prompt, ctx) {
+  if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+  let message = "";
+  let sentMessage = await ctx.reply("⏳ Генерация...");
+  let lastEdit = Date.now();
+
+  // Получаем модель напрямую для стриминга
+  const model = await gpt4all.loadModel(modelName);
+  const options = {
+    maxTokens: 192,
+    temp: 0.65,
+    topK: 30,
+    topP: 0.35,
+    repeatPenalty: 1.2,
+    batchSize: 1,
+    stream: true,
+  };
+
+  for await (const chunk of model.generate(prompt, options)) {
+    message += chunk.text;
+    // Обновляем сообщение не чаще раза в 1.2 секунды
+    if (Date.now() - lastEdit > 1200) {
+      try {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          sentMessage.message_id,
+          undefined,
+          "⏳ Генерация...\n" + message
+        );
+        lastEdit = Date.now();
+      } catch (e) {
+        // Игнорируем ошибки Telegram editMessageText
+      }
+    }
+  }
+  // Финальное обновление
+  await ctx.telegram.editMessageText(
+    ctx.chat.id,
+    sentMessage.message_id,
+    undefined,
+    "✅ Результат:\n" + message
+  );
+}
+
 // Обработка ошибок при работе с файлами
 async function parseDocxToText(filePath) {
   try {
@@ -172,23 +217,12 @@ bot.action(/material_(.+)/, async (ctx) => {
   }
 });
 
-// Генерация теста по случайному материалу
+// Генерация теста по случайному материалу с использованием стриминга
 bot.action("generate_test", async (ctx) => {
   try {
-    await ctx.reply("Генерация теста началась, ожидайте...");
-    (async () => {
-      try {
-        // Минимально простой промпт для быстрой генерации
-        const prompt = "Скажи привет";
-        if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-        const result = await gpt4allModel.generate(prompt);
-        await ctx.reply(`Результат:\n${result}`);
-      } catch (err) {
-        await ctx.reply("Ошибка при генерации теста: " + err.message);
-      }
-    })();
+    await streamAIResponse("Скажи привет", ctx);
   } catch (err) {
-    await ctx.reply("Ошибка при запуске генерации теста: " + err.message);
+    await ctx.reply("Ошибка при генерации теста: " + err.message);
   }
 });
 
