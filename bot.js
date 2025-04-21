@@ -70,6 +70,89 @@ async function initGPT4AllModel() {
   };
 }
 
+// Асинхронная очередь задач для генерации кэша
+const cacheQueue = [];
+let isCacheProcessing = false;
+
+// История генераций для каждого файла
+function saveToCacheHistory(file, summary) {
+  const stmt = db.prepare("INSERT INTO gpt_cache (prompt, response) VALUES (?, ?)");
+  stmt.run(file, summary);
+  stmt.finalize();
+}
+
+// Логирование ошибок и отчётов для администратора (через ADMIN_ID)
+const ADMIN_ID = process.env.ADMIN_ID;
+function notifyAdmin(message) {
+  if (ADMIN_ID) bot.telegram.sendMessage(ADMIN_ID, `[ADMIN LOG]\n${message}`);
+}
+
+// Прогресс и статус
+async function sendProgress(ctx, text) {
+  try { await ctx.reply(text); } catch {}
+  notifyAdmin(text);
+}
+
+// Обработка длинных материалов (разбивка на части)
+function splitTextByLength(text, maxLength = 700) {
+  const parts = [];
+  let i = 0;
+  while (i < text.length) {
+    parts.push(text.substring(i, i + maxLength));
+    i += maxLength;
+  }
+  return parts;
+}
+
+// Новая функция генерации кэша с очередью и прогрессом
+async function processCacheQueue() {
+  if (isCacheProcessing || cacheQueue.length === 0) return;
+  isCacheProcessing = true;
+
+  const { ctx } = cacheQueue.shift();
+  try {
+    await sendProgress(ctx, "🛠️ Генерация кэша: синхронизация материалов...");
+    const files = await yadisk.syncMaterials();
+    if (!files.length) {
+      await sendProgress(ctx, "Нет файлов для кэша.");
+      isCacheProcessing = false;
+      return;
+    }
+
+    const random = files[Math.floor(Math.random() * files.length)];
+    const filePath = path.join(materialsPath, random);
+    await sendProgress(ctx, `📄 Используется файл: ${random}\nПарсинг...`);
+    const content = await parseDocxToText(filePath);
+
+    // Разбиваем материал на части
+    const parts = splitTextByLength(content, 700);
+    let allSummaries = [];
+    for (let idx = 0; idx < parts.length; idx++) {
+      await sendProgress(ctx, `🤖 Генерация тезисов по части ${idx + 1} из ${parts.length}...`);
+      const prompt = `${parts[idx]}\n\nИзучи материал, тезисно изложи, о чем он.`;
+      if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+      const summary = await gpt4allModel.generate(prompt);
+      allSummaries.push(summary);
+    }
+    const finalSummary = allSummaries.join("\n---\n");
+
+    // Сохраняем историю генераций (каждый запуск — новая запись)
+    saveToCacheHistory(random, finalSummary);
+
+    await sendProgress(ctx, "✅ Краткое изложение сохранено в кэш.");
+
+    notifyAdmin(`Кэш сгенерирован для файла: ${random}`);
+
+  } catch (err) {
+    await sendProgress(ctx, "❌ Ошибка при генерации: " + err.message);
+    notifyAdmin(`Ошибка генерации кэша: ${err.message}`);
+  } finally {
+    isCacheProcessing = false;
+    // Запускаем следующую задачу из очереди, если есть
+    if (cacheQueue.length > 0) processCacheQueue();
+  }
+}
+
 // Старый вариант: обычный асинхронный промпт-запрос без стриминга
 async function streamAIResponse(prompt, ctx) {
   try {
@@ -232,55 +315,12 @@ bot.action("generate_test", async (ctx) => {
   }
 });
 
-// Генерация кэша и датасета
+// Кнопка "Генерация Кэша" — ставит задачу в очередь
 bot.action("generate_cache", async (ctx) => {
-  await ctx.answerCbQuery("⏳ Генерация началась..."); // Быстрый ответ на callback (избегаем таймаута)
-  logAndNotify("🛠️ Генерация кэша и датасета запущена, подождите...", ctx);
-
-  setTimeout(async () => {
-    try {
-      const files = await yadisk.syncMaterials();
-      if (!files.length) {
-        logAndNotify("Нет файлов для кэша.", ctx);
-        return;
-      }
-
-      const random = files[Math.floor(Math.random() * files.length)];
-      const filePath = path.join(materialsPath, random);
-      logAndNotify(`Используется файл: ${random}`, ctx);
-      const content = await parseDocxToText(filePath);
-      const questionResponse = await generateAIQuestions(content);
-      const parsed = parseTestResponse(questionResponse);
-
-      saveToCache(parsed.question, JSON.stringify(parsed.answers));
-
-      const datasetFilePath = path.join(cachePath, "dataset.json");
-      let dataset = [];
-      if (fs.existsSync(datasetFilePath)) {
-        const existingData = fs.readFileSync(datasetFilePath, 'utf8');
-        dataset = JSON.parse(existingData);
-      }
-      dataset.push({
-        question: parsed.question,
-        answers: parsed.answers,
-        correct: parsed.correct,
-      });
-      fs.writeFileSync(datasetFilePath, JSON.stringify(dataset, null, 2));
-
-      try {
-        await uploadToYandexDisk(datasetFilePath, `/bot_cache/${path.basename(datasetFilePath)}`, ctx);
-      } catch (error) {
-        logAndNotify(`Ошибка загрузки на Я.Диск: ${error.message}`, ctx);
-      }
-
-      logAndNotify("✅ Кэш и датасет обновлены.", ctx);
-    } catch (err) {
-      logAndNotify(`Ошибка в генерации кэша: ${err.message}`, ctx);
-      await ctx.reply("❌ Ошибка при генерации.");
-    }
-
-    await ctx.reply("Выберите действие:", mainMenuKeyboard());
-  }, 100); // Задержка в 100 мс, чтобы избежать телегиных ограничений
+  cacheQueue.push({ ctx });
+  await ctx.answerCbQuery("⏳ Задача поставлена в очередь.");
+  await sendProgress(ctx, `Ваша задача на генерацию кэша добавлена в очередь. Позиция: ${cacheQueue.length}`);
+  processCacheQueue();
 });
 
 // Обработка ошибок при загрузке на Яндекс.Диск
