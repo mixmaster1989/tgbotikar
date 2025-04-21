@@ -70,72 +70,15 @@ async function initGPT4AllModel() {
   };
 }
 
-// Новый метод для стриминга генерации и обновления сообщения
+// Старый вариант: обычный асинхронный промпт-запрос без стриминга
 async function streamAIResponse(prompt, ctx) {
-  let message = "";
-  let sentMessage = await ctx.reply("⏳ Генерация...");
-  let lastEdit = Date.now();
-
-  const model = await gpt4all.loadModel(modelName);
-
-  const options = {
-    stream: true,
-    maxTokens: 192,
-    temp: 0.65,
-    topK: 30,
-    topP: 0.35,
-    repeatPenalty: 1.2,
-    batchSize: 1,
-  };
-
-  // Попробуйте stream(), если есть
-  if (typeof model.stream === "function") {
-    for await (const chunk of model.stream(prompt, options)) {
-      message += chunk.completion || chunk.text || "";
-      if (Date.now() - lastEdit > 1200) {
-        try {
-          await ctx.telegram.editMessageText(
-            ctx.chat.id,
-            sentMessage.message_id,
-            undefined,
-            "⏳ Генерация...\n" + message
-          );
-          lastEdit = Date.now();
-        } catch (e) {}
-      }
-    }
-  } else if (typeof model.generate === "function") {
-    // Попробуйте generate() с {stream:true}
-    for await (const chunk of model.generate(prompt, options)) {
-      message += chunk.completion || chunk.text || "";
-      if (Date.now() - lastEdit > 1200) {
-        try {
-          await ctx.telegram.editMessageText(
-            ctx.chat.id,
-            sentMessage.message_id,
-            undefined,
-            "⏳ Генерация...\n" + message
-          );
-          lastEdit = Date.now();
-        } catch (e) {}
-      }
-    }
-  } else {
-    await ctx.telegram.editMessageText(
-      ctx.chat.id,
-      sentMessage.message_id,
-      undefined,
-      "❌ Модель не поддерживает стриминг."
-    );
-    return;
+  try {
+    if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+    const result = await gpt4allModel.generate(prompt);
+    await ctx.reply("✅ Результат:\n" + result);
+  } catch (error) {
+    await ctx.reply("❌ Ошибка генерации: " + error.message);
   }
-
-  await ctx.telegram.editMessageText(
-    ctx.chat.id,
-    sentMessage.message_id,
-    undefined,
-    "✅ Результат:\n" + message
-  );
 }
 
 // Обработка ошибок при работе с файлами
@@ -240,7 +183,7 @@ bot.action(/material_(.+)/, async (ctx) => {
   }
 });
 
-// Генерация теста по случайному материалу с использованием стриминга
+// Генерация теста по случайному материалу (или просто "Скажи привет")
 bot.action("generate_test", async (ctx) => {
   try {
     await streamAIResponse("Скажи привет", ctx);
