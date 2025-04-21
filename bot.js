@@ -24,6 +24,9 @@ const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 app.use("/static", express.static(path.join(__dirname, "static")));
 
+// Убедитесь, что папка cache существует
+fs.ensureDirSync(cachePath);
+
 // Улучшенная обработка ошибок при инициализации базы данных
 const db = new sqlite3.Database("database.sqlite", (err) => {
   if (err) {
@@ -131,6 +134,41 @@ function mainMenuKeyboard() {
 
 bot.start((ctx) => ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()));
 bot.action("reset", async (ctx) => ctx.reply("История сброшена.", mainMenuKeyboard()));
+
+// Кнопка "Материалы" — выводит список файлов
+bot.action("materials", async (ctx) => {
+  try {
+    const files = await fs.readdir(materialsPath);
+    const docxFiles = files.filter(f => f.endsWith(".docx"));
+    if (!docxFiles.length) {
+      return ctx.reply("Нет доступных материалов.");
+    }
+    const buttons = docxFiles.map(f =>
+      [Markup.button.callback(f, `material_${encodeURIComponent(f)}`)]
+    );
+    await ctx.reply("Выберите материал:", Markup.inlineKeyboard(buttons));
+  } catch (err) {
+    await ctx.reply("Ошибка при получении списка материалов.");
+  }
+});
+
+// Обработка нажатия на конкретный материал
+bot.action(/material_(.+)/, async (ctx) => {
+  const fileName = decodeURIComponent(ctx.match[1]);
+  const docxPath = path.join(materialsPath, fileName);
+  const pdfName = fileName.replace(/\.docx$/i, ".pdf");
+  const pdfPath = path.join(cachePath, pdfName);
+
+  try {
+    await ctx.reply("⏳ Конвертация DOCX в PDF...");
+    await convertDocxToPdf(docxPath, pdfPath);
+
+    await ctx.replyWithDocument({ source: pdfPath, filename: pdfName });
+    // Telegram автоматически покажет предпросмотр первой страницы PDF
+  } catch (err) {
+    await ctx.reply("Ошибка при конвертации или отправке PDF: " + err.message);
+  }
+});
 
 // Генерация кэша и датасета
 bot.action("generate_cache", async (ctx) => {
