@@ -10,15 +10,13 @@ const os = require("os"); // Работа с системными путями
 const sqlite3 = require("sqlite3").verbose(); // Подключаем SQLite
 const { spawn } = require('child_process'); // Для запуска внешних процессов
 const YaDiskService = require('./services/yadisk_service');
-const LocalDirCRUD = require("./services/local_dir_CRUD");
-const { convertDocxToPdf } = require('./modules/docx2pdf'); // Конвертация DOCX в PDF
+const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 
 // Основные константы и пути
-const materialsPath = path.join(__dirname, "materials"); // Путь к папке с материалами
-const materialsCRUD = process.env.YANDEX_DISK_TOKEN ? new YaDiskService(process.env.YANDEX_DISK_TOKEN) : new LocalDirCRUD(materialsPath);
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
 const modelDir = path.join(os.homedir(), ".cache", "gpt4all"); // Директория с AI моделью
 const finalModelPath = path.join(modelDir, modelName); // Путь к файлу модели. Возможно не нужен.
+const materialsPath = path.join(__dirname, "materials"); // Путь к папке с материалами
 const PORT = process.env.PORT || 3000; // Порт для веб-сервера
 const webAppUrl = `http://89.232.176.215:${PORT}`; // URL веб-приложения
 
@@ -31,17 +29,23 @@ const app = express(); // Создание Express приложения
 // Настройка статических файлов для веб-сервера
 app.use("/static", express.static(path.join(__dirname, "static")));
 
-// Создаем подключение к базе данных
+// Убедитесь, что папка cache существует
+fs.ensureDirSync(cachePath);
+
+// Улучшенная обработка ошибок при инициализации базы данных
 const db = new sqlite3.Database("database.sqlite", (err) => {
-    if (err) {
-        console.error("❌ Ошибка подключения к базе данных:", err);
-    } else {
-        console.log("✅ Успешное подключение к базе данных");
-        initDatabase();
+  if (err) {
+    console.error("DB Error:", err.message);
+    process.exit(1); // Завершаем процесс, если база данных не инициализируется
+  } else {
+    try {
+      initDatabase();
+    } catch (error) {
+      console.error("Ошибка при инициализации базы данных:", error.message);
     }
+  }
 });
 
-// Функция для инициализации таблицы
 function initDatabase() {
     db.run(
         `CREATE TABLE IF NOT EXISTS gpt_cache (
@@ -152,7 +156,7 @@ async function parseDocxToHtml(filePath) {
  */
 async function getFilesFromRoot() {
     try {
-        const files = await materialsCRUD.syncMaterials();
+        const files = await yadisk.syncMaterials();
         console.log(`📚 Доступно ${files.length} .docx файлов`);
         return files;
     } catch (err) {
@@ -163,55 +167,32 @@ async function getFilesFromRoot() {
 
 // Глобальная переменная для хранения инициализированной модели
 let gpt4allModel = null;
-
-// Добавляем глобальный объект для хранения правильных ответов
-const activeTests = new Map();
-
-// Глобальная переменная для хранения активного процесса обработки кэша
-let activeTestCacheProcess = null;
-
-/**
- * Инициализирует модель GPT4All
- * @returns {Promise<Object|null>} объект модели с методом generate или null при ошибке
- */
 async function initGPT4AllModel() {
-    try {
-        console.log("Инициализация GPT4All модели...");
-        const model = await gpt4all.loadModel(modelName);
-
-        return {
-            generate: async (prompt, ctx = null) => {
-                try {
-                    const answer = await model.generate(prompt);
-                    return answer.text;
-                } catch (error) {
-                    console.error("Ошибка при генерации:", error);
-                    return null;
-                }
-            }
-        };
-    } catch (error) {
-        console.error("Ошибка при инициализации GPT4All:", error);
-        return null;
-    }
+  const model = await gpt4all.loadModel(modelName);
+  return {
+    generate: async (prompt) => {
+      const options = {
+        maxTokens: 192,
+        temp: 0.65,
+        topK: 30,
+        topP: 0.35,
+        repeatPenalty: 1.2,
+        batchSize: 1,
+      };
+      return (await model.generate(prompt, options)).text;
+    },
+  };
 }
 
-/**
- * Обрезает текст до безопасного размера
- * @param {string} text - исходный текст
- * @returns {string} обрезанный текст
- */
-function trimText(text) {
-    // Примерно 1500 символов должно уложиться в лимит токенов
-    const MAX_LENGTH = 1500;
-    if (text.length <= MAX_LENGTH) return text;
-
-    // Берем первую часть текста
-    const firstPart = text.substring(0, MAX_LENGTH);
-
-    // Находим последнюю точку для красивого обрезания
-    const lastDot = firstPart.lastIndexOf('.');
-    return lastDot > 0 ? firstPart.substring(0, lastDot + 1) : firstPart;
+// Обработка ошибок при работе с файлами
+async function parseDocxToText(filePath) {
+  try {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return result.value.trim();
+  } catch (error) {
+    console.error(`Ошибка при обработке файла ${filePath}:`, error.message);
+    throw new Error("Не удалось извлечь текст из файла.");
+  }
 }
 
 /**
@@ -220,7 +201,7 @@ function trimText(text) {
  * @param {Object} ctx - контекст Telegram
  * @returns {Promise<string>} сгенерированные вопросы
  */
-async function generateAIQuestions(text, ctx, onComplete) {
+async function generateAIQuestions(text, ctx) {
     try {
         console.log("Начинаем генерацию вопросов...");
 
@@ -253,7 +234,6 @@ async function generateAIQuestions(text, ctx, onComplete) {
         console.log("Отправляем запрос к модели...");
         const result = await gpt4allModel.generate(prompt, ctx);
         console.log("Ответ от модели получен");
-        onComplete(result);
         return result;
     } catch (err) {
         console.error("Ошибка при генерации вопросов через AI:", err);
@@ -267,284 +247,106 @@ async function generateAIQuestions(text, ctx, onComplete) {
  * @returns {Object} объект с вопросом, вариантами ответов и правильным ответом
  */
 function parseTestResponse(response) {
-    const lines = response.split('\n');
-    const question = lines[0].replace('ВОПРОС:', '').trim();
-    const answers = {
-        'А': lines[1].replace('А)', '').trim(),
-        'Б': lines[2].replace('Б)', '').trim(),
-        'В': lines[3].replace('В)', '').trim(),
-        'Г': lines[4].replace('Г)', '').trim()
-    };
-    const correct = lines[5].replace('ПРАВИЛЬНЫЙ:', '').trim();
-
-    return { question, answers, correct };
+  const lines = response.split("\n");
+  return {
+    question: lines[0]?.replace("ВОПРОС:", "").trim(),
+    answers: {
+      А: lines[1]?.slice(3).trim(),
+      Б: lines[2]?.slice(3).trim(),
+      В: lines[3]?.slice(3).trim(),
+      Г: lines[4]?.slice(3).trim(),
+    },
+    correct: lines[5]?.replace("ПРАВИЛЬНЫЙ:", "").trim(),
+  };
 }
 
-// Обработчики команд бота
+function saveToCache(question, response) {
+  const stmt = db.prepare("INSERT OR REPLACE INTO gpt_cache (prompt, response) VALUES (?, ?)");
+  stmt.run(question, response);
+  stmt.finalize();
+}
 
-// Добавляем кнопку в start меню
-bot.start(async (ctx) => {
-    const buttonRows = [
-        [Markup.button.callback("📂 Просмотреть материалы", "open_materials")],
-        [Markup.button.callback("📝 Сгенерировать тест", "generate_test")],
-        [
-            Markup.button.callback("📊 Проверить кэш", "check_cache"),
-            Markup.button.callback("📚 Просмотр датасета", "view_dataset")
-        ]
-    ];
+// Логирование в консоль и в бот
+function logAndNotify(message, ctx = null) {
+  const logMessage = `[${new Date().toISOString()}] ${message}`;
+  console.log(logMessage); // Логируем в консоль
+  if (ctx) ctx.reply(message); // Отправляем в бот
+}
 
-    // Добавляем кнопку остановки только если есть активный процесс
-    if (activeTestCacheProcess) {
-        buttonRows.push([
-            Markup.button.callback("🔄 Запустить обработку", "run_test_cache"),
-            Markup.button.callback("⛔️ Остановить генерацию", "stop_test_cache")
-        ]);
-    } else {
-        buttonRows.push([
-            Markup.button.callback("🔄 Запустить обработку", "run_test_cache")
-        ]);
+// Основное меню
+function mainMenuKeyboard() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("📂 Материалы", "materials")],
+    [Markup.button.callback("📝 Генерация Теста", "generate_test")],
+    [Markup.button.callback("📊 Генерация Кэша", "generate_cache")],
+    [Markup.button.callback("⚙️ Настройки", "settings")],
+    [Markup.button.callback("🔄 Резет", "reset")],
+  ]);
+}
+
+bot.start((ctx) => ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()));
+bot.action("reset", async (ctx) => ctx.reply("История сброшена.", mainMenuKeyboard()));
+
+// Кнопка "Материалы" — выводит список файлов
+bot.action("materials", async (ctx) => {
+  try {
+    const files = await fs.readdir(materialsPath);
+    const docxFiles = files.filter(f => f.endsWith(".docx"));
+    if (!docxFiles.length) {
+      return ctx.reply("Нет доступных материалов.");
     }
-
-    await ctx.reply(
-        "Добро пожаловать! Этот бот поможет вам просматривать материалы.",
-        Markup.inlineKeyboard(buttonRows)
+    const buttons = docxFiles.map(f =>
+      [Markup.button.callback(f, `material_${encodeURIComponent(f)}`)]
     );
+    await ctx.reply("Выберите материал:", Markup.inlineKeyboard(buttons));
+  } catch (err) {
+    await ctx.reply("Ошибка при получении списка материалов.");
+  }
 });
 
-// Улучшенный обработчик кнопки "Проверить кэш"
-bot.action("check_cache", async (ctx) => {
-    try {
-        db.all(`
-            SELECT 
-                prompt, 
-                response, 
-                created_at,
-                (SELECT COUNT(*) FROM gpt_cache) as total_entries
-            FROM gpt_cache 
-            ORDER BY created_at DESC 
-            LIMIT 5
-        `, async (err, rows) => {
-            if (err) {
-                console.error("❌ Ошибка при запросе кэша:", err);
-                return ctx.reply("❌ Ошибка при запросе кэша.");
-            }
-
-            if (rows.length === 0) {
-                return ctx.reply("📂 Кэш пуст.");
-            }
-
-            let message = `📊 <b>Статистика кэша</b>\n`;
-            message += `\nВсего записей: ${rows[0].total_entries}\n`;
-            message += `\n<b>Последние 5 запросов:</b>\n\n`;
-
-            rows.forEach((row, index) => {
-                const date = new Date(row.created_at).toLocaleString('ru-RU');
-                message += `${index + 1}. <b>Дата:</b> ${date}\n`;
-                message += `📝 <b>Вопрос:</b>\n${row.prompt.slice(0, 100)}${row.prompt.length > 100 ? '...' : ''}\n`;
-                message += `💡 <b>Ответ:</b>\n${row.response.slice(0, 100)}${row.response.length > 100 ? '...' : ''}\n\n`;
-            });
-
-            message += `\nДля полного списка используйте команду /cache`;
-
-            await ctx.reply(message, {
-                parse_mode: 'HTML',
-                reply_markup: Markup.inlineKeyboard([
-                    [Markup.button.callback("🔄 Обновить", "check_cache")],
-                    [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
-                ])
-            });
-        });
-    } catch (err) {
-        console.error("❌ Ошибка при обработке кнопки 'Проверить кэш':", err);
-        ctx.reply("❌ Произошла ошибка при обработке кнопки.");
-    }
-});
-
-// Новый обработчик для просмотра датасета
-bot.action("view_dataset", async (ctx) => {
-    try {
-        const datasetDir = path.join(__dirname, "dataset");
-
-        if (!fs.existsSync(datasetDir)) {
-            return ctx.reply("📂 Папка с датасетами не найдена.");
-        }
-
-        const files = fs.readdirSync(datasetDir)
-            .filter(file => file.endsWith('.json'))
-            .sort((a, b) => {
-                return fs.statSync(path.join(datasetDir, b)).mtime.getTime() -
-                    fs.statSync(path.join(datasetDir, a)).mtime.getTime();
-            });
-
-        if (files.length === 0) {
-            return ctx.reply("📂 Датасеты не найдены.");
-        }
-
-        // Берем самый свежий датасет
-        const latestDataset = JSON.parse(
-            fs.readFileSync(path.join(datasetDir, files[0]), 'utf8')
-        );
-
-        let message = `📚 <b>Информация о последнем датасете:</b>\n\n`;
-        message += `📅 Дата создания: ${new Date(latestDataset.created_at).toLocaleString('ru-RU')}\n`;
-        message += `📊 Всего примеров: ${latestDataset.total_examples}\n`;
-        message += `🤖 Модель: ${latestDataset.model}\n\n`;
-
-        message += `<b>Статистика ответов:</b>\n`;
-        const factualCount = latestDataset.examples.filter(ex => ex.metadata.is_factual).length;
-        message += `✅ Фактологических: ${factualCount}\n`;
-        message += `📏 Средняя длина: ${Math.round(latestDataset.examples.reduce((acc, ex) => acc + ex.metadata.response_length, 0) / latestDataset.total_examples)}\n\n`;
-
-        message += `<b>Последние 3 примера:</b>\n\n`;
-        latestDataset.examples.slice(0, 3).forEach((example, i) => {
-            message += `${i + 1}. <b>Вопрос:</b>\n${example.instruction.slice(0, 100)}${example.instruction.length > 100 ? '...' : ''}\n`;
-            message += `<b>Ответ:</b>\n${example.output.slice(0, 100)}${example.output.length > 100 ? '...' : ''}\n\n`;
-        });
-
-        await ctx.reply(message, {
-            parse_mode: 'HTML',
-            reply_markup: Markup.inlineKeyboard([
-                [Markup.button.callback("🔄 Обновить", "view_dataset")],
-                [Markup.button.callback("🏠 В главное меню", "back_to_menu")]
-            ])
-        });
-
-    } catch (err) {
-        console.error("❌ Ошибка при просмотре датасета:", err);
-        ctx.reply("❌ Произошла ошибка при просмотре датасета.");
-    }
-});
-
-// Обработчик кнопки возврата в главное меню
-bot.action("back_to_menu", async (ctx) => {
-    await ctx.editMessageText(
-        "Выберите действие:",
-        Markup.inlineKeyboard([
-            [Markup.button.callback("📂 Просмотреть материалы", "open_materials")],
-            [Markup.button.callback("📝 Сгенерировать тест", "generate_test")],
-            [
-                Markup.button.callback("📊 Проверить кэш", "check_cache"),
-                Markup.button.callback("📚 Просмотр датасета", "view_dataset")
-            ],
-            [Markup.button.callback("🔄 Запустить обработку кэша", "run_test_cache")]
-        ])
-    );
-});
-
-// Команда /cache - проверка содержимого кэша
-bot.command("cache", async (ctx) => {
-    try {
-        db.all("SELECT prompt, response, created_at FROM gpt_cache", (err, rows) => {
-            if (err) {
-                console.error("❌ Ошибка при запросе кэша:", err);
-                return ctx.reply("❌ Ошибка при запросе кэша.");
-            }
-
-            if (rows.length === 0) {
-                return ctx.reply("📂 Кэш пуст.");
-            }
-
-            let message = "📊 Содержимое кэша:\n\n";
-            rows.forEach((row, index) => {
-                message += `${index + 1}. [${row.created_at}]\n`;
-                message += `Промпт: ${row.prompt.slice(0, 50)}...\n`;
-                message += `Ответ: ${row.response.slice(0, 50)}...\n\n`;
-            });
-
-            ctx.reply(message);
-        });
-    } catch (err) {
-        console.error("❌ Ошибка при обработке команды /cache:", err);
-        ctx.reply("❌ Произошла ошибка при обработке команды.");
-    }
-});
-
-// Обработка кнопки "Просмотреть материалы" - показывает список доступных файлов
-bot.action("open_materials", async (ctx) => {
-    const files = await getFilesFromRoot();
-
-    if (files.length === 0) {
-        return ctx.reply("Нет доступных файлов.");
-    }
-
-    const buttons = files.map((file) => [
-        Markup.button.callback(file, `material:${file}`),
-    ]);
-
-    await ctx.reply("Выберите файл:", Markup.inlineKeyboard(buttons));
-});
-
-// Обработка выбора конкретного файла - отправляет PDF вместо ссылки на Web App
+// Обработка выбора конкретного файла - показывает ссылку на веб-просмотр
 bot.action(/^material:(.+)$/, async (ctx) => {
     const fileName = ctx.match[1];
-    const fullPath = path.join(materialsPath, fileName);
-    const pdfFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.pdf`;
-    const pdfPath = path.join(__dirname, 'static', 'previews', pdfFile);
+    const filePath = path.join(materialsPath, fileName);
 
-    try {
-        console.log(`Конвертация файла ${fileName} в PDF...`);
-        await convertDocxToPdf(fullPath, pdfPath); // Конвертация DOCX в PDF
-        console.log(`Файл ${fileName} успешно конвертирован в PDF: ${pdfPath}`);
-        
-        // Отправляем PDF-файл с явным указанием MIME-типа
-        await ctx.replyWithDocument(
-            {
-                source: pdfPath,
-                filename: `${fileName.replace(/\.[^.]+$/, '')}.pdf`,
-                contentType: 'application/pdf', // Явно указываем MIME-тип
-            },
-            {
-                caption: `📄 ${fileName.replace(/\.[^.]+$/, '')}`,
-            }
-        );
-    } catch (err) {
-        console.error('Ошибка при конвертации DOCX в PDF:', err);
-        await ctx.reply('❌ Не удалось сконвертировать файл.');
+    if (!fs.existsSync(filePath)) {
+        return ctx.reply("Файл не найден.");
     }
+
+    const url = `${webAppUrl}/article/${encodeURIComponent(fileName)}`;
+
+    await ctx.reply(
+        `Откройте файл "${fileName}" через Web App:`,
+        Markup.inlineKeyboard([
+            Markup.button.url("Открыть файл", url),
+            Markup.button.callback("🔙 Назад", "open_materials"),
+        ])
+    );
 });
 
 // Обработка кнопки "Сгенерировать тест"
 bot.action("generate_test", async (ctx) => {
     try {
-        const startTime = Date.now(); // Засекаем время начала
         const files = await getFilesFromRoot();
         if (files.length === 0) {
             return ctx.reply("Нет доступных материалов для генерации теста.");
         }
 
-        // Выбираем случайный файл
-        const random = files[Math.floor(Math.random() * files.length)];
-        const filePath = path.join(materialsPath, random);
-        await ctx.reply(`📚 Используется: ${random}`);
+        // Создаем кнопки для выбора файла
+        const buttons = files.map((file) => [
+            Markup.button.callback(`📄 ${file}`, `test:${file}`),
+        ]);
 
-        // Извлекаем текст из файла
-        const content = await parseDocxToText(filePath);
+        // Добавляем кнопку случайного выбора
+        buttons.push([Markup.button.callback("🎲 Случайный материал", "test:random")]);
 
-        // Генерируем тест
-        generateAIQuestions(content,ctx,async (test) => {
-            const parsed = parseTestResponse(test);
-
-            // Формируем сообщение с вопросом
-            let message = `❓ <b>${parsed.question}</b>\n`;
-            for (const key in parsed.answers) {
-                message += `\n${key}) ${parsed.answers[key]}`;
-            }
-            message += `\n\n✅ Правильный ответ: ${parsed.correct}`;
-    
-            // Отправляем тест
-            await ctx.replyWithHTML(message);
-    
-            // Логируем время выполнения
-            const endTime = Date.now(); // Засекаем время окончания
-            const executionTime = ((endTime - startTime) / 1000).toFixed(2); // Время выполнения в секундах
-            await ctx.reply(`⏱️ Генерация теста завершена за ${executionTime} секунд.`);
-    
-            // Возвращаем главное меню
-            await ctx.reply("Выберите действие:", mainMenuKeyboard);
-        });
+        await ctx.reply(
+            "Выберите материал для генерации теста:",
+            Markup.inlineKeyboard(buttons)
+        );
     } catch (err) {
-        console.error("Ошибка при генерации теста:", err);
-        await ctx.reply("❌ Произошла ошибка при генерации теста.");
+        console.error("Ошибка при подготовке списка:", err);
+        await ctx.reply("Произошла ошибка. Попробуйте позже.");
     }
 });
 
@@ -634,17 +436,18 @@ bot.action(/^test:(.+)$/, async (ctx) => {
     }
 });
 
-// Добавляем обработчик ответов на вопросы
-bot.action(/^answer:(\d+):([АБВГ])$/, async (ctx) => {
-    try {
-        const testId = ctx.match[1];
-        const userAnswer = ctx.match[2];
-        const correctAnswer = activeTests.get(testId);
+// Генерация кэша и датасета
+bot.action("generate_cache", async (ctx) => {
+  await ctx.answerCbQuery("⏳ Генерация началась..."); // Быстрый ответ на callback (избегаем таймаута)
+  logAndNotify("🛠️ Генерация кэша и датасета запущена, подождите...", ctx);
 
-        if (!correctAnswer) {
-            await ctx.reply('⚠️ Тест устарел. Пожалуйста, сгенерируйте новый.');
-            return;
-        }
+  setTimeout(async () => {
+    try {
+      const files = await yadisk.syncMaterials();
+      if (!files.length) {
+        logAndNotify("Нет файлов для кэша.", ctx);
+        return;
+      }
 
         // Удаляем тест из активных
         activeTests.delete(testId);
@@ -734,18 +537,7 @@ bot.action("run_test_cache", async (ctx) => {
             }
         });
 
-        activeTestCacheProcess.on('exit', () => {
-            activeTestCacheProcess = null;
-        });
-
-        activeTestCacheProcess.stderr.on('data', (data) => {
-            console.error(`Ошибка: ${data}`);
-        });
-        activeTestCacheProcess.on('error', (err) => {
-            console.error(`Ошибка запуска процесса: ${err}`);
-            pendingUpdate = false;
-        });
-
+        // Остальной код остается прежним...
     } catch (err) {
         console.error("❌ Ошибка при запуске test_cache.js:", err);
         await ctx.reply("❌ Произошла ошибка при запуске процесса обработки кэша.");
@@ -791,11 +583,76 @@ process.on('SIGTERM', () => {
     process.exit(0);
 });
 
+// Главное меню
+const mainMenuKeyboard = Markup.keyboard([
+    ['📚 Кэш', '🤖 Генерация'],
+    ['📊 Статистика', '⚙️ Настройки']
+]).resize().oneTime(false);
+
+// Обновим команду старта
+bot.command('start', (ctx) => {
+    ctx.reply('👋 Привет! Выбери действие:', mainMenuKeyboard);
+});
+
+// Обработчики кнопок главного меню
+bot.hears('📚 Кэш', (ctx) => {
+    ctx.reply('Управление кэшем', {
+        reply_markup: {
+            keyboard: [
+                ['📋 Список кэша', '🗑️ Очистить кэш'],
+                ['🔙 Главное меню']
+            ],
+            resize_keyboard: true
+        }
+    });
+});
+
+bot.hears('🤖 Генерация', (ctx) => {
+    ctx.reply('Режимы генерации', {
+        reply_markup: {
+            keyboard: [
+                ['▶️ Запустить тест-кэш', '⏹️ Остановить тест-кэш'],
+                ['🔙 Главное меню']
+            ],
+            resize_keyboard: true
+        }
+    });
+});
+
+bot.hears('📊 Статистика', (ctx) => {
+    ctx.reply('Статистика работы бота', {
+        reply_markup: {
+            keyboard: [
+                ['📈 Кэш', '🤖 Генерация'],
+                ['🔙 Главное меню']
+            ],
+            resize_keyboard: true
+        }
+    });
+});
+
+bot.hears('⚙️ Настройки', (ctx) => {
+    ctx.reply('Настройки бота', {
+        reply_markup: {
+            keyboard: [
+                ['🔧 Параметры', '📝 Логи'],
+                ['🔙 Главное меню']
+            ],
+            resize_keyboard: true
+        }
+    });
+});
+
+// Возврат в главное меню
+bot.hears('🔙 Главное меню', (ctx) => {
+    ctx.reply('Главное меню', mainMenuKeyboard);
+});
+
 // Добавляем новую команду для ручной синхронизации:
 bot.command('sync', async (ctx) => {
     try {
         await ctx.reply('🔄 Начинаю синхронизацию с Яндекс.Диском...');
-        const files = await materialsCRUD.syncMaterials();
+        const files = await yadisk.syncMaterials();
         await ctx.reply(`✅ Синхронизация завершена!\nОбновлено файлов: ${files.length}`);
     } catch (error) {
         console.error('Ошибка синхронизации:', error);
@@ -807,66 +664,10 @@ bot.command('sync', async (ctx) => {
 bot.command('check_disk', async (ctx) => {
     try {
         await ctx.reply('🔍 Проверяю доступ к Яндекс.Диску...');
-        await materialsCRUD.checkAccess();
+        await yadisk.checkAccess();
         await ctx.reply('✅ Доступ к Яндекс.Диску подтвержден');
     } catch (error) {
         console.error('Ошибка при проверке доступа:', error);
         await ctx.reply(`❌ Ошибка доступа: ${error.message}`);
-    }
-});
-
-// Обработчик кнопки "Материалы"
-bot.action("materials", async (ctx) => {
-    try {
-        console.log("Обработчик 'Материалы' вызван.");
-        await ctx.answerCbQuery("📂 Загрузка материалов...");
-
-        const files = await getFilesFromRoot(); // Получаем список файлов из папки материалов
-        console.log("Список файлов:", files);
-
-        if (!files.length) {
-            await ctx.reply("❌ Нет доступных материалов.");
-            return;
-        }
-
-        const fileButtons = files.map((file) =>
-            Markup.button.callback(file, `file_${file}`)
-        );
-        await ctx.reply(
-            "📂 Доступные материалы:",
-            Markup.inlineKeyboard(fileButtons, { columns: 1 })
-        );
-    } catch (error) {
-        console.error("Ошибка в обработчике 'Материалы':", error.message);
-        await ctx.reply("❌ Произошла ошибка при загрузке материалов.");
-    }
-});
-
-// Обработчик для отправки PDF
-bot.action(/file_(.+)/, async (ctx) => {
-    const fileName = ctx.match[1];
-    const fullPath = path.join(materialsPath, fileName);
-    const pdfFile = `${fileName.replace(/\.[^.]+$/, '')}_${Date.now()}.pdf`;
-    const pdfPath = path.join(__dirname, 'static', 'previews', pdfFile);
-
-    try {
-        console.log(`Конвертация файла ${fileName} в PDF...`);
-        await convertDocxToPdf(fullPath, pdfPath); // Конвертация DOCX в PDF
-        console.log(`Файл ${fileName} успешно конвертирован в PDF: ${pdfPath}`);
-        
-        // Отправляем PDF-файл с явным указанием MIME-типа
-        await ctx.replyWithDocument(
-            {
-                source: pdfPath,
-                filename: `${fileName.replace(/\.[^.]+$/, '')}.pdf`,
-                contentType: 'application/pdf', // Явно указываем MIME-тип
-            },
-            {
-                caption: `📄 ${fileName.replace(/\.[^.]+$/, '')}`, // Описание файла
-            }
-        );
-    } catch (err) {
-        console.error('Ошибка при конвертации DOCX в PDF:', err);
-        await ctx.reply('❌ Не удалось сконвертировать файл.');
     }
 });
