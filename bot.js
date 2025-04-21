@@ -197,7 +197,8 @@ bot.action("ask_ai", async (ctx) => {
 // Обработка текстового сообщения как вопроса для ИИ, если пользователь в нужном состоянии
 bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
-  if (userStates[userId] === "awaiting_ai_prompt") {
+  // Обрабатываем оба состояния: ожидание первого и последующих вопросов
+  if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
     userStates[userId] = "chatting_ai";
     if (!userContexts[userId]) userContexts[userId] = [];
     userContexts[userId].push({ role: "user", content: ctx.message.text });
@@ -205,7 +206,7 @@ bot.on("text", async (ctx) => {
     try {
       if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
 
-      // Собираем контекст (историю), ограничиваем по длине (например, 10 последних сообщений)
+      // Ограничиваем историю (например, 10 последних сообщений)
       const contextWindow = 10;
       const context = userContexts[userId].slice(-contextWindow);
 
