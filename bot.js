@@ -475,5 +475,6 @@ function saveToCacheAndSync(question, answer, ctx = null) {
 
 module.exports = {app,
   bot,
-
+  mainMenuKeyboard,
+  parseDocxToText
 };
