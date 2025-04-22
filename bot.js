@@ -8,6 +8,7 @@ const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const fuzzysort = require('fuzzysort'); // Добавлено
 const { exportCacheToJsonFile, uploadCacheJsonToYadisk } = require("./modules/cache_export");
+const ui = require("./modules/ui_messages"); // Новый модуль UI-сообщений
 require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
@@ -132,36 +133,39 @@ async function processCacheQueue() {
 
   const { ctx } = cacheQueue.shift();
   try {
-    await sendProgress(ctx, "🛠️ Генерация кэша: синхронизация материалов...");
+    await sendProgress(ctx, ui.processingFile);
     const files = await yadisk.syncMaterials();
     if (!files.length) {
-      await sendProgress(ctx, "Нет файлов для кэша.");
+      await sendProgress(ctx, ui.error("Нет файлов для кэша."));
       isCacheProcessing = false;
       return;
     }
 
     const random = files[Math.floor(Math.random() * files.length)];
     const filePath = path.join(materialsPath, random);
-    await sendProgress(ctx, `📄 Используется файл: ${random}\nПарсинг...`);
+    await sendProgress(ctx, ui.processingFile + `\n📄 Используется файл: ${random}`);
     const content = await parseDocxToText(filePath);
 
     // Разбиваем материал на части
     const parts = splitTextByLength(content, 700);
     let allSummaries = [];
     for (let idx = 0; idx < parts.length; idx++) {
-      await sendProgress(ctx, `🤖 Генерация тезисов по части ${idx + 1} из ${parts.length}...`);
+      await sendProgress(ctx, ui.generatingPrompt(idx + 1, parts.length));
       const prompt = `Ты профессиональный специалист по контрольно-кассовой технике, 1С и автоматизации бизнеса. 
 Изучи материал ниже и выдели только те тезисы, которые будут полезны специалисту в этой области. Не перечисляй общеизвестные основы и базовые факты. Упоминай только новые, сложные или малоизвестные детали, которые могут быть интересны профессионалу. Каждый тезис — с новой строки.
 
 ${parts[idx]}`;
       if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
+      await sendProgress(ctx, ui.promptSent);
       const summary = await gpt4allModel.generate(prompt);
+      await sendProgress(ctx, ui.modelAnswerReceived);
       allSummaries.push(summary);
     }
     const finalSummary = allSummaries.join("\n---\n");
 
     // Сохраняем историю генераций (каждый запуск — новая запись)
-    saveToCacheAndSync(random, finalSummary);
+    await sendProgress(ctx, ui.savingToCache);
+    saveToCacheAndSync(random, finalSummary, ctx);
 
     // Красиво оформляем тезисы для вывода в бот
     const thesisList = finalSummary
@@ -175,11 +179,11 @@ ${parts[idx]}`;
       `✅ <b>Краткое изложение (тезисы):</b>\n\n${thesisList}`
     );
 
-    await sendProgress(ctx, "✅ Краткое изложение сохранено в кэш.");
+    await sendProgress(ctx, ui.cacheSynced);
     notifyAdmin(`Кэш сгенерирован для файла: ${random}`);
 
   } catch (err) {
-    await sendProgress(ctx, "❌ Ошибка при генерации: " + err.message);
+    await sendProgress(ctx, ui.error(err.message));
     notifyAdmin(`Ошибка генерации кэша: ${err.message}`);
   } finally {
     isCacheProcessing = false;
@@ -194,7 +198,7 @@ async function streamAIResponse(prompt, ctx) {
     const result = await gpt4allModel.generate(prompt);
     await ctx.reply("✅ Результат:\n" + result);
   } catch (error) {
-    await ctx.reply("❌ Ошибка генерации: " + error.message);
+    await ctx.reply(ui.error(error.message));
   }
 }
 
@@ -291,7 +295,7 @@ bot.action(/material_(.+)/, async (ctx) => {
   try {
     await ctx.answerCbQuery(); // Подтверждаем получение callback
     await ctx.editMessageReplyMarkup(null); // Удаляем клавиатуру
-    await ctx.reply("⏳ Конвертация DOCX в PDF...");
+    await ctx.reply(ui.processingFile);
     
     await convertDocxToPdf(docxPath, pdfPath);
     await ctx.replyWithDocument({ source: pdfPath, filename: pdfName });
@@ -299,7 +303,7 @@ bot.action(/material_(.+)/, async (ctx) => {
     // Показываем главное меню после отправки файла
     await ctx.reply("Выберите действие:", mainMenuKeyboard());
   } catch (err) {
-    await ctx.reply("Ошибка при конвертации или отправке PDF: " + err.message);
+    await ctx.reply(ui.error("Ошибка при конвертации или отправке PDF: " + err.message));
     await ctx.reply("Выберите действие:", mainMenuKeyboard());
   }
 });
@@ -323,11 +327,12 @@ bot.on("text", async (ctx) => {
     notifyAdmin(`[AI Q] Пользователь ${userId} задал вопрос: "${ctx.message.text}"`);
 
     // 1. Fuzzy поиск в локальном кэше
+    await ctx.reply(ui.searchingLocalCache);
     getAllCacheQuestions((err, rows) => {
       if (err) {
         console.error(`[${new Date().toISOString()}] [CACHE] Ошибка получения кэша: ${err.message}`);
         notifyAdmin(`[CACHE] Ошибка получения кэша: ${err.message}`);
-        ctx.reply("❌ Ошибка поиска в кэше.");
+        ctx.reply(ui.error("Ошибка поиска в кэше."));
         return;
       }
       console.log(`[${new Date().toISOString()}] [CACHE] В кэше ${rows.length} записей. Начинаем fuzzy поиск...`);
@@ -351,7 +356,7 @@ bot.on("text", async (ctx) => {
 
       // 2. Fuzzy поиск на Яндекс.Диске
       (async () => {
-        ctx.reply("⏳ Поиск ответа на Яндекс.Диске...");
+        await ctx.reply(ui.searchingYadisk);
         const yadiskAnswer = await fuzzyFindInYandexDisk(ctx.message.text);
         if (yadiskAnswer) {
           ctx.reply("🔎 Ответ из кэша на Яндекс.Диске:\n" + yadiskAnswer);
@@ -370,16 +375,18 @@ bot.on("text", async (ctx) => {
           const context = userContexts[userId].slice(-contextWindow);
           const prompt = context.map(m => (m.role === "user" ? `Пользователь: ${m.content}` : `ИИ: ${m.content}`)).join('\n') + "\nИИ:";
 
+          await ctx.reply(ui.promptSent);
           const result = await gpt4allModel.generate(prompt);
           userContexts[userId].push({ role: "assistant", content: result });
 
-          saveToCacheAndSync(ctx.message.text, result);
+          await ctx.reply(ui.answerSaved);
+          saveToCacheAndSync(ctx.message.text, result, ctx);
 
           ctx.reply(result || "Пустой ответ от модели.");
           console.log(`[${new Date().toISOString()}] [AI] Ответ модели отправлен и сохранён в кэш.`);
           notifyAdmin(`[AI] Ответ модели отправлен и сохранён в кэш.`);
         } catch (error) {
-          ctx.reply("❌ Ошибка генерации: " + error.message);
+          ctx.reply(ui.error(error.message));
           console.error(`[${new Date().toISOString()}] [AI] Ошибка генерации: ${error.message}`);
           notifyAdmin(`[AI] Ошибка генерации: ${error.message}`);
         }
@@ -393,7 +400,7 @@ bot.action("generate_test", async (ctx) => {
   try {
     await streamAIResponse("Скажи привет", ctx);
   } catch (err) {
-    await ctx.reply("Ошибка при генерации теста: " + err.message);
+    await ctx.reply(ui.error("Ошибка при генерации теста: " + err.message));
   }
 });
 
@@ -411,13 +418,12 @@ async function uploadToYandexDisk(localFilePath, remoteFilePath, ctx) {
     await yadisk.uploadFile(localFilePath, remoteFilePath);
     logAndNotify(`Файл загружен на Я.Диск: ${remoteFilePath}`, ctx);
   } catch (error) {
-    console.error(`Ошибка загрузки файла на Я.Диск (${localFilePath}):`, error.message);
-    logAndNotify(`Ошибка загрузки на Я.Диск: ${error.message}`, ctx);
+    logAndNotify(ui.error("Ошибка загрузки на Я.Диск: " + error.message), ctx);
     throw new Error("Не удалось загрузить файл на Яндекс.Диск.");
   }
 }
 
-function saveToCacheAndSync(question, answer) {
+function saveToCacheAndSync(question, answer, ctx = null) {
   saveToCacheHistory(question, answer);
 
   const localPath = path.join(cachePath, "dataset.json");
@@ -426,12 +432,15 @@ function saveToCacheAndSync(question, answer) {
     if (!err) {
       try {
         await uploadCacheJsonToYadisk(yadisk, localPath, remotePath);
-        notifyAdmin("✅ Кэш синхронизирован с Яндекс.Диском.");
+        if (ctx) await ctx.reply(ui.cacheSynced);
+        notifyAdmin(ui.cacheSynced);
       } catch (e) {
-        notifyAdmin("❌ Ошибка загрузки кэша на Яндекс.Диск: " + e.message);
+        if (ctx) await ctx.reply(ui.error(e.message));
+        notifyAdmin(ui.error(e.message));
       }
     } else {
-      notifyAdmin("❌ Ошибка экспорта кэша в JSON: " + err.message);
+      if (ctx) await ctx.reply(ui.error(err.message));
+      notifyAdmin(ui.error(err.message));
     }
   });
 }
