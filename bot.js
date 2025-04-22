@@ -473,13 +473,7 @@ function saveToCacheAndSync(question, answer, ctx = null) {
   logger.info("🤖 Бот запущен!");
 })();
 
-module.exports = {
+module.exports = {app,
   bot,
-  processCacheQueue,
-  saveToCacheAndSync,
-  fuzzyFindInYandexDisk,
-  parseDocxToText,
-  splitTextByLength,
-  mainMenuKeyboard,
-  // ...добавьте другие функции, которые хотите тестировать
+
 };

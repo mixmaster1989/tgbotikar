@@ -2,9 +2,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const { convertDocxToPdf, generatePdfThumbnail } = require("../modules/docx2pdf");
 
-jest.mock('pdf-poppler', () => ({
-  convert: jest.fn(),
-}));
+
 
 describe("modules/docx2pdf.js", () => {
   const docxPath = path.join(__dirname, "..", "materials", "test.docx");
@@ -32,11 +30,5 @@ describe("modules/docx2pdf.js", () => {
     expect(stats.size).toBeGreaterThan(100); // PDF не пустой
   });
 
-  it("generatePdfThumbnail создает миниатюру PDF", async () => {
-    await convertDocxToPdf(docxPath, pdfPath);
-    await generatePdfThumbnail(pdfPath, thumbPath);
-    expect(await fs.pathExists(thumbPath)).toBe(true);
-    const stats = await fs.stat(thumbPath);
-    expect(stats.size).toBeGreaterThan(100); // PNG не пустой
-  });
+  
 });

@@ -35,6 +35,8 @@ describe("services/yadisk_service.js", () => {
   });
 
   it("downloadFileByPath успешно скачивает файл", async () => {
+    mockApi.get.mockResolvedValue({ data: { href: "http://upload" } });
+    mockApi.put.mockResolvedValue({});
     axios.get.mockResolvedValueOnce({ data: { href: "http://download" } });
     const mockStream = { pipe: jest.fn() };
     axios.mockImplementationOnce(() => Promise.resolve({ data: mockStream }));

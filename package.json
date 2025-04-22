@@ -4,7 +4,7 @@
   "description": "Telegram Bot with AI functionality",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js",
+    "start": "node start.js",
     "dev": "nodemon bot.js",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:restart": "pm2 restart telegram-bot",
@@ -13,8 +13,6 @@
     "clean": "rimraf node_modules package-lock.json && npm cache clean --force",
     "test": "jest"
   },
-  
-  
   "keywords": [],
   "author": "",
   "license": "ISC",

@@ -1,7 +1,6 @@
 const libre = require('libreoffice-convert');
 const fs = require('fs-extra');
 const logger = require("./logger");
-const pdf = require('pdf-poppler');
 
 /**
  * Конвертирует DOCX в PDF
@@ -30,22 +29,6 @@ async function convertDocxToPdf(inputPath, outputPath) {
  * @param {string} pdfPath - путь к PDF
  * @param {string} thumbPath - путь для сохранения PNG
  */
-async function generatePdfThumbnail(pdfPath, thumbPath) {
-    const pdf = require('pdf-poppler'); // импорт внутри функции
-    try {
-        const opts = {
-            format: 'png',
-            out_dir: require('path').dirname(thumbPath),
-            out_prefix: require('path').basename(thumbPath, '.png'),
-            page: 1,
-            scale: 1024
-        };
-        await pdf.convert(pdfPath, opts);
-        logger.info(`Миниатюра PDF создана: ${thumbPath}`);
-    } catch (err) {
-        logger.error(`Ошибка при создании миниатюры PDF (${pdfPath}): ${err.message}`);
-        throw err;
-    }
-}
+
 
 module.exports = { convertDocxToPdf, generatePdfThumbnail };
