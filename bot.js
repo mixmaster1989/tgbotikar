@@ -237,11 +237,6 @@ function parseTestResponse(response) {
   };
 }
 
-function saveToCache(question, response) {
-  const stmt = db.prepare("INSERT OR REPLACE INTO gpt_cache (prompt, response) VALUES (?, ?)");
-  stmt.run(question, response);
-  stmt.finalize();
-}
 
 // Логирование в консоль и в бот
 function logAndNotify(message, ctx = null) {
