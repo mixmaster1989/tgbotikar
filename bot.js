@@ -160,6 +160,17 @@ ${parts[idx]}`;
       const summary = await gpt4allModel.generate(prompt);
       await sendProgress(ctx, ui.modelAnswerReceived);
       allSummaries.push(summary);
+
+      // Показываем тезисы пользователю сразу после обработки блока
+      const thesisList = summary
+        .split(/\n+/)
+        .map(t => t.trim())
+        .filter(Boolean)
+        .map((t, i) => `📌 <b>${i + 1}.</b> ${t}`)
+        .join('\n\n');
+      await ctx.replyWithHTML(
+        `✅ <b>Тезисы по части ${idx + 1}:</b>\n\n${thesisList}`
+      );
     }
     const finalSummary = allSummaries.join("\n---\n");
 
@@ -450,3 +461,14 @@ function saveToCacheAndSync(question, answer, ctx = null) {
   await bot.launch();
   console.log("🤖 Бот запущен!");
 })();
+
+module.exports = {
+  bot,
+  processCacheQueue,
+  saveToCacheAndSync,
+  fuzzyFindInYandexDisk,
+  parseDocxToText,
+  splitTextByLength,
+  mainMenuKeyboard,
+  // ...добавьте другие функции, которые хотите тестировать
+};
