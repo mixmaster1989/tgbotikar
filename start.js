@@ -1,5 +1,4 @@
-const app = require("./bot").app;
-const bot = require("./bot").bot;
+const { app, bot } = require("./bot");
 const logger = require("./modules/logger");
 
 const PORT = process.env.PORT || 3000;

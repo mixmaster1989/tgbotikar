@@ -467,14 +467,15 @@ function saveToCacheAndSync(question, answer, ctx = null) {
   });
 }
 
-(async () => {
-  app.listen(PORT, () => logger.info(`🌍 Web App: http://localhost:${PORT}`));
-  await bot.launch();
-  logger.info("🤖 Бот запущен!");
-})();
 
-module.exports = {app,
-  bot,
-  mainMenuKeyboard,
-  parseDocxToText
-};
+
+module.exports = {
+    app,
+    bot,
+    mainMenuKeyboard,
+    parseDocxToText,
+    splitTextByLength,
+    saveToCacheAndSync,
+    fuzzyFindInYandexDisk
+  };
+
