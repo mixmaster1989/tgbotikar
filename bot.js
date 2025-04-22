@@ -7,6 +7,7 @@ const sqlite3 = require("sqlite3").verbose();
 const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const fuzzysort = require('fuzzysort'); // Добавлено
+const { exportCacheToJsonFile, uploadCacheJsonToYadisk } = require("./modules/cache_export");
 require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
@@ -160,7 +161,7 @@ ${parts[idx]}`;
     const finalSummary = allSummaries.join("\n---\n");
 
     // Сохраняем историю генераций (каждый запуск — новая запись)
-    saveToCacheHistory(random, finalSummary);
+    saveToCacheAndSync(random, finalSummary);
 
     // Красиво оформляем тезисы для вывода в бот
     const thesisList = finalSummary
@@ -372,7 +373,7 @@ bot.on("text", async (ctx) => {
           const result = await gpt4allModel.generate(prompt);
           userContexts[userId].push({ role: "assistant", content: result });
 
-          saveToCacheHistory(ctx.message.text, result);
+          saveToCacheAndSync(ctx.message.text, result);
 
           ctx.reply(result || "Пустой ответ от модели.");
           console.log(`[${new Date().toISOString()}] [AI] Ответ модели отправлен и сохранён в кэш.`);
@@ -414,6 +415,25 @@ async function uploadToYandexDisk(localFilePath, remoteFilePath, ctx) {
     logAndNotify(`Ошибка загрузки на Я.Диск: ${error.message}`, ctx);
     throw new Error("Не удалось загрузить файл на Яндекс.Диск.");
   }
+}
+
+function saveToCacheAndSync(question, answer) {
+  saveToCacheHistory(question, answer);
+
+  const localPath = path.join(cachePath, "dataset.json");
+  const remotePath = "/bot_cache/dataset.json";
+  exportCacheToJsonFile(localPath, async (err) => {
+    if (!err) {
+      try {
+        await uploadCacheJsonToYadisk(yadisk, localPath, remotePath);
+        notifyAdmin("✅ Кэш синхронизирован с Яндекс.Диском.");
+      } catch (e) {
+        notifyAdmin("❌ Ошибка загрузки кэша на Яндекс.Диск: " + e.message);
+      }
+    } else {
+      notifyAdmin("❌ Ошибка экспорта кэша в JSON: " + err.message);
+    }
+  });
 }
 
 (async () => {
