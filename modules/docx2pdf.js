@@ -31,4 +31,4 @@ async function convertDocxToPdf(inputPath, outputPath) {
  */
 
 
-module.exports = { convertDocxToPdf, generatePdfThumbnail };
+module.exports = { convertDocxToPdf };
