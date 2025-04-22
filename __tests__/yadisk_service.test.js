@@ -1,15 +1,17 @@
 const fs = require("fs-extra");
 const path = require("path");
 const axios = require("axios");
+jest.mock("axios");
+
 const mockApi = {
   get: jest.fn(),
   put: jest.fn(),
   delete: jest.fn(),
 };
 axios.create = jest.fn(() => mockApi);
+
 const YaDiskService = require("../services/yadisk_service");
 
-jest.mock("axios");
 jest.mock("fs-extra");
 
 describe("services/yadisk_service.js", () => {
@@ -30,8 +32,8 @@ describe("services/yadisk_service.js", () => {
     mockApi.put.mockResolvedValue({});
 
     await expect(yadisk.uploadFile("test.txt", "/remote/test.txt")).resolves.toBe(true);
-    expect(axios.get).toHaveBeenCalled();
-    expect(axios.put).toHaveBeenCalled();
+    expect(mockApi.get).toHaveBeenCalled();
+    expect(mockApi.put).toHaveBeenCalled();
   });
 
   it("downloadFileByPath успешно скачивает файл", async () => {
@@ -47,7 +49,7 @@ describe("services/yadisk_service.js", () => {
     // эмулируем finish
     setTimeout(() => mockWriter.on.mock.calls.find(([e]) => e === "finish")[1](), 20);
     await expect(promise).resolves.toBe("local.txt");
-    expect(axios.get).toHaveBeenCalled();
+    expect(mockApi.get).toHaveBeenCalled();
     expect(fs.createWriteStream).toHaveBeenCalled();
   });
 

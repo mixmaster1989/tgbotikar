@@ -1,6 +1,6 @@
 const fs = require("fs-extra");
 const path = require("path");
-const { convertDocxToPdf, generatePdfThumbnail } = require("../modules/docx2pdf");
+const { convertDocxToPdf,  } = require("../modules/docx2pdf");
 
 
 
