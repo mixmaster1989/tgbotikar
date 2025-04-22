@@ -82,7 +82,7 @@ async function fuzzyFindInYandexDisk(question) {
     // Скачиваем файл кэша с Я.Диска (например, cache/dataset.json)
     const remotePath = "/bot_cache/dataset.json";
     const localPath = path.join(cachePath, "dataset.json");
-    await yadisk.downloadFile(remotePath, localPath);
+    await yadisk.downloadFileByPath(remotePath, localPath);
 
     if (!fs.existsSync(localPath)) return null;
     const data = JSON.parse(fs.readFileSync(localPath, "utf8"));

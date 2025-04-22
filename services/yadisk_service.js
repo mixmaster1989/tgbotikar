@@ -211,6 +211,40 @@ class YaDiskService {
             throw error;
         }
     }
+
+    async downloadFileByPath(remotePath, localPath) {
+        try {
+            this.log('info', 'download', `Получение ссылки для скачивания ${remotePath}...`);
+            const downloadResponse = await this.api.get('/resources/download', {
+                params: { path: remotePath }
+            });
+
+            this.log('info', 'download', `Начало скачивания ${remotePath}`);
+            const response = await axios({
+                method: 'GET',
+                url: downloadResponse.data.href,
+                responseType: 'stream'
+            });
+
+            const writer = fs.createWriteStream(localPath);
+
+            response.data.pipe(writer);
+
+            return new Promise((resolve, reject) => {
+                writer.on('finish', () => {
+                    this.log('success', 'download', `Файл ${remotePath} успешно скачан в ${localPath}`);
+                    resolve(localPath);
+                });
+                writer.on('error', (err) => {
+                    this.log('error', 'download', `Ошибка записи файла ${remotePath}`, err);
+                    reject(err);
+                });
+            });
+        } catch (error) {
+            this.log('error', 'download', `Ошибка при скачивании ${remotePath}`, error);
+            throw error;
+        }
+    }
 }
 
 module.exports = YaDiskService;
