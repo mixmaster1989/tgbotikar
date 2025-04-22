@@ -1,6 +1,7 @@
 const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
+const logger = require("../modules/logger");
 
 class YaDiskService {
     constructor(token) {
@@ -45,6 +46,18 @@ class YaDiskService {
             success: '✅'
         };
 
+        // Winston логирование
+        if (level === 'error') {
+            logger.error(`[YaDisk/${operation}] ${message}${error ? ` | ${error.message}` : ''}`);
+        } else if (level === 'warn') {
+            logger.warn(`[YaDisk/${operation}] ${message}`);
+        } else if (level === 'success') {
+            logger.info(`[YaDisk/${operation}] ${message}`);
+        } else {
+            logger.info(`[YaDisk/${operation}] ${message}`);
+        }
+
+        // Оставим и консоль для наглядности (опционально)
         console.log(`${emoji[level] || '🔄'} [${timestamp}] [YaDisk/${operation}] ${message}${error ? `\n  Error: ${JSON.stringify(logEntry.error, null, 2)}` : ''}`);
     }
 
