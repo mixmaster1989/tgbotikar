@@ -22,39 +22,47 @@ describe("services/yadisk_service.js", () => {
     yadisk = new YaDiskService(token);
     fs.readFile.mockClear();
     fs.createWriteStream.mockClear();
+    mockApi.get.mockClear();
+    mockApi.put.mockClear();
+    mockApi.delete.mockClear();
     axios.get.mockClear();
     axios.put.mockClear();
+    axios.mockClear();
   });
 
   it("uploadFile успешно логирует загрузку файла", async () => {
     mockApi.get.mockResolvedValue({ data: { href: "http://upload" } });
     fs.readFile.mockResolvedValue(Buffer.from("test"));
-    mockApi.put.mockResolvedValue({});
+    axios.put.mockResolvedValue({}); // uploadFile использует axios.put напрямую
 
     await expect(yadisk.uploadFile("test.txt", "/remote/test.txt")).resolves.toBe(true);
     expect(mockApi.get).toHaveBeenCalled();
-    expect(mockApi.put).toHaveBeenCalled();
+    expect(axios.put).toHaveBeenCalled();
   });
 
   it("downloadFileByPath успешно скачивает файл", async () => {
-    mockApi.get.mockResolvedValue({ data: { href: "http://upload" } });
-    mockApi.put.mockResolvedValue({});
-    axios.get.mockResolvedValueOnce({ data: { href: "http://download" } });
+    mockApi.get.mockResolvedValue({ data: { href: "http://download" } });
     const mockStream = { pipe: jest.fn() };
     axios.mockImplementationOnce(() => Promise.resolve({ data: mockStream }));
-    const mockWriter = { on: jest.fn((event, cb) => { if (event === "finish") setTimeout(cb, 10); return mockWriter; }) };
+    const mockWriter = {
+      on: jest.fn(function (event, cb) {
+        if (event === "finish") setTimeout(cb, 10);
+        return mockWriter;
+      }),
+    };
     fs.createWriteStream.mockReturnValue(mockWriter);
 
     const promise = yadisk.downloadFileByPath("/remote/test.txt", "local.txt");
-    // эмулируем finish
-    setTimeout(() => mockWriter.on.mock.calls.find(([e]) => e === "finish")[1](), 20);
+    // Ждём завершения "finish"
+    await new Promise((r) => setTimeout(r, 20));
     await expect(promise).resolves.toBe("local.txt");
     expect(mockApi.get).toHaveBeenCalled();
     expect(fs.createWriteStream).toHaveBeenCalled();
+    expect(mockStream.pipe).toHaveBeenCalledWith(mockWriter);
   });
 
   it("getAllDocxFiles возвращает список docx-файлов", async () => {
-    axios.get.mockResolvedValue({
+    mockApi.get.mockResolvedValue({
       data: {
         _embedded: {
           items: [
