@@ -10,7 +10,8 @@
     "pm2:restart": "pm2 restart telegram-bot",
     "pm2:stop": "pm2 stop telegram-bot",
     "audit": "npm audit fix --force",
-    "clean": "rimraf node_modules package-lock.json && npm cache clean --force"
+    "clean": "rimraf node_modules package-lock.json && npm cache clean --force",
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
