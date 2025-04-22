@@ -18,6 +18,13 @@ jest.mock("../modules/ui_messages", () => ({
   error: (msg) => `❌ Ошибка: ${msg}`,
 }));
 
+jest.mock("../modules/cache_export", () => ({
+  exportCacheToJsonFile: jest.fn((localPath, cb) => cb(null)),
+  uploadCacheJsonToYadisk: jest.fn(() => Promise.resolve(true)),
+}));
+
+const { saveToCacheAndSync } = require("../bot");
+
 describe("bot.js интеграционный тест", () => {
   it("mainMenuKeyboard возвращает корректную клавиатуру", () => {
     const keyboard = botModule.mainMenuKeyboard();
@@ -37,22 +44,16 @@ describe("bot.js интеграционный тест", () => {
     await expect(botModule.parseDocxToText("no_such_file.docx")).rejects.toThrow();
   });
 
-  it("saveToCacheAndSync вызывает экспорт и загрузку кэша", done => {
-    // Мокаем зависимости
+  it("saveToCacheAndSync вызывает экспорт и загрузку кэша", async () => {
     const question = "Тестовый вопрос " + Date.now();
     const answer = "Тестовый ответ";
     const ctx = { reply: jest.fn() };
 
-    // Мокаем экспорт и загрузку
-    jest.spyOn(require("../modules/cache_export"), "exportCacheToJsonFile").mockImplementation((localPath, cb) => cb(null));
-    jest.spyOn(require("../modules/cache_export"), "uploadCacheJsonToYadisk").mockResolvedValue(true);
+    await saveToCacheAndSync(question, answer, ctx);
 
-    botModule.saveToCacheAndSync(question, answer, ctx);
+    await new Promise(r => setTimeout(r, 100));
 
-    setTimeout(() => {
-      expect(ctx.reply).toHaveBeenCalledWith("✅ Кэш успешно обновлён и синхронизирован!");
-      done();
-    }, 200);
+    expect(ctx.reply).toHaveBeenCalledWith("✅ Кэш успешно обновлён и синхронизирован!");
   });
 
   it("fuzzyFindInYandexDisk возвращает null при ошибке", async () => {
