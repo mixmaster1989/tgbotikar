@@ -2,6 +2,10 @@ const fs = require("fs-extra");
 const path = require("path");
 const { convertDocxToPdf, generatePdfThumbnail } = require("../modules/docx2pdf");
 
+jest.mock('pdf-poppler', () => ({
+  convert: jest.fn(),
+}));
+
 describe("modules/docx2pdf.js", () => {
   const docxPath = path.join(__dirname, "..", "materials", "test.docx");
   const pdfPath = path.join(__dirname, "..", "cache", "test.pdf");

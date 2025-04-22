@@ -3,6 +3,10 @@ const logger = require("../modules/logger");
 const fs = require("fs-extra");
 const path = require("path");
 
+jest.mock('pdf-poppler', () => ({
+  convert: jest.fn(),
+}));
+
 describe("mainMenuKeyboard", () => {
   it("возвращает корректную структуру клавиатуры", () => {
     const keyboard = mainMenuKeyboard();

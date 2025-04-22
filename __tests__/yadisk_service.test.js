@@ -1,6 +1,12 @@
 const fs = require("fs-extra");
 const path = require("path");
 const axios = require("axios");
+const mockApi = {
+  get: jest.fn(),
+  put: jest.fn(),
+  delete: jest.fn(),
+};
+axios.create = jest.fn(() => mockApi);
 const YaDiskService = require("../services/yadisk_service");
 
 jest.mock("axios");
@@ -19,9 +25,9 @@ describe("services/yadisk_service.js", () => {
   });
 
   it("uploadFile успешно логирует загрузку файла", async () => {
-    axios.get.mockResolvedValue({ data: { href: "http://upload" } });
+    mockApi.get.mockResolvedValue({ data: { href: "http://upload" } });
     fs.readFile.mockResolvedValue(Buffer.from("test"));
-    axios.put.mockResolvedValue({});
+    mockApi.put.mockResolvedValue({});
 
     await expect(yadisk.uploadFile("test.txt", "/remote/test.txt")).resolves.toBe(true);
     expect(axios.get).toHaveBeenCalled();

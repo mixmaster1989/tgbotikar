@@ -23,6 +23,10 @@ jest.mock("../modules/cache_export", () => ({
   uploadCacheJsonToYadisk: jest.fn(() => Promise.resolve(true)),
 }));
 
+jest.mock('pdf-poppler', () => ({
+  convert: jest.fn(),
+}));
+
 const { saveToCacheAndSync } = require("../bot");
 
 describe("bot.js интеграционный тест", () => {

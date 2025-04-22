@@ -31,13 +31,14 @@ async function convertDocxToPdf(inputPath, outputPath) {
  * @param {string} thumbPath - путь для сохранения PNG
  */
 async function generatePdfThumbnail(pdfPath, thumbPath) {
+    const pdf = require('pdf-poppler'); // импорт внутри функции
     try {
         const opts = {
             format: 'png',
             out_dir: require('path').dirname(thumbPath),
             out_prefix: require('path').basename(thumbPath, '.png'),
             page: 1,
-            scale: 1024 // ширина миниатюры
+            scale: 1024
         };
         await pdf.convert(pdfPath, opts);
         logger.info(`Миниатюра PDF создана: ${thumbPath}`);
