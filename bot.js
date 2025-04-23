@@ -20,7 +20,7 @@ const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
+const modelName = "TinyLlama-1.1B-Chat-v1.0.gguf";
 const modelDir = path.join(os.homedir(), ".cache", "gpt4all");
 const materialsPath = path.join(__dirname, "materials");
 const cachePath = path.join(__dirname, "cache");
@@ -478,4 +478,3 @@ module.exports = {
     saveToCacheAndSync,
     fuzzyFindInYandexDisk
   };
-
