@@ -8,13 +8,15 @@ try {
   easyocr = null;
 }
 
-// Предобработка изображения (grayscale, увеличение контраста, binarize)
+// Улучшенная предобработка изображения для документов
 async function preprocessImage(inputPath, outputPath) {
   const image = await Jimp.read(inputPath);
   image
     .grayscale()
-    .contrast(0.5)
+    .contrast(1)         // Увеличенный контраст
     .normalize()
+    .blur(1)             // Лёгкое размытие для удаления мелких шумов
+    .threshold({ max: 180 }) // Бинаризация (подбери значение max под свой тип фото)
     .write(outputPath);
   return outputPath;
 }
