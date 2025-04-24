@@ -16,7 +16,7 @@ describe('ocr_preprocess.py', () => {
   });
 
   it('обрабатывает документ без ошибок и создаёт выходной файл', (done) => {
-    execFile('python', [path.join(__dirname, '../modules/ocr_preprocess.py'), input, output], (err) => {
+    execFile('python3', [path.join(__dirname, '../modules/ocr_preprocess.py'), input, output], (err) => {
       expect(err).toBeNull();
       fs.pathExists(output).then(exists => {
         expect(exists).toBe(true);
