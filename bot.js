@@ -10,6 +10,7 @@ const fuzzysort = require('fuzzysort'); // Добавлено
 const { exportCacheToJsonFile, uploadCacheJsonToYadisk } = require("./modules/cache_export");
 const ui = require("./modules/ui_messages"); // Новый модуль UI-сообщений
 const logger = require("./modules/logger"); // <-- добавлен winston logger
+const { recognizeText } = require("./modules/ocr"); // OCR-модуль
 require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
@@ -409,6 +410,32 @@ bot.on("text", async (ctx) => {
         }
       })();
     });
+  }
+});
+
+// Обработка фото в режиме "Спросить ИИ"
+bot.on(["photo"], async (ctx) => {
+  const userId = ctx.from.id;
+  if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
+    userStates[userId] = "chatting_ai";
+    const photo = ctx.message.photo.pop(); // самое большое фото
+    const fileId = photo.file_id;
+    const fileLink = await ctx.telegram.getFileLink(fileId);
+    const filePath = path.join(tempPath, `${userId}_${Date.now()}.jpg`);
+    await fs.ensureDir(tempPath);
+    // Скачиваем фото
+    const res = await fetch(fileLink.href);
+    const buffer = await res.arrayBuffer();
+    await fs.writeFile(filePath, Buffer.from(buffer));
+    // OCR
+    await ctx.reply("🔍 Распознаю текст на фото...");
+    try {
+      const text = await recognizeText(filePath);
+      await ctx.reply(text && text.trim() ? `Распознанный текст:\n${text}` : "Текст не найден или не распознан.");
+    } catch (e) {
+      await ctx.reply("Ошибка при распознавании текста: " + e.message);
+    }
+    await fs.remove(filePath);
   }
 });
 
