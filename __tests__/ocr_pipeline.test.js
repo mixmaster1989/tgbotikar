@@ -22,7 +22,7 @@ describe('ocr_pipeline.py', () => {
   });
 
   it('распознаёт текст без ошибок', () => {
-    const cmd = `python "${pipelineScript}" "${testImg}"`;
+    const cmd = `python3 "${pipelineScript}" "${testImg}"`;
     let output = '';
     try {
       output = execSync(cmd, { encoding: 'utf8' });
