@@ -1,6 +1,5 @@
 const fs = require("fs-extra");
-const JimpImport = require("jimp");
-const Jimp = JimpImport.default || JimpImport;
+const Jimp = require("jimp");
 const { createWorker } = require("tesseract.js"); // fallback, если easyocr не находит
 let easyocr;
 try {
@@ -11,7 +10,12 @@ try {
 
 // Предобработка изображения (grayscale, увеличение контраста, binarize)
 async function preprocessImage(inputPath, outputPath) {
-  const image = await Jimp.read(inputPath);
+  let image;
+  if (typeof Jimp.read === 'function') {
+    image = await Jimp.read(inputPath);
+  } else {
+    image = await new Jimp(inputPath);
+  }
   image
     .grayscale()
     .contrast(0.5)
