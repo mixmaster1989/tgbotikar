@@ -28,11 +28,10 @@ async function recognizeText(imagePath) {
     const results = await reader.readtext(processedPath);
     return results.map(r => r[1]).join("\n");
   } else {
-    // fallback на tesseract.js
+    // fallback на tesseract.js (v6+ API)
     const worker = await createWorker();
-    await worker.loadLanguage("rus+eng");
-    await worker.initialize("rus+eng");
-    const { data: { text } } = await worker.recognize(processedPath);
+    await worker.recognize(processedPath, 'rus+eng');
+    const { data: { text } } = await worker.getResult();
     await worker.terminate();
     return text;
   }
