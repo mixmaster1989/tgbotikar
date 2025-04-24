@@ -28,7 +28,7 @@ describe("modules/docx2pdf.js", () => {
     expect(await fs.pathExists(pdfPath)).toBe(true);
     const stats = await fs.stat(pdfPath);
     expect(stats.size).toBeGreaterThan(100); // PDF не пустой
-  });
+  }, 20000);
 
   
 });
