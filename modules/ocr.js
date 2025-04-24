@@ -1,4 +1,6 @@
 const fs = require("fs-extra");
+const { execFile } = require('child_process');
+const path = require('path');
 const Jimp = require("jimp");
 const { createWorker } = require("tesseract.js"); // fallback, если easyocr не находит
 let easyocr;
@@ -8,17 +10,14 @@ try {
   easyocr = null;
 }
 
-// Улучшенная предобработка изображения для документов
+// Новая предобработка: через Python-скрипт с OpenCV
 async function preprocessImage(inputPath, outputPath) {
-  const image = await Jimp.read(inputPath);
-  image
-    .grayscale()
-    .contrast(1)         // Увеличенный контраст
-    .normalize()
-    .blur(1)             // Лёгкое размытие для удаления мелких шумов
-    .threshold({ max: 180 }) // Бинаризация (подбери значение max под свой тип фото)
-    .write(outputPath);
-  return outputPath;
+  return new Promise((resolve, reject) => {
+    execFile('python', [path.join(__dirname, 'ocr_preprocess.py'), inputPath, outputPath], (err) => {
+      if (err) return reject(err);
+      resolve(outputPath);
+    });
+  });
 }
 
 // OCR с помощью EasyOCR (или tesseract.js как fallback)
