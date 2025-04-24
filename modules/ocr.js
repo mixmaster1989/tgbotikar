@@ -88,6 +88,43 @@ async function preprocessStrong(inputPath, outputPath) {
   await sharp(binarized, { raw: { width: info.width, height: info.height, channels: 1 } }).toFile(outputPath);
 }
 
+async function preprocessStrongV3(inputPath, outputPath) {
+  // Более мягкая версия strong: меньшее усиление контраста, меньше размытия
+  // Пример на sharp (или используйте аналогичный подход с вашим инструментом)
+  return sharp(inputPath)
+    .greyscale()
+    .normalize() // выравнивание гистограммы
+    .modulate({ brightness: 1.05, contrast: 1.25 }) // чуть усилить яркость и контраст, но не сильно
+    .sharpen(1, 0.5, 0.5) // мягкое повышение резкости
+    .toFile(outputPath);
+}
+
+async function preprocessStrongContrast(inputPath, outputPath) {
+  return sharp(inputPath)
+    .greyscale()
+    .normalize()
+    .modulate({ brightness: 1, contrast: 2 }) // сильный контраст
+    .toFile(outputPath);
+}
+
+async function preprocessStrongDenoise(inputPath, outputPath) {
+  return sharp(inputPath)
+    .greyscale()
+    .normalize()
+    .median(3) // слабое шумоподавление
+    .modulate({ brightness: 1.05, contrast: 1.25 })
+    .toFile(outputPath);
+}
+
+const preMap = {
+  weak: preprocessWeak,
+  medium: preprocessMedium,
+  strong: preprocessStrong,
+  strong_v3: preprocessStrongV3,
+  strong_contrast: preprocessStrongContrast,
+  strong_denoise: preprocessStrongDenoise
+};
+
 // --- Постобработка ---
 function postprocessWeak(text) {
   // Только trim и удаление пустых строк
@@ -117,7 +154,6 @@ function postprocessStrong(text) {
   return out.join('\n');
 }
 
-const preMap = { weak: preprocessWeak, medium: preprocessMedium, strong: preprocessStrong };
 const postMap = { weak: postprocessWeak, medium: postprocessMedium, strong: postprocessStrong };
 
 // Мягкая предобработка через Python-скрипт (OpenCV)
