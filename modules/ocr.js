@@ -30,8 +30,7 @@ async function recognizeText(imagePath) {
   } else {
     // fallback на tesseract.js (v6+ API)
     const worker = await createWorker();
-    await worker.recognize(processedPath, 'rus+eng');
-    const { data: { text } } = await worker.getResult();
+    const { data: { text } } = await worker.recognize(processedPath, 'rus+eng');
     await worker.terminate();
     return text;
   }
