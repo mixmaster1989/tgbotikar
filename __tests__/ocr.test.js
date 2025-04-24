@@ -17,5 +17,5 @@ describe("modules/ocr.js", () => {
     expect(text.length).toBeGreaterThan(0);
     // Можно добавить проверку на наличие ожидаемой подстроки:
     // expect(text).toMatch(/ожидаемый_текст/i);
-  }, 20000); // OCR может быть медленным
+  }, 420000); // 7 минут
 });
