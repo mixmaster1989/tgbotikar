@@ -1,5 +1,5 @@
 const fs = require("fs-extra");
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const path = require('path');
 const logger = require("./logger");
 const russianDictionary = require("./russian_dict");
@@ -149,16 +149,23 @@ async function preprocessCropTextBlock(inputPath, outputPath) {
 const preMap = {
   weak: preprocessWeak,
   medium: preprocessMedium,
-  strong: preprocessStrong,
-  strong_v3: preprocessStrongV3,
-  strong_v4: preprocessStrongV4,
-  strong_clahe: preprocessStrongClahe,
-  strong_contrast: preprocessStrongContrast,
-  strong_denoise: preprocessStrongDenoise,
-  crop_text_block: preprocessCropTextBlock
+  strong: preprocessStrong
 };
 
 // --- Постобработка ---
+async function postprocessOcroLangTool(text) {
+  // 1. Сохраняем текст во временный файл
+  const tmpPath = path.join(__dirname, 'ocr_tmp.txt');
+  fs.writeFileSync(tmpPath, text, 'utf8');
+  // 2. Запускаем ocr_postprocess.py
+  return new Promise((resolve, reject) => {
+    execFile('python3', [path.join(__dirname, 'ocr_postprocess.py'), tmpPath], { encoding: 'utf8' }, (err, stdout, stderr) => {
+      if (err) return reject(stderr || err);
+      resolve(stdout.trim());
+    });
+  });
+}
+
 function postprocessWeak(text) {
   // Только trim и удаление пустых строк
   return text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0).join('\n');
@@ -187,7 +194,27 @@ function postprocessStrong(text) {
   return out.join('\n');
 }
 
-const postMap = { weak: postprocessWeak, medium: postprocessMedium, strong: postprocessStrong };
+const postMap = {
+  weak: postprocessWeak,
+  medium: postprocessMedium,
+  strong: postprocessStrong,
+  ocro_langtool: postprocessOcroLangTool
+};
+
+// --- Автостарт LanguageTool-сервера ---
+let ltServerStarted = false;
+function startLanguageToolServer() {
+  if (ltServerStarted) return;
+  ltServerStarted = true;
+  const jarPath = '/home/user1/.ssh/tgbotikar/LanguageTool-6.6/languagetool-server.jar'; // путь к JAR
+  const java = spawn('java', ['-jar', jarPath, '--port', '8081'], {
+    detached: true,
+    stdio: 'ignore'
+  });
+  java.unref();
+}
+
+startLanguageToolServer();
 
 // Мягкая предобработка через Python-скрипт (OpenCV)
 async function preprocessImage(inputPath, outputPath) {

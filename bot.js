@@ -417,11 +417,7 @@ bot.on("text", async (ctx) => {
 // 5 шаблонов обработки OCR: сильная предобработка и разные постобработки
 const ocrTemplates = [
   { pre: 'strong', post: 'weak', name: 'Сильная+Слабая (v2)' },
-  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя (v2)' },
-  { pre: 'strong', post: 'strong', name: 'Сильная+Сильная (v2)' },
-  { pre: 'strong_v4', post: 'medium', name: 'Сильная v4+Средняя' },
-  { pre: 'strong_clahe', post: 'medium', name: 'CLAHE+Средняя' },
-  { pre: 'crop_text_block', post: 'medium', name: 'Обрезка+Средняя' }
+  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя (v2)' }
 ];
 
 // При получении фото сохраняем путь и предлагаем 5 кнопок
