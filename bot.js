@@ -456,15 +456,14 @@ bot.action("ocr_doctr", async (ctx) => {
     await ctx.reply("Нет последнего фото для распознавания.");
     return;
   }
-  await ctx.reply("🔍 Распознаю текст на фото (DocTR)...");
-  const { recognizeTextDoctr } = require("./modules/ocr");
+  await ctx.reply("🔍 Распознаю текст на фото (EasyOCR)...");
+  const { recognizeTextEasyOCR } = require("./modules/ocr");
   try {
-    const text = await recognizeTextDoctr(lastPhoto);
-    await ctx.reply(text && text.trim() ? `DocTR OCR результат:\n${text}` : "Текст не найден или не распознан.");
+    const text = await recognizeTextEasyOCR(lastPhoto);
+    await ctx.reply(text && text.trim() ? `EasyOCR результат:\n${text}` : "Текст не найден или не распознан.");
   } catch (e) {
-    await ctx.reply("Ошибка при распознавании (DocTR): " + e.message);
+    await ctx.reply("Ошибка при распознавании (EasyOCR): " + e.message);
   }
-  // Теперь удаляем файл после обработки через DocTR
   await fs.remove(lastPhoto);
   ctx.session.lastPhotoPath = null;
 });
