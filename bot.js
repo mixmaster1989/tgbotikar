@@ -436,36 +436,8 @@ bot.on(["photo"], async (ctx) => {
     } catch (e) {
       await ctx.reply("Ошибка при распознавании текста: " + e.message);
     }
-    // Добавляем кнопку для DocTR OCR
-    await ctx.reply("Хотите попробовать нейросетевой OCR (DocTR)?", {
-      reply_markup: { inline_keyboard: [[{ text: "DocTR OCR", callback_data: "ocr_doctr" }]] }
-    });
-    // Сохраняем путь к последнему фото в сессию
-    if (!ctx.session) ctx.session = {};
-    ctx.session.lastPhotoPath = filePath;
-    // НЕ удаляем файл здесь, чтобы DocTR мог его использовать
-    // await fs.remove(filePath);
+    await fs.remove(filePath);
   }
-});
-
-// Обработка callback-кнопки 'DocTR OCR'
-bot.action("ocr_doctr", async (ctx) => {
-  const userId = ctx.from.id;
-  const lastPhoto = ctx.session && ctx.session.lastPhotoPath;
-  if (!lastPhoto || !fs.existsSync(lastPhoto)) {
-    await ctx.reply("Нет последнего фото для распознавания.");
-    return;
-  }
-  await ctx.reply("🔍 Распознаю текст на фото (EasyOCR)...");
-  const { recognizeTextEasyOCR } = require("./modules/ocr");
-  try {
-    const text = await recognizeTextEasyOCR(lastPhoto);
-    await ctx.reply(text && text.trim() ? `EasyOCR результат:\n${text}` : "Текст не найден или не распознан.");
-  } catch (e) {
-    await ctx.reply("Ошибка при распознавании (EasyOCR): " + e.message);
-  }
-  await fs.remove(lastPhoto);
-  ctx.session.lastPhotoPath = null;
 });
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")

@@ -104,29 +104,4 @@ async function recognizeText(imagePath) {
   });
 }
 
-// Новый OCR через EasyOCR (Python)
-async function recognizeTextEasyOCR(imagePath) {
-  const processedPath = imagePath.replace(/(\.[^.]+)$/, "_processed$1");
-  await preprocessImage(imagePath, processedPath);
-  logger.info(`[OCR] Передан в EasyOCR: ${processedPath}`);
-  return new Promise((resolve, reject) => {
-    execFile('python3', [path.join(__dirname, 'easyocr_pipeline.py'), processedPath], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        logger.error(`[OCR] EasyOCR ошибка: ${stderr || err}`);
-        return reject(stderr || err);
-      }
-      // Извлекаем только текст после RAW OCR TEXT
-      const match = stdout.match(/RAW OCR TEXT[\s\-]*\n([\s\S]*)/i);
-      let rawText = match ? match[1].trim() : stdout.trim();
-      logger.info(`[OCR] EasyOCR RAW: ${rawText.slice(0, 300)}`);
-      // Более мягкая фильтрация: оставляем все непустые строки
-      const lines = rawText.split(/\r?\n/).filter(line => line.trim().length > 0);
-      const filtered = lines.join("\n");
-      const postprocessed = smartJoinAndCorrect(filtered);
-      logger.info(`[OCR] EasyOCR постобработка: ${postprocessed.slice(0,200)}...`);
-      resolve(postprocessed);
-    });
-  });
-}
-
-module.exports = { preprocessImage, recognizeText, recognizeTextEasyOCR, smartJoinAndCorrect };
+module.exports = { preprocessImage, recognizeText, smartJoinAndCorrect };
