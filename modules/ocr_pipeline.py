@@ -24,7 +24,8 @@ def preprocess_image(input_path, output_path):
 def run_ocr(image_path):
     logger.info(f"Запуск DocTR OCR для: {image_path}")
     doc = DocumentFile.from_images(image_path)
-    model = ocr_predictor('db_resnet50', 'crnn_vgg16_bn', pretrained=True, assume_straight_pages=True)
+    # Используем модель, максимально подходящую для кириллицы
+    model = ocr_predictor(det_arch='db_resnet50', reco_arch='sar_resnet31', pretrained=True, assume_straight_pages=True)
     result = model(doc)
     text = result.render()
     logger.info("OCR завершён успешно")
