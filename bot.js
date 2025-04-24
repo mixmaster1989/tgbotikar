@@ -442,7 +442,8 @@ bot.on(["photo"], async (ctx) => {
     // Сохраняем путь к последнему фото в сессию
     if (!ctx.session) ctx.session = {};
     ctx.session.lastPhotoPath = filePath;
-    await fs.remove(filePath); // удалять после всех OCR, если не нужно хранить
+    // НЕ удаляем файл здесь, чтобы DocTR мог его использовать
+    // await fs.remove(filePath);
   }
 });
 
@@ -462,6 +463,9 @@ bot.action("ocr_doctr", async (ctx) => {
   } catch (e) {
     await ctx.reply("Ошибка при распознавании (DocTR): " + e.message);
   }
+  // Теперь удаляем файл после обработки через DocTR
+  await fs.remove(lastPhoto);
+  ctx.session.lastPhotoPath = null;
 });
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")
