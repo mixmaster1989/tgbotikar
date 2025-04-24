@@ -3,6 +3,7 @@ const { execFile } = require('child_process');
 const path = require('path');
 const logger = require("./logger");
 const russianDictionary = require("./russian_dict");
+const sharp = require('sharp');
 
 // --- Левенштейн-дистанция ---
 function levenshtein(a, b) {
@@ -69,6 +70,56 @@ function smartJoinAndCorrect(text) {
   return result.join('\n');
 }
 
+// --- Предобработка ---
+async function preprocessWeak(inputPath, outputPath) {
+  // Почти без изменений: только grayscale
+  await sharp(inputPath).grayscale().toFile(outputPath);
+}
+async function preprocessMedium(inputPath, outputPath) {
+  // Grayscale + автоконтраст
+  await sharp(inputPath).grayscale().modulate({ brightness: 1.1 }).toFile(outputPath);
+}
+async function preprocessStrong(inputPath, outputPath) {
+  // Grayscale + autocontrast + лёгкая binarization
+  const img = sharp(inputPath).grayscale().modulate({ brightness: 1.15 });
+  const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
+  const threshold = 180;
+  const binarized = Buffer.from(data.map(v => (v > threshold ? 255 : 0)));
+  await sharp(binarized, { raw: { width: info.width, height: info.height, channels: 1 } }).toFile(outputPath);
+}
+
+// --- Постобработка ---
+function postprocessWeak(text) {
+  // Только trim и удаление пустых строк
+  return text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0).join('\n');
+}
+function postprocessMedium(text) {
+  // Trim, удаление пустых, автозамена латиницы на кириллицу
+  const map = { 'A':'А','B':'В','E':'Е','K':'К','M':'М','H':'Н','O':'О','P':'Р','C':'С','T':'Т','X':'Х',
+    'a':'а','e':'е','k':'к','m':'м','o':'о','p':'р','c':'с','t':'т','x':'х' };
+  return text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0)
+    .map(line => line.replace(/[A-Za-z]/g, ch => map[ch] || ch)).join('\n');
+}
+function postprocessStrong(text) {
+  // Всё из medium + фильтрация мусора и объединение коротких строк
+  const map = { 'A':'А','B':'В','E':'Е','K':'К','M':'М','H':'Н','O':'О','P':'Р','C':'С','T':'Т','X':'Х',
+    'a':'а','e':'е','k':'к','m':'м','o':'о','p':'р','c':'с','t':'т','x':'х' };
+  let lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 1);
+  lines = lines.map(line => line.replace(/[A-Za-z]/g, ch => map[ch] || ch));
+  // Удаляем строки без букв
+  lines = lines.filter(line => /[А-Яа-яЁё]/.test(line));
+  // Объединяем короткие строки
+  let out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].length < 20 && i > 0) out[out.length-1] += ' ' + lines[i];
+    else out.push(lines[i]);
+  }
+  return out.join('\n');
+}
+
+const preMap = { weak: preprocessWeak, medium: preprocessMedium, strong: preprocessStrong };
+const postMap = { weak: postprocessWeak, medium: postprocessMedium, strong: postprocessStrong };
+
 // Мягкая предобработка через Python-скрипт (OpenCV)
 async function preprocessImage(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
@@ -104,4 +155,16 @@ async function recognizeText(imagePath) {
   });
 }
 
-module.exports = { preprocessImage, recognizeText, smartJoinAndCorrect };
+async function recognizeTextWithTemplate(imagePath, preType, postType) {
+  const processedPath = imagePath.replace(/(\.[^.]+)$/, `_${preType}_${postType}$1`);
+  await preMap[preType](imagePath, processedPath);
+  const text = await recognizeText(processedPath); // базовый PaddleOCR
+  return postMap[postType](text);
+}
+
+module.exports = {
+  preprocessImage,
+  recognizeText,
+  smartJoinAndCorrect,
+  recognizeTextWithTemplate,
+};

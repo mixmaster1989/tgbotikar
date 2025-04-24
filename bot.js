@@ -414,30 +414,64 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// Обработка фото в режиме "Спросить ИИ"
+// 9 шаблонов обработки OCR: слабая/средняя/сильная пред- и постобработка
+const ocrTemplates = [
+  { pre: 'weak', post: 'weak' },
+  { pre: 'weak', post: 'medium' },
+  { pre: 'weak', post: 'strong' },
+  { pre: 'medium', post: 'weak' },
+  { pre: 'medium', post: 'medium' },
+  { pre: 'medium', post: 'strong' },
+  { pre: 'strong', post: 'weak' },
+  { pre: 'strong', post: 'medium' },
+  { pre: 'strong', post: 'strong' },
+];
+
+// При получении фото сохраняем путь и предлагаем 9 кнопок
 bot.on(["photo"], async (ctx) => {
   const userId = ctx.from.id;
   if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
     userStates[userId] = "chatting_ai";
-    const photo = ctx.message.photo.pop(); // самое большое фото
+    const photo = ctx.message.photo.pop();
     const fileId = photo.file_id;
     const fileLink = await ctx.telegram.getFileLink(fileId);
     const filePath = path.join(tempPath, `${userId}_${Date.now()}.jpg`);
     await fs.ensureDir(tempPath);
-    // Скачиваем фото
     const res = await fetch(fileLink.href);
     const buffer = await res.arrayBuffer();
     await fs.writeFile(filePath, Buffer.from(buffer));
-    // OCR
-    await ctx.reply("🔍 Распознаю текст на фото...");
-    try {
-      const text = await recognizeText(filePath);
-      await ctx.reply(text && text.trim() ? `Распознанный текст:\n${text}` : "Текст не найден или не распознан.");
-    } catch (e) {
-      await ctx.reply("Ошибка при распознавании текста: " + e.message);
-    }
-    await fs.remove(filePath);
+    // Сохраняем путь к фото в сессию
+    if (!ctx.session) ctx.session = {};
+    ctx.session.lastPhotoPath = filePath;
+    // Генерируем клавиатуру из 9 кнопок
+    const keyboard = ocrTemplates.map((tpl, i) => [{
+      text: `${i+1} ${tpl.pre[0].toUpperCase()}-пред/${tpl.post[0].toUpperCase()}-пост`,
+      callback_data: `ocr_tpl_${i}`
+    }]);
+    await ctx.reply("Выберите метод обработки OCR:", {
+      reply_markup: { inline_keyboard: keyboard }
+    });
   }
+});
+
+// Обработка кнопок шаблонов OCR
+ocrTemplates.forEach((tpl, i) => {
+  bot.action(`ocr_tpl_${i}`, async (ctx) => {
+    const filePath = ctx.session && ctx.session.lastPhotoPath;
+    if (!filePath || !fs.existsSync(filePath)) {
+      await ctx.reply("Нет последнего фото для распознавания.");
+      return;
+    }
+    await ctx.reply(`🔍 Распознаю (пред: ${tpl.pre}, пост: ${tpl.post})...`);
+    const { recognizeTextWithTemplate } = require("./modules/ocr");
+    try {
+      const text = await recognizeTextWithTemplate(filePath, tpl.pre, tpl.post);
+      await ctx.reply((text && text.trim() ? `Результат (${tpl.pre}/${tpl.post}):\n${text}` : "Текст не найден или не распознан."));
+    } catch (e) {
+      await ctx.reply("Ошибка при распознавании: " + e.message);
+    }
+    // Не удаляем файл! Можно пробовать другие шаблоны
+  });
 });
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")
