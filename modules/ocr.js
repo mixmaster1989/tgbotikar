@@ -1,5 +1,6 @@
 const fs = require("fs-extra");
-const Jimp = require("jimp");
+const JimpImport = require("jimp");
+const Jimp = JimpImport.default || JimpImport;
 const { createWorker } = require("tesseract.js"); // fallback, если easyocr не находит
 let easyocr;
 try {
