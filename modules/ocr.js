@@ -136,6 +136,16 @@ async function preprocessStrongClahe(inputPath, outputPath) {
   });
 }
 
+async function preprocessCropTextBlock(inputPath, outputPath) {
+  // Обрезка области с текстом через crop_text_block.py
+  return new Promise((resolve, reject) => {
+    execFile('python3', [path.join(__dirname, 'crop_text_block.py'), inputPath, outputPath], (err) => {
+      if (err) return reject(err);
+      resolve(outputPath);
+    });
+  });
+}
+
 const preMap = {
   weak: preprocessWeak,
   medium: preprocessMedium,
@@ -144,7 +154,8 @@ const preMap = {
   strong_v4: preprocessStrongV4,
   strong_clahe: preprocessStrongClahe,
   strong_contrast: preprocessStrongContrast,
-  strong_denoise: preprocessStrongDenoise
+  strong_denoise: preprocessStrongDenoise,
+  crop_text_block: preprocessCropTextBlock
 };
 
 // --- Постобработка ---
