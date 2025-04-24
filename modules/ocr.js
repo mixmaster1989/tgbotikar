@@ -10,12 +10,7 @@ try {
 
 // Предобработка изображения (grayscale, увеличение контраста, binarize)
 async function preprocessImage(inputPath, outputPath) {
-  let image;
-  if (typeof Jimp.read === 'function') {
-    image = await Jimp.read(inputPath);
-  } else {
-    image = await new Jimp(inputPath);
-  }
+  const image = await Jimp.read(inputPath);
   image
     .grayscale()
     .contrast(0.5)
