@@ -116,11 +116,33 @@ async function preprocessStrongDenoise(inputPath, outputPath) {
     .toFile(outputPath);
 }
 
+async function preprocessStrongV4(inputPath, outputPath) {
+  // Промежуточная сила: чуть сильнее, чем v3, но мягче чем v2
+  return sharp(inputPath)
+    .greyscale()
+    .normalize()
+    .modulate({ brightness: 1.1, contrast: 1.5 })
+    .sharpen(1.5, 0.7, 0.7)
+    .toFile(outputPath);
+}
+
+async function preprocessStrongClahe(inputPath, outputPath) {
+  // CLAHE через python-скрипт (если sharp не поддерживает CLAHE)
+  return new Promise((resolve, reject) => {
+    execFile('python3', [path.join(__dirname, 'clahe_preprocess.py'), inputPath, outputPath], (err) => {
+      if (err) return reject(err);
+      resolve(outputPath);
+    });
+  });
+}
+
 const preMap = {
   weak: preprocessWeak,
   medium: preprocessMedium,
   strong: preprocessStrong,
   strong_v3: preprocessStrongV3,
+  strong_v4: preprocessStrongV4,
+  strong_clahe: preprocessStrongClahe,
   strong_contrast: preprocessStrongContrast,
   strong_denoise: preprocessStrongDenoise
 };
