@@ -22,8 +22,18 @@ function levenshtein(a, b) {
   return matrix[b.length][a.length];
 }
 
+// --- Замена латиницы на кириллицу ---
+const latinToCyrillic = {
+  'A': 'А', 'B': 'В', 'E': 'Е', 'K': 'К', 'M': 'М', 'H': 'Н', 'O': 'О', 'P': 'Р', 'C': 'С', 'T': 'Т', 'X': 'Х',
+  'a': 'а', 'b': 'в', 'e': 'е', 'k': 'к', 'm': 'м', 'h': 'н', 'o': 'о', 'p': 'р', 'c': 'с', 't': 'т', 'x': 'х'
+};
+function fixLatinCyrillic(str) {
+  return str.replace(/[A-Za-z]/g, ch => latinToCyrillic[ch] || ch);
+}
+
 // --- Коррекция слова с учётом регистра ---
 function correctWord(word, needUpper) {
+  word = fixLatinCyrillic(word); // сначала заменяем латиницу
   const lower = word.toLowerCase();
   if (russianDictionary.includes(lower)) {
     return needUpper ? (lower.charAt(0).toUpperCase() + lower.slice(1)) : lower;
