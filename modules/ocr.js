@@ -13,7 +13,7 @@ try {
 // Новая предобработка: через Python-скрипт с OpenCV
 async function preprocessImage(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
-    execFile('python', [path.join(__dirname, 'ocr_preprocess.py'), inputPath, outputPath], (err) => {
+    execFile('python3', [path.join(__dirname, 'ocr_preprocess.py'), inputPath, outputPath], (err) => {
       if (err) return reject(err);
       resolve(outputPath);
     });
