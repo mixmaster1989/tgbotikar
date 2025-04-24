@@ -22,23 +22,23 @@ function levenshtein(a, b) {
   return matrix[b.length][a.length];
 }
 
-// --- Коррекция слова ---
-function correctWord(word) {
+// --- Коррекция слова с учётом регистра ---
+function correctWord(word, needUpper) {
   const lower = word.toLowerCase();
-  if (russianDictionary.includes(lower)) return word;
+  if (russianDictionary.includes(lower)) {
+    return needUpper ? (lower.charAt(0).toUpperCase() + lower.slice(1)) : lower;
+  }
   for (const dictWord of russianDictionary) {
     if (levenshtein(lower, dictWord) === 1) {
-      // Сохраняем регистр
-      return word[0] === word[0].toUpperCase() ? dictWord[0].toUpperCase() + dictWord.slice(1) : dictWord;
+      return needUpper ? (dictWord.charAt(0).toUpperCase() + dictWord.slice(1)) : dictWord;
     }
   }
-  return word;
+  return needUpper ? (word.charAt(0).toUpperCase() + word.slice(1)) : word;
 }
 
-// --- Склейка строк и коррекция ---
+// --- Склейка строк, коррекция и авто-капитализация ---
 function smartJoinAndCorrect(text) {
   let lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  // Склеиваем строки по смыслу
   let result = [];
   for (let i = 0; i < lines.length; ++i) {
     if (i > 0 && result[result.length-1] && !/[.!?…]$/.test(result[result.length-1])) {
@@ -47,8 +47,15 @@ function smartJoinAndCorrect(text) {
       result.push(lines[i]);
     }
   }
-  // Коррекция каждого слова
-  result = result.map(line => line.split(/\s+/).map(correctWord).join(' '));
+  // Коррекция и авто-капитализация
+  result = result.map((line, idx) => {
+    const words = line.split(/\s+/);
+    return words.map((w, i) => correctWord(w, i === 0)).join(' ');
+  });
+  // Первая строка с большой буквы
+  if (result.length && result[0].length) {
+    result[0] = result[0][0].toUpperCase() + result[0].slice(1);
+  }
   return result.join('\n');
 }
 
