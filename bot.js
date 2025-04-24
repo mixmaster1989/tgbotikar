@@ -1,4 +1,4 @@
-const { Telegraf, Markup } = require("telegraf");
+const { Telegraf, Markup, session } = require("telegraf");
 const express = require("express");
 const fs = require("fs-extra");
 const path = require("path");
@@ -29,6 +29,7 @@ const tempPath = path.join(__dirname, "temp");
 const gpt4allPath = path.join(modelDir, modelName);
 const gpt4allCachePath = path.join(gpt4allPath, "cache");
 const bot = new Telegraf(BOT_TOKEN);
+bot.use(session());
 const app = express();
 app.use("/static", express.static(path.join(__dirname, "static")));
 
