@@ -87,4 +87,4 @@ async function recognizeText(imagePath) {
   });
 }
 
-module.exports = { preprocessImage, recognizeText };
+module.exports = { preprocessImage, recognizeText, smartJoinAndCorrect };
