@@ -435,7 +435,32 @@ bot.on(["photo"], async (ctx) => {
     } catch (e) {
       await ctx.reply("Ошибка при распознавании текста: " + e.message);
     }
-    await fs.remove(filePath);
+    // Добавляем кнопку для DocTR OCR
+    await ctx.reply("Хотите попробовать нейросетевой OCR (DocTR)?", {
+      reply_markup: { inline_keyboard: [[{ text: "DocTR OCR", callback_data: "ocr_doctr" }]] }
+    });
+    // Сохраняем путь к последнему фото в сессию
+    if (!ctx.session) ctx.session = {};
+    ctx.session.lastPhotoPath = filePath;
+    await fs.remove(filePath); // удалять после всех OCR, если не нужно хранить
+  }
+});
+
+// Обработка callback-кнопки 'DocTR OCR'
+bot.action("ocr_doctr", async (ctx) => {
+  const userId = ctx.from.id;
+  const lastPhoto = ctx.session && ctx.session.lastPhotoPath;
+  if (!lastPhoto || !fs.existsSync(lastPhoto)) {
+    await ctx.reply("Нет последнего фото для распознавания.");
+    return;
+  }
+  await ctx.reply("🔍 Распознаю текст на фото (DocTR)...");
+  const { recognizeTextDoctr } = require("./modules/ocr");
+  try {
+    const text = await recognizeTextDoctr(lastPhoto);
+    await ctx.reply(text && text.trim() ? `DocTR OCR результат:\n${text}` : "Текст не найден или не распознан.");
+  } catch (e) {
+    await ctx.reply("Ошибка при распознавании (DocTR): " + e.message);
   }
 });
 

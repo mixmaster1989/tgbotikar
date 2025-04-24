@@ -104,4 +104,28 @@ async function recognizeText(imagePath) {
   });
 }
 
-module.exports = { preprocessImage, recognizeText, smartJoinAndCorrect };
+// Новый OCR через DocTR (Python)
+async function recognizeTextDoctr(imagePath) {
+  const processedPath = imagePath.replace(/(\.[^.]+)$/, "_processed$1");
+  await preprocessImage(imagePath, processedPath);
+  logger.info(`[OCR] Передан в DocTR: ${processedPath}`);
+  return new Promise((resolve, reject) => {
+    execFile('python3', [path.join(__dirname, 'ocr_pipeline.py'), processedPath], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        logger.error(`[OCR] DocTR ошибка: ${stderr || err}`);
+        return reject(stderr || err);
+      }
+      // Извлекаем только текст после RAW OCR TEXT
+      const match = stdout.match(/RAW OCR TEXT[\s\-]*\n([\s\S]*)/i);
+      const rawText = match ? match[1].trim() : stdout.trim();
+      // Фильтруем строки: только те, где есть >=2 кириллических символа
+      const lines = rawText.split(/\r?\n/).filter(line => (line.match(/[А-Яа-яЁё]/g) || []).length >= 2);
+      const filtered = lines.join("\n");
+      const postprocessed = smartJoinAndCorrect(filtered);
+      logger.info(`[OCR] DocTR постобработка: ${postprocessed.slice(0,200)}...`);
+      resolve(postprocessed);
+    });
+  });
+}
+
+module.exports = { preprocessImage, recognizeText, recognizeTextDoctr, smartJoinAndCorrect };
