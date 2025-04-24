@@ -414,20 +414,18 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// 9 шаблонов обработки OCR: слабая/средняя/сильная пред- и постобработка
+// 5 шаблонов обработки OCR: сильная предобработка и разные постобработки
 const ocrTemplates = [
-  { pre: 'weak', post: 'weak' },
-  { pre: 'weak', post: 'medium' },
-  { pre: 'weak', post: 'strong' },
-  { pre: 'medium', post: 'weak' },
-  { pre: 'medium', post: 'medium' },
-  { pre: 'medium', post: 'strong' },
-  { pre: 'strong', post: 'weak' },
-  { pre: 'strong', post: 'medium' },
-  { pre: 'strong', post: 'strong' },
+  // Оставляем только сильную предобработку, так как она дала лучший результат
+  { pre: 'strong', post: 'weak', name: 'Сильная+Слабая (v2)' },
+  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя (v2)' },
+  { pre: 'strong', post: 'strong', name: 'Сильная+Сильная (v2)' },
+  // Новые варианты для экспериментов
+  { pre: 'strong-contrast', post: 'medium', name: 'Сильная+Контраст+Средняя' },
+  { pre: 'strong-denoise', post: 'medium', name: 'Сильная+Денойз+Средняя' }
 ];
 
-// При получении фото сохраняем путь и предлагаем 9 кнопок
+// При получении фото сохраняем путь и предлагаем 5 кнопок
 bot.on(["photo"], async (ctx) => {
   const userId = ctx.from.id;
   if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
@@ -443,9 +441,9 @@ bot.on(["photo"], async (ctx) => {
     // Сохраняем путь к фото в сессию
     if (!ctx.session) ctx.session = {};
     ctx.session.lastPhotoPath = filePath;
-    // Генерируем клавиатуру из 9 кнопок
+    // Генерируем клавиатуру из 5 кнопок
     const keyboard = ocrTemplates.map((tpl, i) => [{
-      text: `${i+1} ${tpl.pre[0].toUpperCase()}-пред/${tpl.post[0].toUpperCase()}-пост`,
+      text: `${i+1} ${tpl.name}`,
       callback_data: `ocr_tpl_${i}`
     }]);
     await ctx.reply("Выберите метод обработки OCR:", {
@@ -462,11 +460,11 @@ ocrTemplates.forEach((tpl, i) => {
       await ctx.reply("Нет последнего фото для распознавания.");
       return;
     }
-    await ctx.reply(`🔍 Распознаю (пред: ${tpl.pre}, пост: ${tpl.post})...`);
+    await ctx.reply(`🔍 Распознаю (${tpl.name})...`);
     const { recognizeTextWithTemplate } = require("./modules/ocr");
     try {
       const text = await recognizeTextWithTemplate(filePath, tpl.pre, tpl.post);
-      await ctx.reply((text && text.trim() ? `Результат (${tpl.pre}/${tpl.post}):\n${text}` : "Текст не найден или не распознан."));
+      await ctx.reply((text && text.trim() ? `Результат (${tpl.name}):\n${text}` : "Текст не найден или не распознан."));
     } catch (e) {
       await ctx.reply("Ошибка при распознавании: " + e.message);
     }
