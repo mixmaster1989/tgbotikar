@@ -31,6 +31,15 @@ function fixLatinCyrillic(str) {
   return str.replace(/[A-Za-z]/g, ch => latinToCyrillic[ch] || ch);
 }
 
+// --- Функция замены латиницы на кириллицу (для фильтрации DocTR) ---
+function fixLatinCyrillicDocTR(str) {
+  const latinToCyrillic = {
+    'A': 'А', 'B': 'В', 'E': 'Е', 'K': 'К', 'M': 'М', 'H': 'Н', 'O': 'О', 'P': 'Р', 'C': 'С', 'T': 'Т', 'X': 'Х',
+    'a': 'а', 'b': 'в', 'e': 'е', 'k': 'к', 'm': 'м', 'h': 'н', 'o': 'о', 'p': 'р', 'c': 'с', 't': 'т', 'x': 'х'
+  };
+  return str.replace(/[A-Za-z]/g, ch => latinToCyrillic[ch] || ch);
+}
+
 // --- Коррекция слова с учётом регистра ---
 function correctWord(word, needUpper) {
   word = fixLatinCyrillic(word); // сначала заменяем латиницу
@@ -117,9 +126,12 @@ async function recognizeTextDoctr(imagePath) {
       }
       // Извлекаем только текст после RAW OCR TEXT
       const match = stdout.match(/RAW OCR TEXT[\s\-]*\n([\s\S]*)/i);
-      const rawText = match ? match[1].trim() : stdout.trim();
-      // Фильтруем строки: только те, где есть >=2 кириллических символа
-      const lines = rawText.split(/\r?\n/).filter(line => (line.match(/[А-Яа-яЁё]/g) || []).length >= 2);
+      let rawText = match ? match[1].trim() : stdout.trim();
+      logger.info(`[OCR] DocTR RAW: ${rawText.slice(0, 300)}`);
+      // Автозамена латиницы на кириллицу ДО фильтрации
+      rawText = fixLatinCyrillicDocTR(rawText);
+      // Более мягкая фильтрация: оставляем все непустые строки
+      const lines = rawText.split(/\r?\n/).filter(line => line.trim().length > 0);
       const filtered = lines.join("\n");
       const postprocessed = smartJoinAndCorrect(filtered);
       logger.info(`[OCR] DocTR постобработка: ${postprocessed.slice(0,200)}...`);
