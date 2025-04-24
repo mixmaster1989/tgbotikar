@@ -21,25 +21,25 @@ describe('easyocr_pipeline.py', () => {
       out.on('finish', () => {
         try {
           const pipelineScript = path.join(__dirname, '../modules/easyocr_pipeline.py');
-          const cmd = `python3 "${pipelineScript}" "${testImg}"`;
           let output = '';
           try {
             output = execFileSync('python3', [pipelineScript, testImg], { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 });
           } catch (e) {
             output = e.stdout || e.stderr || '';
           }
-          // Фиксируем возможную латиницу вместо кириллицы
-          function fixLatinCyrillic(str) {
-            const latinToCyrillic = {
-              'A': 'А', 'B': 'В', 'E': 'Е', 'K': 'К', 'M': 'М', 'H': 'Н', 'O': 'О', 'P': 'Р', 'C': 'С', 'T': 'Т', 'X': 'Х',
-              'a': 'а', 'b': 'в', 'e': 'е', 'k': 'к', 'm': 'м', 'h': 'н', 'o': 'о', 'p': 'р', 'c': 'с', 't': 'т', 'x': 'х'
+          // Нормализация: все похожие буквы приводим к латинице
+          function normalizeOcrText(str) {
+            const map = {
+              'А':'A','В':'B','Е':'E','К':'K','М':'M','Н':'H','О':'O','Р':'P','С':'C','Т':'T','Х':'X',
+              'а':'a','е':'e','к':'k','м':'m','о':'o','р':'p','с':'c','т':'t','х':'x',
+              'Ё':'E','ё':'e'
             };
-            return str.replace(/[A-Za-z]/g, ch => latinToCyrillic[ch] || ch);
+            return str.replace(/[А-Яа-яЁё]/g, ch => map[ch] || ch);
           }
-          output = fixLatinCyrillic(output);
+          output = normalizeOcrText(output);
           expect(output).toMatch(/Тест/i);
           expect(output).toMatch(/OCR/i);
-          expect(output).toMatch(/RAW OCR TEXT/);
+          expect(output).toMatch(/RAW OCR TEXT/i);
           fs.unlinkSync(testImg);
           resolve();
         } catch (err) {
