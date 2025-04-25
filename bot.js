@@ -495,12 +495,12 @@ bot.action('ocr_all_templates', async (ctx) => {
         logger.error(`[BOT] Ошибка отправки ответа по шаблону ${i+1}: ${tpl.name}: ${err.message}`);
       }
     }
-    // --- Новый этап: анализируем все результаты, выбираем лучший, чистим ---
-    const best = cleanAndSelectBestOcrResult(allResults);
+    // --- Новый этап: "семантическая сборка" из всех шаблонов ---
+    const semanticResult = semanticOcrAssemble(allResults);
     await ctx.replyWithHTML(
-      `<b>🏆 Лучший результат OCR (шаблон: ${best.tplName})</b>\n\n<pre>${best.cleaned}</pre>`
+      `<b>🏆 Семантическая сборка OCR (уникальные строки из всех шаблонов)</b>\n\n<pre>${semanticResult}</pre>`
     );
-    logger.info(`[BOT] Все шаблоны завершены. Лучший: ${best.tplName}`);
+    logger.info(`[BOT] Все шаблоны завершены. Семантическая сборка завершена.`);
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
@@ -535,6 +535,34 @@ function cleanAndSelectBestOcrResult(results) {
   // 4. Находим результат с максимальным числом "осознанных" слов
   const best = processed.reduce((max, cur) => (cur.wordCount > max.wordCount ? cur : max), processed[0]);
   return best;
+}
+
+// --- Новый механизм: "Семантическая сборка" из всех шаблонов OCR ---
+function semanticOcrAssemble(results) {
+  // results: [{ tplName, text }]
+  // 1. Фильтруем и разбиваем на строки
+  function cleanLines(text) {
+    return text
+      .split(/\n|\r|\f|\v|\u2028|\u2029|\u0085/)
+      .map(line => line.replace(/[^а-яА-ЯёЁ0-9a-zA-Z.,:;!?()\-\s]/g, ''))
+      .map(line => line.trim())
+      .filter(line => line.length > 8 && /[а-яА-ЯёЁ]/.test(line));
+  }
+  // 2. Собираем все строки из всех шаблонов
+  let allLines = [];
+  results.forEach(r => {
+    allLines = allLines.concat(cleanLines(r.text));
+  });
+  // 3. Считаем частоту каждой строки
+  const freq = {};
+  allLines.forEach(line => {
+    freq[line] = (freq[line] || 0) + 1;
+  });
+  // 4. Оставляем только уникальные строки, сортируем по частоте (убывание), затем по длине (убывание)
+  const uniqueLines = [...new Set(allLines)];
+  uniqueLines.sort((a, b) => freq[b] - freq[a] || b.length - a.length);
+  // 5. Склеиваем в финальный текст
+  return uniqueLines.join('\n');
 }
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")
