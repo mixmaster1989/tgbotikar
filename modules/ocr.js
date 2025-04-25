@@ -211,7 +211,7 @@ function postprocessStrong(text) {
 async function postprocessCustomSemantic(text) {
   return new Promise((resolve, reject) => {
     const pythonScript = path.join(__dirname, 'ocr_semantic_postprocess.py');
-    const child = execFile('python', [pythonScript], { encoding: 'utf8' }, (err, stdout, stderr) => {
+    const child = execFile('python3', [pythonScript], { encoding: 'utf8' }, (err, stdout, stderr) => {
       if (err) return reject(stderr || err);
       resolve(stdout.trim());
     });
