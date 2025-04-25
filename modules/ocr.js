@@ -170,9 +170,11 @@ const axios = require('axios');
 async function postprocessLanguageTool(text) {
   try {
     logger.info(`[LanguageTool] Запрос: ${text.slice(0, 200)}...`);
-    const response = await axios.post('http://localhost:8081/v2/check', {
-      text,
-      language: 'ru-RU'
+    const params = new URLSearchParams();
+    params.append('text', text);
+    params.append('language', 'ru-RU');
+    const response = await axios.post('http://localhost:8081/v2/check', params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
     logger.info(`[LanguageTool] Ответ: ${JSON.stringify(response.data).slice(0, 500)}...`);
     if (response.data && response.data.matches && response.data.matches.length > 0) {
