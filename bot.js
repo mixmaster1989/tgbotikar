@@ -269,7 +269,6 @@ function parseTestResponse(response) {
   };
 }
 
-
 // Логирование в консоль и в бот
 function logAndNotify(message, ctx = null) {
   const logMessage = `[${new Date().toISOString()}] ${message}`;
@@ -488,7 +487,7 @@ bot.action('ocr_all_templates', async (ctx) => {
       allResults.push({ tplName: tpl.name, text: tesseractText });
       try {
         await ctx.replyWithHTML(
-          `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n${tesseractText}`
+          `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n<pre>${escapeHTML(tesseractText)}</pre>`
         );
         logger.info(`[BOT] Ответ отправлен по шаблону ${i+1}: ${tpl.name}`);
       } catch (err) {
@@ -498,7 +497,7 @@ bot.action('ocr_all_templates', async (ctx) => {
     // --- Новый этап: "семантическая сборка" из всех шаблонов ---
     const semanticResult = semanticOcrAssemble(allResults);
     await ctx.replyWithHTML(
-      `<b>🏆 Семантическая сборка OCR (уникальные строки из всех шаблонов)</b>\n\n<pre>${semanticResult}</pre>`
+      `<b>🏆 Семантическая сборка OCR (уникальные строки из всех шаблонов)</b>\n\n<pre>${escapeHTML(semanticResult)}</pre>`
     );
     logger.info(`[BOT] Все шаблоны завершены. Семантическая сборка завершена.`);
   } catch (e) {
@@ -560,6 +559,14 @@ function semanticOcrAssemble(results) {
     return b.length - a.length;
   });
   return finalLines.join('\n');
+}
+
+// --- Экранирование HTML для Telegram ---
+function escapeHTML(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")
