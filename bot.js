@@ -537,32 +537,38 @@ function cleanAndSelectBestOcrResult(results) {
   return best;
 }
 
-// --- Новый механизм: "Семантическая сборка" из всех шаблонов OCR ---
+// --- Новый механизм: "Семантическая сборка" с фильтрацией и анти-дублированием (fuzzysort) ---
 function semanticOcrAssemble(results) {
-  // results: [{ tplName, text }]
-  // 1. Фильтруем и разбиваем на строки
   function cleanLines(text) {
     return text
       .split(/\n|\r|\f|\v|\u2028|\u2029|\u0085/)
       .map(line => line.replace(/[^а-яА-ЯёЁ0-9a-zA-Z.,:;!?()\-\s]/g, ''))
       .map(line => line.trim())
-      .filter(line => line.length > 8 && /[а-яА-ЯёЁ]/.test(line));
+      .filter(line =>
+        line.length > 8 &&
+        /[а-яА-ЯёЁ]/.test(line) &&
+        (line.replace(/[^а-яА-ЯёЁ]/g, '').length / line.length) > 0.5
+      );
   }
-  // 2. Собираем все строки из всех шаблонов
+  // Собираем все строки
   let allLines = [];
-  results.forEach(r => {
-    allLines = allLines.concat(cleanLines(r.text));
-  });
-  // 3. Считаем частоту каждой строки
+  results.forEach(r => { allLines = allLines.concat(cleanLines(r.text)); });
+  // Сортируем по длине и частоте
   const freq = {};
+  allLines.forEach(line => { freq[line] = (freq[line] || 0) + 1; });
+  allLines = [...new Set(allLines)];
+  allLines.sort((a, b) => freq[b] - freq[a] || b.length - a.length);
+  // Убираем похожие строки (fuzzysort)
+  const finalLines = [];
   allLines.forEach(line => {
-    freq[line] = (freq[line] || 0) + 1;
+    if (!finalLines.some(existing => {
+      const res = fuzzysort.single(line, [existing], { threshold: -50 });
+      return res && res.score > -50;
+    })) {
+      finalLines.push(line);
+    }
   });
-  // 4. Оставляем только уникальные строки, сортируем по частоте (убывание), затем по длине (убывание)
-  const uniqueLines = [...new Set(allLines)];
-  uniqueLines.sort((a, b) => freq[b] - freq[a] || b.length - a.length);
-  // 5. Склеиваем в финальный текст
-  return uniqueLines.join('\n');
+  return finalLines.join('\n');
 }
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")
