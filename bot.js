@@ -555,10 +555,7 @@ bot.action('ocr_all_templates', async (ctx) => {
     }
 
     const bestResult = selectBestOcrResult(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
-    await ctx.replyWithHTML(
-      `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(bestResult)}</pre>`
-    );
-    logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
+    sendBestOcrResult(ctx, bestResult);
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
@@ -839,11 +836,15 @@ function selectBestOcrResultV2(allResults, semanticResult, cleanedSemantic, huma
 }
 
 // --- В месте, где отправляется результат ---
-const bestResult = selectBestOcrResultV2(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
-await ctx.replyWithHTML(
-  `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(bestResult)}</pre>`
-);
-logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
+function sendBestOcrResult(ctx, bestResult) {
+  return ctx.replyWithHTML(
+    `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(bestResult)}</pre>`
+  ).then(() => {
+    logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
+  }).catch(e => {
+    logger.error(`[BOT] Ошибка отправки результата пользователю: ${e.message}`);
+  });
+}
 
 module.exports = {
     app,
