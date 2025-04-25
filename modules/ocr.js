@@ -268,10 +268,38 @@ async function recognizeTextWithTemplateTesseract(imagePath, preType, postType) 
 
 // --- Автостарт LanguageTool-сервера ---
 let ltServerStarted = false;
+function restartLanguageToolServer() {
+  const { execSync, spawn } = require('child_process');
+  try {
+    const pids = execSync("lsof -t -i :8081").toString().trim().split(/\s+/);
+    for (const pid of pids) {
+      if (pid) execSync(`kill -9 ${pid}`);
+    }
+    logger.info('[LT] Старые процессы на 8081 завершены');
+  } catch (e) {
+    logger.info('[LT] Нет старых процессов на 8081');
+  }
+  ltServerStarted = false;
+
+  // Запускаем сервер и логируем stdout/stderr
+  const jarPath = '/home/user1/.ssh/tgbotikar/LanguageTool-6.6/languagetool-server.jar';
+  const java = spawn('java', ['-jar', jarPath, '--port', '8081']);
+  java.stdout.on('data', (data) => {
+    logger.info(`[LT-Server] ${data.toString().trim()}`);
+  });
+  java.stderr.on('data', (data) => {
+    logger.error(`[LT-Server] ${data.toString().trim()}`);
+  });
+  java.on('close', (code) => {
+    logger.error(`[LT-Server] Процесс завершён с кодом ${code}`);
+  });
+  ltServerStarted = true;
+}
+
 function startLanguageToolServer() {
   if (ltServerStarted) return;
   ltServerStarted = true;
-  const jarPath = '/home/user1/.ssh/tgbotikar/LanguageTool-6.6/languagetool-server.jar'; // путь к JAR
+  const jarPath = '/home/user1/.ssh/tgbotikar/LanguageTool-6.6/languagetool-server.jar';
   const java = spawn('java', ['-jar', jarPath, '--port', '8081'], {
     detached: true,
     stdio: 'ignore'
@@ -279,7 +307,8 @@ function startLanguageToolServer() {
   java.unref();
 }
 
-startLanguageToolServer();
+// Вместо старта — рестартуем сервер при инициализации модуля
+restartLanguageToolServer();
 
 // Мягкая предобработка через Python-скрипт (OpenCV)
 async function preprocessImage(inputPath, outputPath) {
