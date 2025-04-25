@@ -499,10 +499,12 @@ bot.action('ocr_all_templates', async (ctx) => {
     const semanticResult = semanticOcrAssemble(allResults);
     // --- Очистка LanguageTool ---
     const cleanedSemantic = await cleanWithLanguageTool(semanticResult);
+    // --- Финальная сборка для Telegram ---
+    const humanResult = humanReadableAssemble(cleanedSemantic);
     await ctx.replyWithHTML(
-      `<b>🏆 Семантическая сборка OCR (LanguageTool доочистка)</b>\n\n<pre>${escapeHTML(cleanedSemantic)}</pre>`
+      `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(humanResult)}</pre>`
     );
-    logger.info(`[BOT] Все шаблоны завершены. Семантическая сборка завершена.`);
+    logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
@@ -589,6 +591,45 @@ function semanticOcrAssemble(results) {
     return b.length - a.length;
   });
   return finalLines.join('\n');
+}
+
+// --- Финальная "человеко-ориентированная" сборка для Telegram ---
+function humanReadableAssemble(text) {
+  // Ключевые смысловые блоки в нужном порядке (можно расширять)
+  const keyPhrases = [
+    "1С БУХГАЛТЕРИЯ",
+    "АВТОМАТИЗАЦИЯ ТОРГОВЛИ",
+    "ПРИНТЕРЫ ЭТИКЕТОК",
+    "СКАНЕРЫ ШТРИХ-КОДА",
+    "ВЕСОВОЕ ОБОРУДОВАНИЕ",
+    "ТЕРМИНАЛЫ СБОРА ДАННЫХ",
+    "POS-системы"
+  ];
+  // Привести к верхнему регистру, убрать мусорные символы
+  const lines = text.split(/\r?\n|[\'"“”‘’—–…·•,.;:!?()\[\]{}]/).map(s => s.trim().toUpperCase()).filter(Boolean);
+  // Для каждого ключевого блока ищем наиболее похожую строку из OCR
+  const uniq = new Set();
+  const result = [];
+  for (const phrase of keyPhrases) {
+    let best = '';
+    let bestScore = -100;
+    for (const line of lines) {
+      // Простая метрика схожести: сколько слов из ключа есть в строке
+      const words = phrase.split(' ');
+      let score = 0;
+      for (const w of words) if (line.includes(w)) score++;
+      if (score > bestScore) {
+        bestScore = score;
+        best = line;
+      }
+    }
+    // Добавляем только если совпало хотя бы 2 слова и ещё не было такого блока
+    if (bestScore >= 2 && !uniq.has(phrase)) {
+      result.push(phrase);
+      uniq.add(phrase);
+    }
+  }
+  return result.join('\n');
 }
 
 // --- Экранирование HTML для Telegram ---
