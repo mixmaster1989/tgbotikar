@@ -507,66 +507,57 @@ bot.action('ocr_all_templates', async (ctx) => {
   }
 });
 
-// --- Функция: очистка и выбор лучшего результата OCR ---
-function cleanAndSelectBestOcrResult(results) {
-  // results: [{ tplName, text }]
-  // 1. Фильтруем строки: только кириллица, цифры, базовые знаки препинания, длина строки > 10
-  function cleanText(text) {
-    return text
-      .split(/\n|\r|\f|\v|\u2028|\u2029|\u0085/)
-      .map(line => line.replace(/[^а-яА-ЯёЁ0-9a-zA-Z.,:;!?()\-\s]/g, ''))
-      .map(line => line.trim())
-      .filter(line => line.length > 10 && /[а-яА-ЯёЁ]/.test(line))
-      .join('\n');
-  }
-  // 2. Считаем "осознанные" слова (русские слова длиной > 2)
-  function countWords(text) {
-    return (text.match(/[а-яА-ЯёЁ]{3,}/g) || []).length;
-  }
-  // 3. Для каждого результата: чистим, считаем слова
-  const processed = results.map(r => {
-    const cleaned = cleanText(r.text);
-    return {
-      tplName: r.tplName,
-      cleaned,
-      wordCount: countWords(cleaned)
-    };
-  });
-  // 4. Находим результат с максимальным числом "осознанных" слов
-  const best = processed.reduce((max, cur) => (cur.wordCount > max.wordCount ? cur : max), processed[0]);
-  return best;
-}
-
-// --- Новый механизм: "Семантическая сборка" с фильтрацией и анти-дублированием (fuzzysort) ---
+// --- Умная семантическая сборка: разбивка, фильтрация, сортировка ---
 function semanticOcrAssemble(results) {
-  function cleanLines(text) {
+  // 1. Разбиваем длинные строки на смысловые блоки
+  function splitToBlocks(text) {
     return text
-      .split(/\n|\r|\f|\v|\u2028|\u2029|\u0085/)
-      .map(line => line.replace(/[^а-яА-ЯёЁ0-9a-zA-Z.,:;!?()\-\s]/g, ''))
-      .map(line => line.trim())
-      .filter(line =>
-        line.length > 8 &&
-        /[а-яА-ЯёЁ]/.test(line) &&
-        (line.replace(/[^а-яА-ЯёЁ]/g, '').length / line.length) > 0.5
-      );
+      .split(/[\n\r\f\v\u2028\u2029\u0085]+/)
+      .flatMap(line =>
+        line
+          .split(/\s{2,}|\||:|—|–|—|\.|,|;/) // делим по двойным пробелам, |, :, тире, точкам, запятым, точкам с запятой
+          .map(x => x.trim())
+      )
+      .filter(Boolean);
   }
-  // Собираем все строки
-  let allLines = [];
-  results.forEach(r => { allLines = allLines.concat(cleanLines(r.text)); });
-  // Сортируем по длине и частоте
+  // 2. Фильтруем: только строки с >=2 русскими словами длиной >=4, доля букв >0.6
+  function isClean(line) {
+    const words = (line.match(/[а-яА-ЯёЁ]{4,}/g) || []);
+    const letterFrac = (line.replace(/[^а-яА-ЯёЁ]/g, '').length / (line.length || 1));
+    return words.length >= 2 && letterFrac > 0.6;
+  }
+  // 3. Собираем все блоки
+  let allBlocks = [];
+  results.forEach(r => {
+    allBlocks = allBlocks.concat(splitToBlocks(r.text));
+  });
+  // 4. Фильтруем мусор
+  allBlocks = allBlocks.filter(isClean);
+  // 5. Считаем частоту
   const freq = {};
-  allLines.forEach(line => { freq[line] = (freq[line] || 0) + 1; });
-  allLines = [...new Set(allLines)];
-  allLines.sort((a, b) => freq[b] - freq[a] || b.length - a.length);
-  // Убираем похожие строки (fuzzysort)
+  allBlocks.forEach(line => { freq[line] = (freq[line] || 0) + 1; });
+  // 6. Сортируем по частоте и длине
+  allBlocks = [...new Set(allBlocks)];
+  allBlocks.sort((a, b) => freq[b] - freq[a] || b.length - a.length);
+  // 7. Убираем дубли и похожие строки (fuzzysort, threshold -30)
   const finalLines = [];
-  allLines.forEach(line => {
+  allBlocks.forEach(line => {
     if (!finalLines.some(existing => {
-      const res = fuzzysort.single(line, [existing], { threshold: -50 });
-      return res && res.score > -50;
+      const res = fuzzysort.single(line, [existing], { threshold: -30 });
+      return res && res.score > -30;
     })) {
       finalLines.push(line);
     }
+  });
+  // 8. Сортировка по ключевым словам (если есть)
+  const keywords = [
+    'ИП', '1С', 'БУХГАЛТЕРИЯ', 'Денежный ящик', 'Форт', 'позиционный', 'руб', 'Подпись', 'дата', 'автоматизация', 'принтер', 'сканер', 'весовое', 'терминал', 'POS'
+  ];
+  finalLines.sort((a, b) => {
+    const ka = keywords.findIndex(k => a.toLowerCase().includes(k.toLowerCase()));
+    const kb = keywords.findIndex(k => b.toLowerCase().includes(k.toLowerCase()));
+    if (ka !== kb) return (ka === -1 ? 100 : ka) - (kb === -1 ? 100 : kb);
+    return b.length - a.length;
   });
   return finalLines.join('\n');
 }
