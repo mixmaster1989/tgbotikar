@@ -416,10 +416,16 @@ bot.on("text", async (ctx) => {
 
 // 4 шаблона обработки OCR: 2 обычных и 2 с LanguageTool
 const ocrTemplates = [
-  { pre: 'strong', post: 'weak', name: 'Сильная+Слабая (v2)' },
-  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя (v2)' },
-  { pre: 'strong', post: 'languagetool', name: 'Сильная+Слабая+Коррекция (LanguageTool)' },
-  { pre: 'strong', post: 'languagetool', name: 'Сильная+Средняя+Коррекция (LanguageTool)' }
+  { pre: 'strong', post: 'weak', name: 'Сильная+Слабая' },
+  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя' },
+  { pre: 'strong', post: 'strong', name: 'Сильная+Максимальная' },
+  { pre: 'strong', post: 'languagetool', name: 'Сильная+Коррекция (LanguageTool)' },
+  { pre: 'strong', post: 'languagetool', name: 'Сильная+Максимум LanguageTool' },
+  { pre: 'strong', post: 'custom_semantic', name: 'Сильная+Кастомная семантика' },
+  { pre: 'strong', post: 'weak', name: 'Сильная+Слабая+Коррекция (LanguageTool)', extra: 'languagetool' },
+  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя+Коррекция (LanguageTool)', extra: 'languagetool' },
+  { pre: 'strong', post: 'strong', name: 'Сильная+Максимальная+Коррекция (LanguageTool)', extra: 'languagetool' },
+  { pre: 'strong', post: 'custom_semantic', name: 'Сильная+Кастомная+Коррекция (LanguageTool)', extra: 'languagetool' }
 ];
 
 // При получении фото сохраняем путь и предлагаем 5 кнопок
