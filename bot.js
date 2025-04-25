@@ -7,17 +7,27 @@ const sqlite3 = require("sqlite3").verbose();
 const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const fuzzysort = require('fuzzysort'); // Добавлено
-const { exportCacheToJsonFile, uploadCacheJsonToYadisk } = require("./modules/cache_export");
-const ui = require("./modules/ui_messages"); // Новый модуль UI-сообщений
-const logger = require("./modules/logger"); // <-- добавлен winston logger
-const { recognizeText } = require("./modules/ocr"); // OCR-модуль
+
+// --- Логирование ошибок при require ---
+function safeRequire(modulePath) {
+  try {
+    return require(modulePath);
+  } catch (e) {
+    console.error(`[FATAL] Ошибка при require('${modulePath}'):`, e);
+    throw e;
+  }
+}
+
+const { exportCacheToJsonFile, uploadCacheJsonToYadisk } = safeRequire("./modules/cache_export");
+const ui = safeRequire("./modules/ui_messages"); // Новый модуль UI-сообщений
+const logger = safeRequire("./modules/logger"); // <-- добавлен winston logger
+const { recognizeText } = safeRequire("./modules/ocr"); // OCR-модуль
+const { convertDocxToPdf } = safeRequire("./modules/docx2pdf");
+const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = safeRequire("./modules/cache");
+
 require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
-const { convertDocxToPdf } = require("./modules/docx2pdf");
-const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = require("./modules/cache");
-
-const yadisk = new YaDiskService(process.env.YANDEX_DISK_TOKEN);
 
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
