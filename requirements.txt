@@ -1,0 +1,4 @@
+easyocr
+pillow
+fs-extra
+# jimp и tesseract.js удалены, так как больше не используются

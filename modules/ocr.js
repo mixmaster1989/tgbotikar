@@ -207,11 +207,26 @@ function postprocessStrong(text) {
   return out.join('\n');
 }
 
+// --- Кастомная семантическая постобработка через SymSpell (Python) ---
+const { execFile } = require('child_process');
+async function postprocessCustomSemantic(text) {
+  return new Promise((resolve, reject) => {
+    const pythonScript = path.join(__dirname, 'ocr_semantic_postprocess.py');
+    const child = execFile('python', [pythonScript], { encoding: 'utf8' }, (err, stdout, stderr) => {
+      if (err) return reject(stderr || err);
+      resolve(stdout.trim());
+    });
+    child.stdin.write(text);
+    child.stdin.end();
+  });
+}
+
 const postMap = {
   weak: postprocessWeak,
   medium: postprocessMedium,
   strong: postprocessStrong,
-  languagetool: postprocessLanguageTool
+  languagetool: postprocessLanguageTool,
+  custom_semantic: postprocessCustomSemantic,
 };
 
 // --- Автостарт LanguageTool-сервера ---
