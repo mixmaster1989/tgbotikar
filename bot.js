@@ -25,6 +25,7 @@ const logger = safeRequire("./modules/logger"); // <-- добавлен winston 
 const { recognizeText } = safeRequire("./modules/ocr"); // OCR-модуль
 const { convertDocxToPdf } = safeRequire("./modules/docx2pdf");
 const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = safeRequire("./modules/cache");
+const { postprocessLanguageTool } = require('./modules/ocr'); // Импорт локальной постобработки LanguageTool
 
 require("dotenv").config();
 
@@ -497,8 +498,8 @@ bot.action('ocr_all_templates', async (ctx) => {
     }
     // --- Новый этап: "семантическая сборка" из всех шаблонов ---
     const semanticResult = semanticOcrAssemble(allResults);
-    // --- Очистка LanguageTool ---
-    const cleanedSemantic = await cleanWithLanguageTool(semanticResult);
+    // --- Очистка через локальный LanguageTool ---
+    const cleanedSemantic = await postprocessLanguageTool(semanticResult);
     // --- Финальная сборка для Telegram ---
     const humanResult = humanReadableAssemble(cleanedSemantic);
     await ctx.replyWithHTML(
@@ -510,33 +511,6 @@ bot.action('ocr_all_templates', async (ctx) => {
     await ctx.reply('Ошибка при распознавании: ' + e.message);
   }
 });
-
-// --- LanguageTool интеграция для доочистки текста ---
-async function cleanWithLanguageTool(text) {
-  try {
-    const result = await languageToolApi.check({
-      text,
-      language: 'ru',
-      endpoint: 'https://api.languagetoolplus.com/v2/check'
-    });
-    let cleaned = text;
-    if (result && result.matches && result.matches.length) {
-      // Применяем исправления LanguageTool к тексту
-      let offset = 0;
-      for (const match of result.matches) {
-        if (match.replacements && match.replacements.length) {
-          const replacement = match.replacements[0].value;
-          cleaned = cleaned.slice(0, match.offset + offset) + replacement + cleaned.slice(match.offset + offset + match.length);
-          offset += replacement.length - match.length;
-        }
-      }
-    }
-    return cleaned;
-  } catch (e) {
-    console.error('[LanguageTool] Ошибка:', e.message);
-    return text;
-  }
-}
 
 // --- Умная семантическая сборка: разбивка, фильтрация, сортировка ---
 function semanticOcrAssemble(results) {
