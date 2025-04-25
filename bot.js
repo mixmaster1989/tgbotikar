@@ -7,6 +7,7 @@ const sqlite3 = require("sqlite3").verbose();
 const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const fuzzysort = require('fuzzysort'); // Добавлено
+const { default: LanguageToolApi } = require('languagetool-api');
 
 // --- Логирование ошибок при require ---
 function safeRequire(modulePath) {
@@ -496,8 +497,11 @@ bot.action('ocr_all_templates', async (ctx) => {
     }
     // --- Новый этап: "семантическая сборка" из всех шаблонов ---
     const semanticResult = semanticOcrAssemble(allResults);
+    // --- Очистка LanguageTool ---
+    const langTool = new LanguageToolApi({ endpoint: 'https://api.languagetoolplus.com/v2/check', language: 'ru' });
+    const cleanedSemantic = await cleanWithLanguageTool(semanticResult, langTool);
     await ctx.replyWithHTML(
-      `<b>🏆 Семантическая сборка OCR (уникальные строки из всех шаблонов)</b>\n\n<pre>${escapeHTML(semanticResult)}</pre>`
+      `<b>🏆 Семантическая сборка OCR (LanguageTool доочистка)</b>\n\n<pre>${escapeHTML(cleanedSemantic)}</pre>`
     );
     logger.info(`[BOT] Все шаблоны завершены. Семантическая сборка завершена.`);
   } catch (e) {
@@ -505,6 +509,29 @@ bot.action('ocr_all_templates', async (ctx) => {
     await ctx.reply('Ошибка при распознавании: ' + e.message);
   }
 });
+
+// --- LanguageTool интеграция для доочистки текста ---
+async function cleanWithLanguageTool(text, langTool) {
+  try {
+    const result = await langTool.check({ text });
+    let cleaned = text;
+    if (result && result.matches && result.matches.length) {
+      // Применяем исправления LanguageTool к тексту
+      let offset = 0;
+      for (const match of result.matches) {
+        if (match.replacements && match.replacements.length) {
+          const replacement = match.replacements[0].value;
+          cleaned = cleaned.slice(0, match.offset + offset) + replacement + cleaned.slice(match.offset + offset + match.length);
+          offset += replacement.length - match.length;
+        }
+      }
+    }
+    return cleaned;
+  } catch (e) {
+    console.error('[LanguageTool] Ошибка:', e.message);
+    return text;
+  }
+}
 
 // --- Умная семантическая сборка: разбивка, фильтрация, сортировка ---
 function semanticOcrAssemble(results) {
