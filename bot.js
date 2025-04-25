@@ -414,10 +414,12 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// 5 шаблонов обработки OCR: сильная предобработка и разные постобработки
+// 4 шаблона обработки OCR: 2 обычных и 2 с LanguageTool
 const ocrTemplates = [
   { pre: 'strong', post: 'weak', name: 'Сильная+Слабая (v2)' },
-  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя (v2)' }
+  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя (v2)' },
+  { pre: 'strong', post: 'languagetool', name: 'Сильная+Слабая+Коррекция (LanguageTool)' },
+  { pre: 'strong', post: 'languagetool', name: 'Сильная+Средняя+Коррекция (LanguageTool)' }
 ];
 
 // При получении фото сохраняем путь и предлагаем 5 кнопок

@@ -153,17 +153,30 @@ const preMap = {
 };
 
 // --- Постобработка ---
-async function postprocessOcroLangTool(text) {
-  // 1. Сохраняем текст во временный файл
-  const tmpPath = path.join(__dirname, 'ocr_tmp.txt');
-  fs.writeFileSync(tmpPath, text, 'utf8');
-  // 2. Запускаем ocr_postprocess.py
-  return new Promise((resolve, reject) => {
-    execFile('python3', [path.join(__dirname, 'ocr_postprocess.py'), tmpPath], { encoding: 'utf8' }, (err, stdout, stderr) => {
-      if (err) return reject(stderr || err);
-      resolve(stdout.trim());
+const axios = require('axios');
+
+async function postprocessLanguageTool(text) {
+  try {
+    const response = await axios.post('http://localhost:8081/v2/check', {
+      text,
+      language: 'ru-RU'
     });
-  });
+    if (response.data && response.data.matches && response.data.matches.length > 0) {
+      let result = text;
+      // Применяем исправления в обратном порядке (чтобы не сбить индексы)
+      const corrections = response.data.matches.map(m => ({ offset: m.offset, length: m.length, replacement: m.replacements[0]?.value || '' }));
+      corrections.sort((a, b) => b.offset - a.offset);
+      for (const c of corrections) {
+        result = result.slice(0, c.offset) + c.replacement + result.slice(c.offset + c.length);
+      }
+      return result;
+    }
+    return text;
+  } catch (err) {
+    // Логируем, но не падаем
+    console.error('LanguageTool error:', err.message);
+    return text;
+  }
 }
 
 function postprocessWeak(text) {
@@ -198,7 +211,7 @@ const postMap = {
   weak: postprocessWeak,
   medium: postprocessMedium,
   strong: postprocessStrong,
-  ocro_langtool: postprocessOcroLangTool
+  languagetool: postprocessLanguageTool
 };
 
 // --- Автостарт LanguageTool-сервера ---
