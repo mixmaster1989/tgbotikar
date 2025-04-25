@@ -169,7 +169,7 @@ const axios = require('axios');
 
 async function postprocessLanguageTool(text) {
   try {
-    logger.info(`[LanguageTool] Запрос: ${text.slice(0, 200)}...`);
+    logger.info(`[LanguageTool] Запрос: ${text.slice(0, 200)}... (длина: ${text.length})`);
     const params = new URLSearchParams();
     params.append('text', text);
     params.append('language', 'ru-RU');
@@ -192,6 +192,8 @@ async function postprocessLanguageTool(text) {
     logger.error(`[LanguageTool] Ошибка: ${err.message}`);
     if (err.response) {
       logger.error(`[LanguageTool] Ответ сервера: ${JSON.stringify(err.response.data)}`);
+      // Дополнительно бросаем подробности ошибки наружу
+      throw new Error(`LanguageTool 500: ${err.response.status} ${JSON.stringify(err.response.data)}`);
     }
     throw err;
   }
