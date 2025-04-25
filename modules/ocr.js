@@ -208,7 +208,6 @@ function postprocessStrong(text) {
 }
 
 // --- Кастомная семантическая постобработка через SymSpell (Python) ---
-const { execFile } = require('child_process');
 async function postprocessCustomSemantic(text) {
   return new Promise((resolve, reject) => {
     const pythonScript = path.join(__dirname, 'ocr_semantic_postprocess.py');
