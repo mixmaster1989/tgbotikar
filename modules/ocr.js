@@ -297,5 +297,6 @@ module.exports = {
   recognizeTextWithTemplateTesseract,
   smartJoinAndCorrect,
   preMap,
-  postMap
+  postMap,
+  postprocessLanguageTool
 };
