@@ -580,7 +580,9 @@ function humanReadableAssemble(text) {
     "POS-системы"
   ];
   // Привести к верхнему регистру, убрать мусорные символы
-  const lines = text.split(/\r?\n|[\'"“”‘’—–…·•,.;:!?()\[\]{}]/).map(s => s.trim().toUpperCase()).filter(Boolean);
+  const lines = text.split(/\r?\n|['"“”‘’—–…·•,.;:!?()\[\]{}]/)
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean);
   // Для каждого ключевого блока ищем наиболее похожую строку из OCR
   const uniq = new Set();
   const result = [];
@@ -602,6 +604,26 @@ function humanReadableAssemble(text) {
       result.push(phrase);
       uniq.add(phrase);
     }
+  }
+  // Если ничего не найдено — fallback: фильтруем осмысленные строки
+  if (result.length === 0) {
+    // Фильтр: убираем короткие, мусорные, дублирующиеся строки
+    const filtered = lines.filter(line =>
+      line.length >= 8 &&
+      /[А-ЯЁ]{2,}/.test(line) && // минимум 2 русские буквы
+      /[A-ZА-ЯЁ0-9]/.test(line) && // есть буквы/цифры
+      !/^[-_=]+$/.test(line) && // не только символы
+      line.replace(/[^А-ЯЁ]/g, '').length >= 0.5 * line.length // не менее 50% букв
+    );
+    // Убираем дубли
+    const uniqFiltered = [...new Set(filtered)];
+    // Если совсем ничего — fallback: берём любые строки не короче 5 символов
+    if (uniqFiltered.length === 0) {
+      const anyLines = [...new Set(lines.filter(line => line.length >= 5))];
+      return anyLines.slice(0, 3).join('\n');
+    }
+    // Возвращаем до 5 наиболее длинных строк
+    return uniqFiltered.sort((a, b) => b.length - a.length).slice(0, 5).join('\n');
   }
   return result.join('\n');
 }
