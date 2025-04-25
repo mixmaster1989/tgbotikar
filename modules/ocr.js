@@ -157,10 +157,12 @@ const axios = require('axios');
 
 async function postprocessLanguageTool(text) {
   try {
+    logger.info(`[LanguageTool] Запрос: ${text.slice(0, 200)}...`);
     const response = await axios.post('http://localhost:8081/v2/check', {
       text,
       language: 'ru-RU'
     });
+    logger.info(`[LanguageTool] Ответ: ${JSON.stringify(response.data).slice(0, 500)}...`);
     if (response.data && response.data.matches && response.data.matches.length > 0) {
       let result = text;
       // Применяем исправления в обратном порядке (чтобы не сбить индексы)
@@ -173,9 +175,11 @@ async function postprocessLanguageTool(text) {
     }
     return text;
   } catch (err) {
-    // Логируем, но не падаем
-    console.error('LanguageTool error:', err.message);
-    return text;
+    logger.error(`[LanguageTool] Ошибка: ${err.message}`);
+    if (err.response) {
+      logger.error(`[LanguageTool] Ответ сервера: ${JSON.stringify(err.response.data)}`);
+    }
+    throw err;
   }
 }
 
@@ -301,4 +305,5 @@ module.exports = {
   recognizeText,
   smartJoinAndCorrect,
   recognizeTextWithTemplate,
+  recognizeTextTesseract,
 };
