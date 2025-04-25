@@ -238,10 +238,28 @@ async function recognizeTextTesseract(imagePath) {
 
 async function recognizeTextWithTemplateTesseract(imagePath, preType, postType) {
   const processedPath = imagePath.replace(/(\.[^.]+)$/, `_${preType}_${postType}$1`);
-  await preMap[preType](imagePath, processedPath);
-  let text = await recognizeTextTesseract(processedPath);
-  text = postMap[postType](text);
-  return text;
+  logger.info(`[OCR] Шаблон: pre=${preType}, post=${postType} — старт`);
+  try {
+    // Таймаут на всю обработку (например, 60 секунд)
+    const timeoutMs = 60000;
+    const result = await Promise.race([
+      (async () => {
+        await preMap[preType](imagePath, processedPath);
+        logger.info(`[OCR] preMap[${preType}] завершён`);
+        let text = await recognizeTextTesseract(processedPath);
+        logger.info(`[OCR] Tesseract завершён`);
+        text = postMap[postType](text);
+        logger.info(`[OCR] postMap[${postType}] завершён`);
+        logger.info(`[OCR] Шаблон: pre=${preType}, post=${postType} — УСПЕХ`);
+        return text;
+      })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout for template pre=${preType}, post=${postType}`)), timeoutMs))
+    ]);
+    return result;
+  } catch (e) {
+    logger.error(`[OCR] Ошибка в шаблоне pre=${preType}, post=${postType}: ${e.message}`);
+    return `Ошибка в шаблоне pre=${preType}, post=${postType}: ${e.message}`;
+  }
 }
 
 // --- Автостарт LanguageTool-сервера ---
