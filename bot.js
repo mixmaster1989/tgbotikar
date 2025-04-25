@@ -25,7 +25,7 @@ const logger = safeRequire("./modules/logger"); // <-- добавлен winston 
 const { recognizeText } = safeRequire("./modules/ocr"); // OCR-модуль
 const { convertDocxToPdf } = safeRequire("./modules/docx2pdf");
 const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = safeRequire("./modules/cache");
-const { postprocessLanguageTool } = require('./modules/ocr'); // Импорт локальной постобработки LanguageTool
+const { postprocessLanguageTool, levenshtein } = require('./modules/ocr'); // Импорт локальной постобработки LanguageTool
 const { loadGarbage, addGarbage, filterGarbage } = require('./modules/ocr_garbage_manager');
 
 require("dotenv").config();
