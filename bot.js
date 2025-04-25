@@ -7,7 +7,7 @@ const sqlite3 = require("sqlite3").verbose();
 const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const fuzzysort = require('fuzzysort'); // Добавлено
-const { default: LanguageToolApi } = require('languagetool-api');
+const languageToolApi = require('languagetool-api');
 
 // --- Логирование ошибок при require ---
 function safeRequire(modulePath) {
@@ -498,8 +498,7 @@ bot.action('ocr_all_templates', async (ctx) => {
     // --- Новый этап: "семантическая сборка" из всех шаблонов ---
     const semanticResult = semanticOcrAssemble(allResults);
     // --- Очистка LanguageTool ---
-    const langTool = new LanguageToolApi({ endpoint: 'https://api.languagetoolplus.com/v2/check', language: 'ru' });
-    const cleanedSemantic = await cleanWithLanguageTool(semanticResult, langTool);
+    const cleanedSemantic = await cleanWithLanguageTool(semanticResult);
     await ctx.replyWithHTML(
       `<b>🏆 Семантическая сборка OCR (LanguageTool доочистка)</b>\n\n<pre>${escapeHTML(cleanedSemantic)}</pre>`
     );
@@ -511,9 +510,13 @@ bot.action('ocr_all_templates', async (ctx) => {
 });
 
 // --- LanguageTool интеграция для доочистки текста ---
-async function cleanWithLanguageTool(text, langTool) {
+async function cleanWithLanguageTool(text) {
   try {
-    const result = await langTool.check({ text });
+    const result = await languageToolApi.check({
+      text,
+      language: 'ru',
+      endpoint: 'https://api.languagetoolplus.com/v2/check'
+    });
     let cleaned = text;
     if (result && result.matches && result.matches.length) {
       // Применяем исправления LanguageTool к тексту
