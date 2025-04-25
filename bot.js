@@ -424,30 +424,19 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// --- OCR шаблоны ---
-const preTypes = [
-  'weak',
-  'medium',
-  'strong',
-  'strongV3',
-  'strongContrast',
-  'strongDenoise',
-  'strongV4',
-  'strongClahe',
-  'cropTextBlock'
+// --- OCR шаблоны: топ-10 лучших ---
+const ocrTemplates = [
+  { pre: 'cropTextBlock', post: 'strong', name: 'cropTextBlock+strong' },
+  { pre: 'cropTextBlock', post: 'medium', name: 'cropTextBlock+medium' },
+  { pre: 'cropTextBlock', post: 'weak', name: 'cropTextBlock+weak' },
+  { pre: 'strong', post: 'medium', name: 'strong+medium' },
+  { pre: 'strong', post: 'strong', name: 'strong+strong' },
+  { pre: 'strong', post: 'weak', name: 'strong+weak' },
+  { pre: 'medium', post: 'strong', name: 'medium+strong' },
+  { pre: 'medium', post: 'medium', name: 'medium+medium' },
+  { pre: 'medium', post: 'weak', name: 'medium+weak' },
+  { pre: 'strongV3', post: 'strong', name: 'strongV3+strong' }
 ];
-const postTypes = ['weak', 'medium', 'strong'];
-
-const ocrTemplates = [];
-preTypes.forEach(pre => {
-  postTypes.forEach(post => {
-    ocrTemplates.push({
-      pre,
-      post,
-      name: `${pre}+${post}`
-    });
-  });
-});
 
 // --- Единая кнопка для запуска всех шаблонов ---
 const ocrTemplatesKeyboard = [[{ text: 'Распознать всеми шаблонами', callback_data: 'ocr_all_templates' }]];
