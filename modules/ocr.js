@@ -283,7 +283,7 @@ function restartLanguageToolServer() {
 
   // Запускаем сервер и логируем stdout/stderr
   const jarPath = '/home/user1/.ssh/tgbotikar/LanguageTool-6.3/languagetool-server.jar';
-  const java = spawn('java', ['-jar', jarPath, '--port', '8081']);
+  const java = spawn('java', ['-cp', jarPath, 'org.languagetool.server.HTTPServer', '--port', '8081']);
   java.stdout.on('data', (data) => {
     logger.info(`[LT-Server] ${data.toString().trim()}`);
   });
@@ -300,7 +300,7 @@ function startLanguageToolServer() {
   if (ltServerStarted) return;
   ltServerStarted = true;
   const jarPath = '/home/user1/.ssh/tgbotikar/LanguageTool-6.3/languagetool-server.jar';
-  const java = spawn('java', ['-jar', jarPath, '--port', '8081'], {
+  const java = spawn('java', ['-cp', jarPath, 'org.languagetool.server.HTTPServer', '--port', '8081'], {
     detached: true,
     stdio: 'ignore'
   });
