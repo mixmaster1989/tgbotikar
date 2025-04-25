@@ -481,7 +481,7 @@ bot.action('ocr_all_templates', async (ctx) => {
       try {
         const { recognizeTextWithTemplateTesseract } = require("./modules/ocr");
         tesseractText = await recognizeTextWithTemplateTesseract(filePath, tpl.pre, tpl.post);
-        logger.info(`[BOT] Завершён шаблон ${i+1}: ${tpl.name}`);
+        logger.info(`[BOT] Результат шаблона ${i+1}: ${tpl.name}: ${tesseractText}`);
       } catch (e) {
         tesseractText = `Ошибка Tesseract: ${e.message}`;
         logger.error(`[BOT] Ошибка шаблона ${i+1}: ${tpl.name}: ${e.message}`);
@@ -498,10 +498,13 @@ bot.action('ocr_all_templates', async (ctx) => {
     }
     // --- Новый этап: "семантическая сборка" из всех шаблонов ---
     const semanticResult = semanticOcrAssemble(allResults);
+    logger.info(`[BOT] Итоговый результат семантической сборки: ${semanticResult}`);
     // --- Очистка через локальный LanguageTool ---
     const cleanedSemantic = await postprocessLanguageTool(semanticResult);
+    logger.info(`[BOT] Итоговый результат после LanguageTool: ${cleanedSemantic}`);
     // --- Финальная сборка для Telegram ---
     const humanResult = humanReadableAssemble(cleanedSemantic);
+    logger.info(`[BOT] Итоговый результат для Telegram: ${humanResult}`);
     await ctx.replyWithHTML(
       `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(humanResult)}</pre>`
     );
