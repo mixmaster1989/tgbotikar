@@ -466,19 +466,29 @@ bot.action('ocr_all_templates', async (ctx) => {
     await ctx.reply('Начинаю распознавание всеми шаблонами...');
     for (let i = 0; i < ocrTemplates.length; ++i) {
       const tpl = ocrTemplates[i];
+      logger.info(`[BOT] Старт шаблона ${i+1}: ${tpl.name}`);
       await ctx.reply(`Использую шаблон ${i+1}: ${tpl.name}`);
       let tesseractText = '';
       try {
         const { recognizeTextWithTemplateTesseract } = require("./modules/ocr");
         tesseractText = await recognizeTextWithTemplateTesseract(filePath, tpl.pre, tpl.post);
+        logger.info(`[BOT] Завершён шаблон ${i+1}: ${tpl.name}`);
       } catch (e) {
         tesseractText = `Ошибка Tesseract: ${e.message}`;
+        logger.error(`[BOT] Ошибка шаблона ${i+1}: ${tpl.name}: ${e.message}`);
       }
-      await ctx.replyWithHTML(
-        `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n${tesseractText}`
-      );
+      try {
+        await ctx.replyWithHTML(
+          `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n${tesseractText}`
+        );
+        logger.info(`[BOT] Ответ отправлен по шаблону ${i+1}: ${tpl.name}`);
+      } catch (err) {
+        logger.error(`[BOT] Ошибка отправки ответа по шаблону ${i+1}: ${tpl.name}: ${err.message}`);
+      }
     }
+    logger.info(`[BOT] Все шаблоны завершены.`);
   } catch (e) {
+    logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
   }
 });
