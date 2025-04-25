@@ -428,13 +428,7 @@ bot.on("text", async (ctx) => {
 const ocrTemplates = [
   { pre: 'strong', post: 'weak', name: 'Сильная+Слабая' },
   { pre: 'strong', post: 'medium', name: 'Сильная+Средняя' },
-  { pre: 'strong', post: 'strong', name: 'Сильная+Максимальная' },
-  { pre: 'strong', post: 'languagetool', name: 'Сильная+Коррекция (LanguageTool)' },
-  { pre: 'strong', post: 'custom_semantic', name: 'Сильная+Кастомная семантика' },
-  { pre: 'strong', post: 'weak', name: 'Сильная+Слабая+Коррекция (LanguageTool)', extra: 'languagetool' },
-  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя+Коррекция (LanguageTool)', extra: 'languagetool' },
-  { pre: 'strong', post: 'strong', name: 'Сильная+Максимальная+Коррекция (LanguageTool)', extra: 'languagetool' },
-  { pre: 'strong', post: 'custom_semantic', name: 'Сильная+Кастомная+Коррекция (LanguageTool)', extra: 'languagetool' }
+  { pre: 'strong', post: 'strong', name: 'Сильная+Максимальная' }
 ];
 
 // В интерфейсе — только одна кнопка
@@ -473,29 +467,15 @@ bot.action('ocr_all_templates', async (ctx) => {
     for (let i = 0; i < ocrTemplates.length; ++i) {
       const tpl = ocrTemplates[i];
       await ctx.reply(`Использую шаблон ${i+1}: ${tpl.name}`);
-      let paddleText = '';
       let tesseractText = '';
-      // PaddleOCR с защитой от ошибок
       try {
-        const { recognizeTextWithTemplate } = require("./modules/ocr");
-        paddleText = await recognizeTextWithTemplate(filePath, tpl.pre, tpl.post);
-      } catch (e) {
-        paddleText = `Ошибка PaddleOCR: ${e.message}`;
-      }
-      // Не отправлять в LanguageTool пустой текст
-      if (tpl.post === 'languagetool' && (!paddleText || paddleText.trim() === '')) {
-        await ctx.reply('PaddleOCR выдал пустой результат, пропускаю LanguageTool.');
-      }
-      // Tesseract с защитой от ошибок
-      try {
-        const { recognizeTextTesseract } = require("./modules/ocr");
-        tesseractText = await recognizeTextTesseract(filePath);
+        const { recognizeTextWithTemplateTesseract } = require("./modules/ocr");
+        tesseractText = await recognizeTextWithTemplateTesseract(filePath, tpl.pre, tpl.post);
       } catch (e) {
         tesseractText = `Ошибка Tesseract: ${e.message}`;
       }
       await ctx.replyWithHTML(
-        `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n` +
-        `<b>PaddleOCR:</b>\n${paddleText}\n\n<b>Tesseract:</b>\n${tesseractText}`
+        `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n${tesseractText}`
       );
     }
   } catch (e) {

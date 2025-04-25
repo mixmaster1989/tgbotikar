@@ -211,36 +211,32 @@ function postprocessStrong(text) {
   return out.join('\n');
 }
 
-// --- Кастомная семантическая постобработка через SymSpell (Python) ---
-async function postprocessCustomSemantic(text) {
-  return new Promise((resolve, reject) => {
-    const pythonScript = path.join(__dirname, 'ocr_semantic_postprocess.py');
-    const child = execFile('python3', [pythonScript], { encoding: 'utf8' }, (err, stdout, stderr) => {
-      if (err) return reject(stderr || err);
-      resolve(stdout.trim());
-    });
-    child.stdin.write(text);
-    child.stdin.end();
-  });
+// --- Tesseract OCR ---
+const Tesseract = require('tesseract.js');
+
+async function recognizeTextTesseract(imagePath) {
+  try {
+    const { data: { text } } = await Tesseract.recognize(imagePath, 'rus', { logger: m => logger.info(m) });
+    return text;
+  } catch (e) {
+    logger.error(`[Tesseract] Ошибка: ${e.message}`);
+    throw e;
+  }
 }
 
-// --- Tesseract OCR ---
-async function recognizeTextTesseract(imagePath) {
-  return new Promise((resolve, reject) => {
-    execFile('tesseract', [imagePath, 'stdout', '-l', 'rus', '--psm', '6'], { encoding: 'utf8' }, (err, stdout, stderr) => {
-      if (err) return reject(stderr || err);
-      resolve(stdout.trim());
-    });
-  });
+async function recognizeTextWithTemplateTesseract(imagePath, preType, postType) {
+  const processedPath = imagePath.replace(/(\.[^.]+)$/, `_${preType}_${postType}$1`);
+  await preMap[preType](imagePath, processedPath);
+  let text = await recognizeTextTesseract(processedPath);
+  text = postMap[postType](text);
+  return text;
 }
 
 const postMap = {
   weak: postprocessWeak,
   medium: postprocessMedium,
-  strong: postprocessStrong,
-  languagetool: postprocessLanguageTool,
-  custom_semantic: postprocessCustomSemantic,
-  tesseract: recognizeTextTesseract,
+  strong: postprocessStrong
+//  languagetool: postprocessLanguageTool, // отключено по требованию
 };
 
 // --- Автостарт LanguageTool-сервера ---
@@ -272,38 +268,11 @@ async function preprocessImage(inputPath, outputPath) {
   });
 }
 
-// OCR через PaddleOCR (Python) с фильтрацией и автокоррекцией
-async function recognizeText(imagePath) {
-  const processedPath = imagePath.replace(/(\.[^.]+)$/, "_processed$1");
-  await preprocessImage(imagePath, processedPath);
-  logger.info(`[OCR] Передан в PaddleOCR: ${processedPath}`);
-  return new Promise((resolve, reject) => {
-    execFile('python3', [path.join(__dirname, 'ocr_paddle.py'), processedPath], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        logger.error(`[OCR] PaddleOCR ошибка: ${stderr || err}`);
-        return reject(stderr || err);
-      }
-      // Фильтруем строки: только те, где есть >=2 кириллических символа
-      const lines = stdout.trim().split(/\r?\n/).filter(line => (line.match(/[А-Яа-яЁё]/g) || []).length >= 2);
-      const filtered = lines.join("\n");
-      const postprocessed = smartJoinAndCorrect(filtered);
-      logger.info(`[OCR] PaddleOCR постобработка: ${postprocessed.slice(0,200)}...`);
-      resolve(postprocessed);
-    });
-  });
-}
-
-async function recognizeTextWithTemplate(imagePath, preType, postType) {
-  const processedPath = imagePath.replace(/(\.[^.]+)$/, `_${preType}_${postType}$1`);
-  await preMap[preType](imagePath, processedPath);
-  const text = await recognizeText(processedPath); // базовый PaddleOCR
-  return postMap[postType](text);
-}
-
 module.exports = {
   preprocessImage,
-  recognizeText,
-  smartJoinAndCorrect,
-  recognizeTextWithTemplate,
   recognizeTextTesseract,
+  recognizeTextWithTemplateTesseract,
+  smartJoinAndCorrect,
+  preMap,
+  postMap
 };
