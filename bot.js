@@ -26,6 +26,7 @@ const { recognizeText } = safeRequire("./modules/ocr"); // OCR-модуль
 const { convertDocxToPdf } = safeRequire("./modules/docx2pdf");
 const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = safeRequire("./modules/cache");
 const { postprocessLanguageTool } = require('./modules/ocr'); // Импорт локальной постобработки LanguageTool
+const { loadGarbage, addGarbage, filterGarbage } = require('./modules/ocr_garbage_manager');
 
 require("dotenv").config();
 
@@ -555,7 +556,7 @@ bot.action('ocr_all_templates', async (ctx) => {
     }
 
     const bestResult = selectBestOcrResult(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
-    sendBestOcrResult(ctx, bestResult);
+    await sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemantic, humanResult);
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
@@ -630,9 +631,7 @@ function humanReadableAssemble(text) {
     "POS-системы"
   ];
   // Привести к верхнему регистру, убрать мусорные символы
-  const lines = text.split(/\r?\n|['"“”‘’—–…·•,.;:!?()\[\]{}]/)
-    .map(s => s.trim().toUpperCase())
-    .filter(Boolean);
+  const lines = text.split(/\r?\n/).map(s => s.trim().toUpperCase()).filter(Boolean);
   // Для каждого ключевого блока ищем наиболее похожую строку из OCR
   const uniq = new Set();
   const result = [];
@@ -836,15 +835,60 @@ function selectBestOcrResultV2(allResults, semanticResult, cleanedSemantic, huma
 }
 
 // --- В месте, где отправляется результат ---
-function sendBestOcrResult(ctx, bestResult) {
-  return ctx.replyWithHTML(
-    `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(bestResult)}</pre>`
-  ).then(() => {
-    logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
-  }).catch(e => {
-    logger.error(`[BOT] Ошибка отправки результата пользователю: ${e.message}`);
+async function sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemantic, humanResult) {
+  let bestResult = selectBestOcrResultV2(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
+  let lines = bestResult.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // 1. Фильтрация по словарю мусора
+  lines = await filterGarbage(lines);
+  // 2. Фильтрация коротких и странных строк (loopback)
+  const importantWords = ['активируйте', 'скачайте', 'приложение', 'магазин', 'сервис', 'эво', 'касовые', 'подробнее', 'адрес', 'телефон', 'инн'];
+  const garbageCandidates = [];
+  const filtered = lines.filter(line => {
+    const clean = line.replace(/[«»@*%_"'\-]/g, '').trim();
+    if (clean.length < 8 && !importantWords.some(w => clean.toLowerCase().includes(w))) {
+      garbageCandidates.push(line);
+      return false;
+    }
+    if ((clean.match(/[А-Яа-яЁё]/g) || []).length < 3 && !importantWords.some(w => clean.toLowerCase().includes(w))) {
+      garbageCandidates.push(line);
+      return false;
+    }
+    return true;
   });
+  // 3. Loopback: пополняем словарь мусора
+  await addGarbage(garbageCandidates);
+  // 4. Финальный текст
+  const finalText = filtered.join('\n');
+  await ctx.replyWithHTML(
+    `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(finalText)}</pre>`
+  );
+  logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
+  // 5. Предложение ввести оригинал текста для сравнения
+  userStates[ctx.from.id] = 'awaiting_original';
+  userLastOcr[ctx.from.id] = finalText;
+  await ctx.reply('Если у вас есть оригинальный текст, отправьте его сюда для сравнения и улучшения качества распознавания.');
 }
+
+// --- Сравнение с оригиналом от пользователя ---
+const userLastOcr = {};
+bot.on('text', async ctx => {
+  const userId = ctx.from.id;
+  if (userStates[userId] === 'awaiting_original' && userLastOcr[userId]) {
+    const ocrText = userLastOcr[userId];
+    const origText = ctx.message.text;
+    // Сравнение (Levenshtein)
+    const lev = levenshtein(ocrText.replace(/\s+/g, ''), origText.replace(/\s+/g, ''));
+    const maxLen = Math.max(ocrText.length, origText.length);
+    const similarity = maxLen > 0 ? (1 - lev / maxLen) : 0;
+    await ctx.reply(`Сравнение завершено! Совпадение: ${(similarity * 100).toFixed(1)}%. Спасибо, ваш пример поможет улучшить распознавание.`);
+    // (Опционально) Можно добавить строки-расхождения в словарь мусора
+    // ...
+    userStates[userId] = undefined;
+    userLastOcr[userId] = undefined;
+    return;
+  }
+  // ... (остальные обработчики текста)
+});
 
 module.exports = {
     app,
