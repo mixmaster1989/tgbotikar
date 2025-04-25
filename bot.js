@@ -424,14 +424,32 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// --- Единая кнопка для запуска всех шаблонов ---
-const ocrTemplates = [
-  { pre: 'strong', post: 'weak', name: 'Сильная+Слабая' },
-  { pre: 'strong', post: 'medium', name: 'Сильная+Средняя' },
-  { pre: 'strong', post: 'strong', name: 'Сильная+Максимальная' }
+// --- OCR шаблоны ---
+const preTypes = [
+  'weak',
+  'medium',
+  'strong',
+  'strongV3',
+  'strongContrast',
+  'strongDenoise',
+  'strongV4',
+  'strongClahe',
+  'cropTextBlock'
 ];
+const postTypes = ['weak', 'medium', 'strong'];
 
-// В интерфейсе — только одна кнопка
+const ocrTemplates = [];
+preTypes.forEach(pre => {
+  postTypes.forEach(post => {
+    ocrTemplates.push({
+      pre,
+      post,
+      name: `${pre}+${post}`
+    });
+  });
+});
+
+// --- Единая кнопка для запуска всех шаблонов ---
 const ocrTemplatesKeyboard = [[{ text: 'Распознать всеми шаблонами', callback_data: 'ocr_all_templates' }]];
 
 // При получении фото сохраняем путь и предлагаем кнопку
