@@ -473,10 +473,20 @@ bot.action('ocr_all_templates', async (ctx) => {
     for (let i = 0; i < ocrTemplates.length; ++i) {
       const tpl = ocrTemplates[i];
       await ctx.reply(`Использую шаблон ${i+1}: ${tpl.name}`);
-      // PaddleOCR
-      const { recognizeTextWithTemplate } = require("./modules/ocr");
-      const paddleText = await recognizeTextWithTemplate(filePath, tpl.pre, tpl.post);
+      let paddleText = '';
       let tesseractText = '';
+      // PaddleOCR с защитой от ошибок
+      try {
+        const { recognizeTextWithTemplate } = require("./modules/ocr");
+        paddleText = await recognizeTextWithTemplate(filePath, tpl.pre, tpl.post);
+      } catch (e) {
+        paddleText = `Ошибка PaddleOCR: ${e.message}`;
+      }
+      // Не отправлять в LanguageTool пустой текст
+      if (tpl.post === 'languagetool' && (!paddleText || paddleText.trim() === '')) {
+        await ctx.reply('PaddleOCR выдал пустой результат, пропускаю LanguageTool.');
+      }
+      // Tesseract с защитой от ошибок
       try {
         const { recognizeTextTesseract } = require("./modules/ocr");
         tesseractText = await recognizeTextTesseract(filePath);
