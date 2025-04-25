@@ -471,6 +471,7 @@ bot.action('ocr_all_templates', async (ctx) => {
       return;
     }
     await ctx.reply('Начинаю распознавание всеми шаблонами...');
+    const allResults = [];
     for (let i = 0; i < ocrTemplates.length; ++i) {
       const tpl = ocrTemplates[i];
       logger.info(`[BOT] Старт шаблона ${i+1}: ${tpl.name}`);
@@ -484,6 +485,7 @@ bot.action('ocr_all_templates', async (ctx) => {
         tesseractText = `Ошибка Tesseract: ${e.message}`;
         logger.error(`[BOT] Ошибка шаблона ${i+1}: ${tpl.name}: ${e.message}`);
       }
+      allResults.push({ tplName: tpl.name, text: tesseractText });
       try {
         await ctx.replyWithHTML(
           `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n${tesseractText}`
@@ -493,12 +495,47 @@ bot.action('ocr_all_templates', async (ctx) => {
         logger.error(`[BOT] Ошибка отправки ответа по шаблону ${i+1}: ${tpl.name}: ${err.message}`);
       }
     }
-    logger.info(`[BOT] Все шаблоны завершены.`);
+    // --- Новый этап: анализируем все результаты, выбираем лучший, чистим ---
+    const best = cleanAndSelectBestOcrResult(allResults);
+    await ctx.replyWithHTML(
+      `<b>🏆 Лучший результат OCR (шаблон: ${best.tplName})</b>\n\n<pre>${best.cleaned}</pre>`
+    );
+    logger.info(`[BOT] Все шаблоны завершены. Лучший: ${best.tplName}`);
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
   }
 });
+
+// --- Функция: очистка и выбор лучшего результата OCR ---
+function cleanAndSelectBestOcrResult(results) {
+  // results: [{ tplName, text }]
+  // 1. Фильтруем строки: только кириллица, цифры, базовые знаки препинания, длина строки > 10
+  function cleanText(text) {
+    return text
+      .split(/\n|\r|\f|\v|\u2028|\u2029|\u0085/)
+      .map(line => line.replace(/[^а-яА-ЯёЁ0-9a-zA-Z.,:;!?()\-\s]/g, ''))
+      .map(line => line.trim())
+      .filter(line => line.length > 10 && /[а-яА-ЯёЁ]/.test(line))
+      .join('\n');
+  }
+  // 2. Считаем "осознанные" слова (русские слова длиной > 2)
+  function countWords(text) {
+    return (text.match(/[а-яА-ЯёЁ]{3,}/g) || []).length;
+  }
+  // 3. Для каждого результата: чистим, считаем слова
+  const processed = results.map(r => {
+    const cleaned = cleanText(r.text);
+    return {
+      tplName: r.tplName,
+      cleaned,
+      wordCount: countWords(cleaned)
+    };
+  });
+  // 4. Находим результат с максимальным числом "осознанных" слов
+  const best = processed.reduce((max, cur) => (cur.wordCount > max.wordCount ? cur : max), processed[0]);
+  return best;
+}
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")
 bot.action("generate_test", async (ctx) => {
