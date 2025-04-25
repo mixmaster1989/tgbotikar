@@ -441,9 +441,7 @@ bot.on(["photo"], async (ctx) => {
       text: `${i+1} ${tpl.name}`,
       callback_data: `ocr_tpl_${i}`
     }]);
-    await ctx.reply("Выберите метод обработки OCR:", {
-      reply_markup: { inline_keyboard: keyboard }
-    });
+    await ctx.reply("Выберите способ обработки OCR:", Markup.inlineKeyboard(keyboard));
   }
 });
 
