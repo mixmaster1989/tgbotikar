@@ -424,13 +424,12 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// 4 шаблона обработки OCR: 2 обычных и 2 с LanguageTool
+// --- Единая кнопка для запуска всех шаблонов ---
 const ocrTemplates = [
   { pre: 'strong', post: 'weak', name: 'Сильная+Слабая' },
   { pre: 'strong', post: 'medium', name: 'Сильная+Средняя' },
   { pre: 'strong', post: 'strong', name: 'Сильная+Максимальная' },
   { pre: 'strong', post: 'languagetool', name: 'Сильная+Коррекция (LanguageTool)' },
-  { pre: 'strong', post: 'languagetool', name: 'Сильная+Максимум LanguageTool' },
   { pre: 'strong', post: 'custom_semantic', name: 'Сильная+Кастомная семантика' },
   { pre: 'strong', post: 'weak', name: 'Сильная+Слабая+Коррекция (LanguageTool)', extra: 'languagetool' },
   { pre: 'strong', post: 'medium', name: 'Сильная+Средняя+Коррекция (LanguageTool)', extra: 'languagetool' },
@@ -438,7 +437,10 @@ const ocrTemplates = [
   { pre: 'strong', post: 'custom_semantic', name: 'Сильная+Кастомная+Коррекция (LanguageTool)', extra: 'languagetool' }
 ];
 
-// При получении фото сохраняем путь и предлагаем 5 кнопок
+// В интерфейсе — только одна кнопка
+const ocrTemplatesKeyboard = [[{ text: 'Распознать всеми шаблонами', callback_data: 'ocr_all_templates' }]];
+
+// При получении фото сохраняем путь и предлагаем кнопку
 bot.on(["photo"], async (ctx) => {
   const userId = ctx.from.id;
   if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
@@ -454,33 +456,41 @@ bot.on(["photo"], async (ctx) => {
     // Сохраняем путь к фото в сессию
     if (!ctx.session) ctx.session = {};
     ctx.session.lastPhotoPath = filePath;
-    // Генерируем клавиатуру из 5 кнопок
-    const keyboard = ocrTemplates.map((tpl, i) => [{
-      text: `${i+1} ${tpl.name}`,
-      callback_data: `ocr_tpl_${i}`
-    }]);
-    await ctx.reply("Выберите способ обработки OCR:", Markup.inlineKeyboard(keyboard));
+    // Генерируем клавиатуру из 1 кнопки
+    await ctx.reply("Выберите способ обработки OCR:", Markup.inlineKeyboard(ocrTemplatesKeyboard));
   }
 });
 
-// Обработка кнопок шаблонов OCR
-ocrTemplates.forEach((tpl, i) => {
-  bot.action(`ocr_tpl_${i}`, async (ctx) => {
+// Обработка кнопки "Распознать всеми шаблонами"
+bot.action('ocr_all_templates', async (ctx) => {
+  try {
     const filePath = ctx.session && ctx.session.lastPhotoPath;
     if (!filePath || !fs.existsSync(filePath)) {
-      await ctx.reply("Нет последнего фото для распознавания.");
+      await ctx.reply('Нет последнего фото для распознавания.');
       return;
     }
-    await ctx.reply(`🔍 Распознаю (${tpl.name})...`);
-    const { recognizeTextWithTemplate } = require("./modules/ocr");
-    try {
-      const text = await recognizeTextWithTemplate(filePath, tpl.pre, tpl.post);
-      await ctx.reply((text && text.trim() ? `Результат (${tpl.name}):\n${text}` : "Текст не найден или не распознан."));
-    } catch (e) {
-      await ctx.reply("Ошибка при распознавании: " + e.message);
+    await ctx.reply('Начинаю распознавание всеми шаблонами...');
+    for (let i = 0; i < ocrTemplates.length; ++i) {
+      const tpl = ocrTemplates[i];
+      await ctx.reply(`Использую шаблон ${i+1}: ${tpl.name}`);
+      // PaddleOCR
+      const { recognizeTextWithTemplate } = require("./modules/ocr");
+      const paddleText = await recognizeTextWithTemplate(filePath, tpl.pre, tpl.post);
+      let tesseractText = '';
+      try {
+        const { recognizeTextTesseract } = require("./modules/ocr");
+        tesseractText = await recognizeTextTesseract(filePath);
+      } catch (e) {
+        tesseractText = `Ошибка Tesseract: ${e.message}`;
+      }
+      await ctx.replyWithHTML(
+        `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n` +
+        `<b>PaddleOCR:</b>\n${paddleText}\n\n<b>Tesseract:</b>\n${tesseractText}`
+      );
     }
-    // Не удаляем файл! Можно пробовать другие шаблоны
-  });
+  } catch (e) {
+    await ctx.reply('Ошибка при распознавании: ' + e.message);
+  }
 });
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")

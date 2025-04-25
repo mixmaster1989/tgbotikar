@@ -220,12 +220,23 @@ async function postprocessCustomSemantic(text) {
   });
 }
 
+// --- Tesseract OCR ---
+async function recognizeTextTesseract(imagePath) {
+  return new Promise((resolve, reject) => {
+    execFile('tesseract', [imagePath, 'stdout', '-l', 'rus', '--psm', '6'], { encoding: 'utf8' }, (err, stdout, stderr) => {
+      if (err) return reject(stderr || err);
+      resolve(stdout.trim());
+    });
+  });
+}
+
 const postMap = {
   weak: postprocessWeak,
   medium: postprocessMedium,
   strong: postprocessStrong,
   languagetool: postprocessLanguageTool,
   custom_semantic: postprocessCustomSemantic,
+  tesseract: recognizeTextTesseract,
 };
 
 // --- Автостарт LanguageTool-сервера ---
