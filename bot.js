@@ -505,8 +505,58 @@ bot.action('ocr_all_templates', async (ctx) => {
     // --- Финальная сборка для Telegram ---
     const humanResult = humanReadableAssemble(cleanedSemantic);
     logger.info(`[BOT] Итоговый результат для Telegram: ${humanResult}`);
+    // --- Оценка человекочитаемости результата OCR ---
+    function evalHumanReadableScore(text) {
+      if (!text || typeof text !== 'string') return 0;
+      // Количество строк и средняя длина
+      const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (!lines.length) return 0;
+      const avgLen = lines.reduce((a, b) => a + b.length, 0) / lines.length;
+      // Доля русских букв
+      const totalChars = text.length;
+      const ruChars = (text.match(/[А-Яа-яЁё]/g) || []).length;
+      const ruRatio = ruChars / (totalChars || 1);
+      // Количество "мусорных" строк (очень коротких, с большим количеством спецсимволов)
+      const noisyLines = lines.filter(l => l.length < 5 || (l.replace(/[А-Яа-яЁё0-9]/gi, '').length / l.length) > 0.5).length;
+      // Количество уникальных строк
+      const uniqLines = new Set(lines).size;
+      // Бонус за наличие типичных слов (например, "активируйте", "скачайте", "приложение", "магазин")
+      const bonusWords = ["АКТИВИРУЙТЕ", "СКАЧАЙТЕ", "ПРИЛОЖЕНИЕ", "МАГАЗИН", "СЕРВИСЫ", "ЭВОТОР"];
+      let bonus = 0;
+      for (const w of bonusWords) if (text.toUpperCase().includes(w)) bonus += 0.1;
+      // Итоговая формула: больше русских букв, меньше мусора, больше строк, больше уникальности, бонус за ключевые слова
+      return (
+        ruRatio * 2 +
+        Math.min(avgLen / 20, 1) +
+        Math.min(lines.length / 10, 1) +
+        Math.min(uniqLines / lines.length, 1) +
+        bonus -
+        noisyLines * 0.2
+      );
+    }
+
+    // --- Выбор лучшего результата OCR ---
+    function selectBestOcrResult(allResults, semanticResult, cleanedSemantic, humanResult) {
+      // Оцениваем все варианты
+      const candidates = [];
+      allResults.forEach((r, i) => candidates.push({
+        text: r,
+        label: `Шаблон ${i + 1}`,
+        score: evalHumanReadableScore(r)
+      }));
+      candidates.push({ text: semanticResult, label: 'Семантическая сборка', score: evalHumanReadableScore(semanticResult) });
+      candidates.push({ text: cleanedSemantic, label: 'После LanguageTool', score: evalHumanReadableScore(cleanedSemantic) });
+      candidates.push({ text: humanResult, label: 'Финальный (humanReadableAssemble)', score: evalHumanReadableScore(humanResult) });
+      // Выбираем с максимальным score
+      candidates.sort((a, b) => b.score - a.score);
+      logger.info(`[BOT] Лучший результат: ${candidates[0].label} (оценка: ${candidates[0].score.toFixed(2)})`);
+      logger.info(`[BOT] Лучший текст:\n${candidates[0].text}`);
+      return candidates[0].text;
+    }
+
+    const bestResult = selectBestOcrResult(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
     await ctx.replyWithHTML(
-      `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(humanResult)}</pre>`
+      `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(bestResult)}</pre>`
     );
     logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
   } catch (e) {
