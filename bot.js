@@ -522,7 +522,27 @@ function saveToCacheAndSync(question, answer, ctx = null) {
   });
 }
 
+// --- УТИЛИТА: Скачивание файла Telegram в temp ---
+async function downloadFile(file, userId) {
+  const tempPath = path.join(__dirname, 'temp');
+  await fs.ensureDir(tempPath);
+  const ext = path.extname(file.file_path || '.jpg');
+  const fileName = `${userId}_${Date.now()}${ext}`;
+  const dest = path.join(tempPath, fileName);
+  const fileLink = await bot.telegram.getFileLink(file.file_id);
 
+  const res = await fetch(fileLink.href);
+  if (!res.ok) throw new Error(`Ошибка загрузки файла: ${res.statusText}`);
+  // Для node >=18 используем arrayBuffer, для node-fetch@2 — buffer
+  let buffer;
+  if (typeof res.arrayBuffer === 'function') {
+    buffer = Buffer.from(await res.arrayBuffer());
+  } else {
+    buffer = await res.buffer();
+  }
+  await fs.writeFile(dest, buffer);
+  return dest;
+}
 
 module.exports = {
     app,
