@@ -149,7 +149,19 @@ async function preprocessCropTextBlock(inputPath, outputPath) {
 const preMap = {
   weak: preprocessWeak,
   medium: preprocessMedium,
-  strong: preprocessStrong
+  strong: preprocessStrong,
+  strongV3: preprocessStrongV3,
+  strongContrast: preprocessStrongContrast,
+  strongDenoise: preprocessStrongDenoise,
+  strongV4: preprocessStrongV4,
+  strongClahe: preprocessStrongClahe,
+  cropTextBlock: preprocessCropTextBlock
+};
+
+const postMap = {
+  weak: postprocessWeak,
+  medium: postprocessMedium,
+  strong: postprocessStrong
 };
 
 // --- Постобработка ---
@@ -216,7 +228,7 @@ const Tesseract = require('tesseract.js');
 
 async function recognizeTextTesseract(imagePath) {
   try {
-    const { data: { text } } = await Tesseract.recognize(imagePath, 'rus', { logger: m => logger.info(m) });
+    const { data: { text } } = await Tesseract.recognize(imagePath, 'rus', { logger: () => {} });
     return text;
   } catch (e) {
     logger.error(`[Tesseract] Ошибка: ${e.message}`);
@@ -231,13 +243,6 @@ async function recognizeTextWithTemplateTesseract(imagePath, preType, postType) 
   text = postMap[postType](text);
   return text;
 }
-
-const postMap = {
-  weak: postprocessWeak,
-  medium: postprocessMedium,
-  strong: postprocessStrong
-//  languagetool: postprocessLanguageTool, // отключено по требованию
-};
 
 // --- Автостарт LanguageTool-сервера ---
 let ltServerStarted = false;
