@@ -677,69 +677,6 @@ function humanReadableAssemble(text) {
   return result.join('\n');
 }
 
-// --- Экранирование HTML для Telegram ---
-function escapeHTML(str) {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-// Генерация теста по случайному материалу (или просто "Скажи привет")
-bot.action("generate_test", async (ctx) => {
-  try {
-    await streamAIResponse("Скажи привет", ctx);
-  } catch (err) {
-    logger.error("Ошибка при генерации теста: " + err.message);
-    await ctx.reply(ui.error("Ошибка при генерации теста: " + err.message));
-  }
-});
-
-// Кнопка "Генерация Кэша" — ставит задачу в очередь
-bot.action("generate_cache", async (ctx) => {
-  cacheQueue.push({ ctx });
-  await ctx.answerCbQuery("⏳ Задача поставлена в очередь.");
-  await sendProgress(ctx, `Ваша задача на генерацию кэша добавлена в очередь. Позиция: ${cacheQueue.length}`);
-  processCacheQueue();
-});
-
-// Обработка ошибок при загрузке на Яндекс.Диск
-async function uploadToYandexDisk(localFilePath, remoteFilePath, ctx) {
-  try {
-    await yadisk.uploadFile(localFilePath, remoteFilePath);
-    logAndNotify(`Файл загружен на Я.Диск: ${remoteFilePath}`, ctx);
-  } catch (error) {
-    logger.error("Ошибка загрузки на Я.Диск: " + error.message);
-    logAndNotify(ui.error("Ошибка загрузки на Я.Диск: " + error.message), ctx);
-    throw new Error("Не удалось загрузить файл на Яндекс.Диск.");
-  }
-}
-
-function saveToCacheAndSync(question, answer, ctx = null) {
-  saveToCacheHistory(question, answer);
-
-  const localPath = path.join(cachePath, "dataset.json");
-  const remotePath = "/bot_cache/dataset.json";
-  exportCacheToJsonFile(localPath, async (err) => {
-    if (!err) {
-      try {
-        await uploadCacheJsonToYadisk(yadisk, localPath, remotePath);
-        if (ctx) await ctx.reply(ui.cacheSynced);
-        notifyAdmin(ui.cacheSynced);
-        logger.info("Кэш успешно обновлён и синхронизирован!");
-      } catch (e) {
-        if (ctx) await ctx.reply(ui.error(e.message));
-        notifyAdmin(ui.error(e.message));
-        logger.error("Ошибка загрузки кэша на Яндекс.Диск: " + e.message);
-      }
-    } else {
-      if (ctx) await ctx.reply(ui.error(err.message));
-      notifyAdmin(ui.error(err.message));
-      logger.error("Ошибка экспорта кэша в JSON: " + err.message);
-    }
-  });
-}
-
 // --- УТИЛИТА: Скачивание файла Telegram в temp ---
 async function downloadFile(file, userId) {
   const tempPath = path.join(__dirname, 'temp');
@@ -876,13 +813,15 @@ bot.on('text', async ctx => {
   if (userStates[userId] === 'awaiting_original' && userLastOcr[userId]) {
     const ocrText = userLastOcr[userId];
     const origText = ctx.message.text;
-    // Сравнение (Levenshtein)
-    const lev = levenshtein(ocrText.replace(/\s+/g, ''), origText.replace(/\s+/g, ''));
-    const maxLen = Math.max(ocrText.length, origText.length);
-    const similarity = maxLen > 0 ? (1 - lev / maxLen) : 0;
-    await ctx.reply(`Сравнение завершено! Совпадение: ${(similarity * 100).toFixed(1)}%. Спасибо, ваш пример поможет улучшить распознавание.`);
-    // (Опционально) Можно добавить строки-расхождения в словарь мусора
-    // ...
+    try {
+      // Сравнение (Levenshtein)
+      const lev = levenshtein(ocrText.replace(/\s+/g, ''), origText.replace(/\s+/g, ''));
+      const maxLen = Math.max(ocrText.length, origText.length);
+      const similarity = maxLen > 0 ? (1 - lev / maxLen) : 0;
+      await ctx.reply(`Сравнение завершено! Совпадение: ${(similarity * 100).toFixed(1)}%. Спасибо, ваш пример поможет улучшить распознавание.`);
+    } catch (e) {
+      await ctx.reply('Ошибка сравнения текста: ' + e.message);
+    }
     userStates[userId] = undefined;
     userLastOcr[userId] = undefined;
     return;
