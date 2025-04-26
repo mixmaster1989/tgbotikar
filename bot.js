@@ -27,6 +27,8 @@ const { convertDocxToPdf } = safeRequire("./modules/docx2pdf");
 const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = safeRequire("./modules/cache");
 const { postprocessLanguageTool, levenshtein } = require('./modules/ocr'); // Импорт локальной постобработки LanguageTool
 const { loadGarbage, addGarbage, filterGarbage } = require('./modules/ocr_garbage_manager');
+const { getTemplates } = require('./modules/ocr/templates');
+const { processOcrPipeline } = require('./modules/ocr/pipeline');
 
 require("dotenv").config();
 
@@ -427,20 +429,6 @@ bot.on("text", async (ctx) => {
 });
 
 // --- OCR шаблоны: топ-10 лучших ---
-const ocrTemplates = [
-  { pre: 'cropTextBlock', post: 'strong', name: 'cropTextBlock+strong' },
-  { pre: 'cropTextBlock', post: 'medium', name: 'cropTextBlock+medium' },
-  { pre: 'cropTextBlock', post: 'weak', name: 'cropTextBlock+weak' },
-  { pre: 'strong', post: 'medium', name: 'strong+medium' },
-  { pre: 'strong', post: 'strong', name: 'strong+strong' },
-  { pre: 'strong', post: 'weak', name: 'strong+weak' },
-  { pre: 'medium', post: 'strong', name: 'medium+strong' },
-  { pre: 'medium', post: 'medium', name: 'medium+medium' },
-  { pre: 'medium', post: 'weak', name: 'medium+weak' },
-  { pre: 'strongV3', post: 'strong', name: 'strongV3+strong' }
-];
-
-// --- Единая кнопка для запуска всех шаблонов ---
 const ocrTemplatesKeyboard = [[{ text: 'Распознать всеми шаблонами', callback_data: 'ocr_all_templates' }]];
 
 // При получении фото сохраняем путь и предлагаем кнопку
@@ -473,274 +461,12 @@ bot.action('ocr_all_templates', async (ctx) => {
       return;
     }
     await ctx.reply('Начинаю распознавание всеми шаблонами...');
-    const allResults = [];
-    for (let i = 0; i < ocrTemplates.length; ++i) {
-      const tpl = ocrTemplates[i];
-      logger.info(`[BOT] Старт шаблона ${i+1}: ${tpl.name}`);
-      await ctx.reply(`Использую шаблон ${i+1}: ${tpl.name}`);
-      let tesseractText = '';
-      try {
-        const { recognizeTextWithTemplateTesseract } = require("./modules/ocr");
-        tesseractText = await recognizeTextWithTemplateTesseract(filePath, tpl.pre, tpl.post);
-        logger.info(`[BOT] Результат шаблона ${i+1}: ${tpl.name}: ${tesseractText}`);
-      } catch (e) {
-        tesseractText = `Ошибка Tesseract: ${e.message}`;
-        logger.error(`[BOT] Ошибка шаблона ${i+1}: ${tpl.name}: ${e.message}`);
-      }
-      allResults.push({ tplName: tpl.name, text: tesseractText });
-      try {
-        await ctx.replyWithHTML(
-          `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n<pre>${escapeHTML(tesseractText)}</pre>`
-        );
-        logger.info(`[BOT] Ответ отправлен по шаблону ${i+1}: ${tpl.name}`);
-      } catch (err) {
-        logger.error(`[BOT] Ошибка отправки ответа по шаблону ${i+1}: ${tpl.name}: ${err.message}`);
-      }
-    }
-    // --- Новый этап: "семантическая сборка" из всех шаблонов ---
-    const semanticResult = semanticOcrAssemble(allResults);
-    logger.info(`[BOT] Итоговый результат семантической сборки: ${semanticResult}`);
-    // --- Очистка через локальный LanguageTool ---
-    const cleanedSemantic = await postprocessLanguageTool(semanticResult);
-    logger.info(`[BOT] Итоговый результат после LanguageTool: ${cleanedSemantic}`);
-    // --- Финальная сборка для Telegram ---
-    const humanResult = humanReadableAssemble(cleanedSemantic);
-    logger.info(`[BOT] Итоговый результат для Telegram: ${humanResult}`);
-    // --- Оценка человекочитаемости результата OCR ---
-    function evalHumanReadableScore(text) {
-      if (!text || typeof text !== 'string') return 0;
-      // Количество строк и средняя длина
-      const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      if (!lines.length) return 0;
-      const avgLen = lines.reduce((a, b) => a + b.length, 0) / lines.length;
-      // Доля русских букв
-      const totalChars = text.length;
-      const ruChars = (text.match(/[А-Яа-яЁё]/g) || []).length;
-      const ruRatio = ruChars / (totalChars || 1);
-      // Количество "мусорных" строк (очень коротких, с большим количеством спецсимволов)
-      const noisyLines = lines.filter(l => l.length < 5 || (l.replace(/[А-Яа-яЁё0-9]/gi, '').length / l.length) > 0.5).length;
-      // Количество уникальных строк
-      const uniqLines = new Set(lines).size;
-      // Бонус за наличие типичных слов (например, "активируйте", "скачайте", "приложение", "магазин")
-      const bonusWords = ["АКТИВИРУЙТЕ", "СКАЧАЙТЕ", "ПРИЛОЖЕНИЕ", "МАГАЗИН", "СЕРВИСЫ", "ЭВОТОР"];
-      let bonus = 0;
-      for (const w of bonusWords) if (text.toUpperCase().includes(w)) bonus += 0.1;
-      // Итоговая формула: больше русских букв, меньше мусора, больше строк, больше уникальности, бонус за ключевые слова
-      return (
-        ruRatio * 2 +
-        Math.min(avgLen / 20, 1) +
-        Math.min(lines.length / 10, 1) +
-        Math.min(uniqLines / lines.length, 1) +
-        bonus -
-        noisyLines * 0.2
-      );
-    }
-
-    // --- Выбор лучшего результата OCR ---
-    function selectBestOcrResult(allResults, semanticResult, cleanedSemantic, humanResult) {
-      // Оцениваем все варианты
-      const candidates = [];
-      allResults.forEach((r, i) => candidates.push({
-        text: r,
-        label: `Шаблон ${i + 1}`,
-        score: evalHumanReadableScore(r)
-      }));
-      candidates.push({ text: semanticResult, label: 'Семантическая сборка', score: evalHumanReadableScore(semanticResult) });
-      candidates.push({ text: cleanedSemantic, label: 'После LanguageTool', score: evalHumanReadableScore(cleanedSemantic) });
-      candidates.push({ text: humanResult, label: 'Финальный (humanReadableAssemble)', score: evalHumanReadableScore(humanResult) });
-      // Выбираем с максимальным score
-      candidates.sort((a, b) => b.score - a.score);
-      logger.info(`[BOT] --- Сравнение вариантов OCR ---`);
-      candidates.forEach(c => {
-        logger.info(`[BOT] ${c.label}: score=${c.score.toFixed(2)}\n${c.text}\n---`);
-      });
-      logger.info(`[BOT] Лучший результат: ${candidates[0].label} (оценка: ${candidates[0].score.toFixed(2)})`);
-      logger.info(`[BOT] Лучший текст:\n${candidates[0].text}`);
-      return candidates[0].text;
-    }
-
-    // --- В месте, где отправляется результат ---
-    async function sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemantic, humanResult) {
-      logger.info('[DEBUG] --- POSTPROCESSING START ---');
-      logger.info(`[DEBUG] allResults.length: ${allResults.length}`);
-      allResults.forEach((r, i) => logger.info(`[DEBUG] allResults[${i}]: ${JSON.stringify(r)}`));
-      logger.info(`[DEBUG] semanticResult: ${semanticResult}`);
-      logger.info(`[DEBUG] cleanedSemantic: ${cleanedSemantic}`);
-      logger.info(`[DEBUG] humanResult: ${humanResult}`);
-
-      let bestResult = selectBestOcrResult(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
-      logger.info(`[DEBUG] selectBestOcrResult output: ${bestResult}`);
-
-      let lines = bestResult.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      logger.info(`[DEBUG] lines after split: ${JSON.stringify(lines)}`);
-
-      // 1. Фильтрация по словарю мусора
-      lines = await filterGarbage(lines);
-      logger.info(`[DEBUG] lines after filterGarbage: ${JSON.stringify(lines)}`);
-
-      // 2. Фильтрация коротких и странных строк (loopback)
-      const importantWords = ['активируйте', 'скачайте', 'приложение', 'магазин', 'сервис', 'эво', 'касовые', 'подробнее', 'адрес', 'телефон', 'инн'];
-      let garbageCandidates = [];
-      const filtered = lines.filter(line => {
-        const clean = line.trim();
-        if (clean.length < 5) {
-          garbageCandidates.push(line);
-          return false;
-        }
-        if ((clean.match(/[А-Яа-яЁё]/g) || []).length < 3 && !importantWords.some(w => clean.toLowerCase().includes(w))) {
-          garbageCandidates.push(line);
-          return false;
-        }
-        return true;
-      });
-      logger.info(`[DEBUG] filtered lines after importantWords: ${JSON.stringify(filtered)}`);
-
-      // 3. Loopback: пополняем словарь мусора
-      await addGarbage(garbageCandidates);
-      logger.info(`[DEBUG] garbageCandidates: ${JSON.stringify(garbageCandidates)}`);
-
-      // 4. Финальный текст
-      const finalText = filtered.join('\n');
-      logger.info(`[DEBUG] finalText: ${finalText}`);
-
-      await ctx.replyWithHTML(
-        `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(finalText)}</pre>`
-      );
-      logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
-      // 5. Предложение ввести оригинал текста для сравнения
-      userStates[ctx.from.id] = 'awaiting_original';
-      userLastOcr[ctx.from.id] = finalText;
-      await ctx.reply('Если у вас есть оригинальный текст, отправьте его сюда для сравнения и улучшения качества распознавания.');
-    }
-
-    sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemantic, humanResult);
+    await processOcrPipeline(ctx, filePath, getTemplates());
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
   }
 });
-
-// --- Умная семантическая сборка: разбивка, фильтрация, сортировка ---
-function semanticOcrAssemble(results) {
-  // 1. Разбиваем длинные строки на смысловые блоки
-  function splitToBlocks(text) {
-    return text
-      .split(/[\n\r\f\v\u2028\u2029\u0085]+/)
-      .flatMap(line =>
-        line
-          .split(/\s{2,}|\||:|—|–|—|\.|,|;/) // делим по двойным пробелам, |, :, тире, точкам, запятым, точкам с запятой
-          .map(x => x.trim())
-      )
-      .filter(Boolean);
-  }
-  // 2. Фильтруем: только строки с >=2 русскими словами длиной >=4, доля букв >0.6
-  function isClean(line) {
-    const words = (line.match(/[а-яА-ЯёЁ]{4,}/g) || []);
-    const letterFrac = (line.replace(/[^а-яА-ЯёЁ]/g, '').length / (line.length || 1));
-    return words.length >= 2 && letterFrac > 0.6;
-  }
-  // 3. Собираем все блоки
-  let allBlocks = [];
-  results.forEach(r => {
-    allBlocks = allBlocks.concat(splitToBlocks(r.text));
-  });
-  // 4. Фильтруем мусор
-  allBlocks = allBlocks.filter(isClean);
-  // 5. Считаем частоту
-  const freq = {};
-  allBlocks.forEach(line => { freq[line] = (freq[line] || 0) + 1; });
-  // 6. Сортируем по частоте и длине
-  allBlocks = [...new Set(allBlocks)];
-  allBlocks.sort((a, b) => freq[b] - freq[a] || b.length - a.length);
-  // 7. Убираем дубли и похожие строки (fuzzysort, threshold -30)
-  const finalLines = [];
-  allBlocks.forEach(line => {
-    if (!finalLines.some(existing => {
-      const res = fuzzysort.single(line, [existing], { threshold: -30 });
-      return res && res.score > -30;
-    })) {
-      finalLines.push(line);
-    }
-  });
-  // 8. Сортировка по ключевым словам (если есть)
-  const keywords = [
-    'ИП', '1С', 'БУХГАЛТЕРИЯ', 'Денежный ящик', 'Форт', 'позиционный', 'руб', 'Подпись', 'дата', 'автоматизация', 'принтер', 'сканер', 'весовое', 'терминал', 'POS'
-  ];
-  finalLines.sort((a, b) => {
-    const ka = keywords.findIndex(k => a.toLowerCase().includes(k.toLowerCase()));
-    const kb = keywords.findIndex(k => b.toLowerCase().includes(k.toLowerCase()));
-    if (ka !== kb) return (ka === -1 ? 100 : ka) - (kb === -1 ? 100 : kb);
-    return b.length - a.length;
-  });
-  return finalLines.join('\n');
-}
-
-// --- Финальная "человеко-ориентированная" сборка для Telegram ---
-function humanReadableAssemble(text) {
-  // Ключевые смысловые блоки в нужном порядке (можно расширять)
-  const keyPhrases = [
-    "1С БУХГАЛТЕРИЯ",
-    "АВТОМАТИЗАЦИЯ ТОРГОВЛИ",
-    "ПРИНТЕРЫ ЭТИКЕТОК",
-    "СКАНЕРЫ ШТРИХ-КОДА",
-    "ВЕСОВОЕ ОБОРУДОВАНИЕ",
-    "ТЕРМИНАЛЫ СБОРА ДАННЫХ",
-    "POS-системы"
-  ];
-  // Привести к верхнему регистру, убрать мусорные символы
-  const lines = text.split(/\r?\n/).map(s => s.trim().toUpperCase()).filter(Boolean);
-  // Для каждого ключевого блока ищем наиболее похожую строку из OCR
-  const uniq = new Set();
-  const result = [];
-  for (const phrase of keyPhrases) {
-    let best = '';
-    let bestScore = -100;
-    for (const line of lines) {
-      // Простая метрика схожести: сколько слов из ключа есть в строке
-      const words = phrase.split(' ');
-      let score = 0;
-      for (const w of words) if (line.includes(w)) score++;
-      if (score > bestScore) {
-        bestScore = score;
-        best = line;
-      }
-    }
-    // Добавляем только если совпало хотя бы 2 слова и ещё не было такого блока
-    if (bestScore >= 2 && !uniq.has(phrase)) {
-      result.push(phrase);
-      uniq.add(phrase);
-    }
-  }
-  // Если ничего не найдено — fallback: фильтруем осмысленные строки
-  if (result.length === 0) {
-    // Фильтр: убираем короткие, мусорные, дублирующиеся строки
-    const filtered = lines.filter(line =>
-      line.length >= 8 &&
-      /[А-ЯЁ]{2,}/.test(line) && // минимум 2 русские буквы
-      /[A-ZА-ЯЁ0-9]/.test(line) && // есть буквы/цифры
-      !/^[-_=]+$/.test(line) && // не только символы
-      line.replace(/[^А-ЯЁ]/g, '').length >= 0.5 * line.length // не менее 50% букв
-    );
-    // Убираем дубли
-    const uniqFiltered = [...new Set(filtered)];
-    // Если совсем ничего — fallback: берём любые строки не короче 5 символов
-    if (uniqFiltered.length === 0) {
-      const anyLines = [...new Set(lines.filter(line => line.length >= 5))];
-      return anyLines.slice(0, 3).join('\n');
-    }
-    // Возвращаем до 5 наиболее длинных строк
-    return uniqFiltered.sort((a, b) => b.length - a.length).slice(0, 5).join('\n');
-  }
-  return result.join('\n');
-}
-
-// --- Экранирование HTML для Telegram ---
-function escapeHTML(str) {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
 
 // Генерация теста по случайному материалу (или просто "Скажи привет")
 bot.action("generate_test", async (ctx) => {
@@ -899,7 +625,7 @@ async function sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemanti
   lines = await filterGarbage(lines);
   // 2. Фильтрация коротких и странных строк (loopback)
   const importantWords = ['активируйте', 'скачайте', 'приложение', 'магазин', 'сервис', 'эво', 'касовые', 'подробнее', 'адрес', 'телефон', 'инн'];
-  const garbageCandidates = [];
+  let garbageCandidates = [];
   const filtered = lines.filter(line => {
     const clean = line.replace(/[«»@*%_"'\-]/g, '').trim();
     if (clean.length < 8 && !importantWords.some(w => clean.toLowerCase().includes(w))) {
