@@ -461,7 +461,44 @@ bot.action('ocr_all_templates', async (ctx) => {
       return;
     }
     await ctx.reply('Начинаю распознавание всеми шаблонами...');
-    await processOcrPipeline(ctx, filePath, getTemplates());
+    // Получаем шаблоны
+    const templates = getTemplates();
+    const allResults = [];
+    for (let i = 0; i < templates.length; ++i) {
+      const tpl = templates[i];
+      logger.info(`[BOT] Старт шаблона ${i+1}: ${tpl.name}`);
+      await ctx.reply(`Использую шаблон ${i+1}: ${tpl.name}`);
+      let tesseractText = '';
+      try {
+        const { recognizeTextWithTemplateTesseract } = require("./modules/ocr");
+        tesseractText = await recognizeTextWithTemplateTesseract(filePath, tpl.pre, tpl.post);
+        logger.info(`[BOT] Результат шаблона ${i+1}: ${tpl.name}: ${tesseractText}`);
+      } catch (e) {
+        tesseractText = `Ошибка Tesseract: ${e.message}`;
+        logger.error(`[BOT] Ошибка шаблона ${i+1}: ${tpl.name}: ${e.message}`);
+      }
+      allResults.push({ tplName: tpl.name, text: tesseractText });
+      try {
+        await ctx.replyWithHTML(
+          `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n<pre>${tesseractText}</pre>`
+        );
+        logger.info(`[BOT] Ответ отправлен по шаблону ${i+1}: ${tpl.name}`);
+      } catch (err) {
+        logger.error(`[BOT] Ошибка отправки ответа по шаблону ${i+1}: ${tpl.name}: ${err.message}`);
+      }
+    }
+    // Семантическая сборка и постобработка
+    const semanticOcrAssemble = require('./semanticOcrAssemble');
+    const semanticResult = semanticOcrAssemble(allResults);
+    logger.info(`[BOT] Итоговый результат семантической сборки: ${semanticResult}`);
+    const { postprocessLanguageTool } = require('./modules/ocr');
+    const cleanedSemantic = await postprocessLanguageTool(semanticResult);
+    logger.info(`[BOT] Итоговый результат после LanguageTool: ${cleanedSemantic}`);
+    const humanReadableAssemble = require('./humanReadableAssemble');
+    const humanResult = humanReadableAssemble(cleanedSemantic);
+    logger.info(`[BOT] Итоговый результат для Telegram: ${humanResult}`);
+    // userStates и userLastOcr доступны глобально
+    await processOcrPipeline(ctx, allResults, semanticResult, cleanedSemantic, humanResult, userStates, userLastOcr);
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
