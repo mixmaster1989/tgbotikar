@@ -279,7 +279,7 @@ function logAndNotify(message, ctx = null) {
   if (ctx) ctx.reply(message); // Отправляем в бот
 }
 
-// Основное меню
+// Основное меню (inline)
 function mainMenuKeyboard() {
   return Markup.inlineKeyboard([
     [Markup.button.callback("📂 Материалы", "materials")],
