@@ -1,9 +1,7 @@
 const path = require("path");
 const fs = require("fs-extra");
-const { exportCacheToJsonFile } = require("../modules/cache_export");
-const { saveToCacheHistory, fuzzyFindInCache } = require("../modules/cache");
-const db = require('sqlite3').verbose();
-const database = new db.Database(path.join(__dirname, '..', 'database.sqlite'));
+const cacheExport = require("../modules/cache_export");
+const cache = require("../modules/cache");
 
 describe("Cache export module", () => {
   const localPath = path.join(__dirname, "..", "cache", "dataset.test.json");
@@ -11,13 +9,21 @@ describe("Cache export module", () => {
   const answer = "Тестовый ответ для экспорта";
 
   beforeEach((done) => {
+    const db = require('sqlite3').verbose();
+    const database = new db.Database(path.join(__dirname, '..', 'database.sqlite'));
     database.run("DELETE FROM gpt_cache WHERE prompt = ?", [question], done);
   });
 
-  it("should export cache to JSON after saving new entry", (done) => {
-    saveToCacheHistory(question, answer);
+  afterEach(() => {
+    jest.clearAllMocks && jest.clearAllMocks();
+  });
 
-    exportCacheToJsonFile(localPath, (err) => {
+  it("should export cache to JSON after saving new entry", (done) => {
+    expect(typeof cache.saveToCacheHistory).toBe('function');
+    expect(typeof cacheExport.exportCacheToJsonFile).toBe('function');
+    cache.saveToCacheHistory(question, answer);
+
+    cacheExport.exportCacheToJsonFile(localPath, (err) => {
       expect(err).toBeFalsy();
       const data = fs.readJsonSync(localPath);
       const found = data.find(r => r.prompt === question && r.response === answer);
@@ -32,14 +38,22 @@ describe('Cache module', () => {
   const answer = 'Тестовый ответ';
 
   beforeEach((done) => {
+    const db = require('sqlite3').verbose();
+    const database = new db.Database(path.join(__dirname, '..', 'database.sqlite'));
     database.run("DELETE FROM gpt_cache WHERE prompt = ?", [question], done);
   });
 
+  afterEach(() => {
+    jest.clearAllMocks && jest.clearAllMocks();
+  });
+
   it('should save and find answer in cache', (done) => {
-    saveToCacheHistory(question, answer);
+    expect(typeof cache.saveToCacheHistory).toBe('function');
+    expect(typeof cache.fuzzyFindInCache).toBe('function');
+    cache.saveToCacheHistory(question, answer);
 
     setTimeout(() => {
-      fuzzyFindInCache(question, (err, found) => {
+      cache.fuzzyFindInCache(question, (err, found) => {
         expect(found).toBe(answer);
         done();
       });

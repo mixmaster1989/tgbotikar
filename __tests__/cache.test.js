@@ -1,6 +1,11 @@
 const fs = require("fs-extra");
 const path = require("path");
-const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = require("../modules/cache");
+const cache = require("../modules/cache");
+
+// Добавим afterEach для очистки mocks
+afterEach(() => {
+  jest.clearAllMocks && jest.clearAllMocks();
+});
 
 describe("modules/cache.js", () => {
   const testPrompt = "Тестовый вопрос " + Date.now();
@@ -12,10 +17,12 @@ describe("modules/cache.js", () => {
   });
 
   it("saveToCacheHistory добавляет запись в кэш", done => {
-    saveToCacheHistory(testPrompt, testResponse);
+    expect(typeof cache.saveToCacheHistory).toBe('function');
+    expect(typeof cache.getAllCacheQuestions).toBe('function');
+    cache.saveToCacheHistory(testPrompt, testResponse);
     // Даем sqlite немного времени на запись
     setTimeout(() => {
-      getAllCacheQuestions((err, rows) => {
+      cache.getAllCacheQuestions((err, rows) => {
         expect(err).toBeNull();
         const found = rows.find(r => r.prompt === testPrompt && r.response === testResponse);
         expect(found).toBeDefined();
@@ -25,7 +32,7 @@ describe("modules/cache.js", () => {
   });
 
   it("getAllCacheQuestions возвращает массив записей", done => {
-    getAllCacheQuestions((err, rows) => {
+    cache.getAllCacheQuestions((err, rows) => {
       expect(err).toBeNull();
       expect(Array.isArray(rows)).toBe(true);
       done();
@@ -33,7 +40,8 @@ describe("modules/cache.js", () => {
   });
 
   it("fuzzyFindInCache находит похожий вопрос", done => {
-    fuzzyFindInCache(testPrompt, (err, response) => {
+    expect(typeof cache.fuzzyFindInCache).toBe('function');
+    cache.fuzzyFindInCache(testPrompt, (err, response) => {
       expect(err).toBeNull();
       expect(response).toBe(testResponse);
       done();
