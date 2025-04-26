@@ -29,6 +29,7 @@ const { postprocessLanguageTool, levenshtein } = require('./modules/ocr'); // И
 const { loadGarbage, addGarbage, filterGarbage } = require('./modules/ocr_garbage_manager');
 const { getTemplates } = require('./modules/ocr/templates');
 const { processOcrPipeline } = require('./modules/ocr/pipeline');
+const { semanticOcrAssemble, humanReadableAssemble } = require('./modules/ocr/postprocess');
 
 require("dotenv").config();
 
@@ -488,13 +489,11 @@ bot.action('ocr_all_templates', async (ctx) => {
       }
     }
     // Семантическая сборка и постобработка
-    const semanticOcrAssemble = require('./semanticOcrAssemble');
     const semanticResult = semanticOcrAssemble(allResults);
     logger.info(`[BOT] Итоговый результат семантической сборки: ${semanticResult}`);
     const { postprocessLanguageTool } = require('./modules/ocr');
     const cleanedSemantic = await postprocessLanguageTool(semanticResult);
     logger.info(`[BOT] Итоговый результат после LanguageTool: ${cleanedSemantic}`);
-    const humanReadableAssemble = require('./humanReadableAssemble');
     const humanResult = humanReadableAssemble(cleanedSemantic);
     logger.info(`[BOT] Итоговый результат для Telegram: ${humanResult}`);
     // userStates и userLastOcr доступны глобально
