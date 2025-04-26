@@ -550,13 +550,70 @@ bot.action('ocr_all_templates', async (ctx) => {
       candidates.push({ text: humanResult, label: 'Финальный (humanReadableAssemble)', score: evalHumanReadableScore(humanResult) });
       // Выбираем с максимальным score
       candidates.sort((a, b) => b.score - a.score);
+      logger.info(`[BOT] --- Сравнение вариантов OCR ---`);
+      candidates.forEach(c => {
+        logger.info(`[BOT] ${c.label}: score=${c.score.toFixed(2)}\n${c.text}\n---`);
+      });
       logger.info(`[BOT] Лучший результат: ${candidates[0].label} (оценка: ${candidates[0].score.toFixed(2)})`);
       logger.info(`[BOT] Лучший текст:\n${candidates[0].text}`);
       return candidates[0].text;
     }
 
-    const bestResult = selectBestOcrResult(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
-    await sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemantic, humanResult);
+    // --- В месте, где отправляется результат ---
+    async function sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemantic, humanResult) {
+      logger.info('[DEBUG] --- POSTPROCESSING START ---');
+      logger.info(`[DEBUG] allResults.length: ${allResults.length}`);
+      allResults.forEach((r, i) => logger.info(`[DEBUG] allResults[${i}]: ${JSON.stringify(r)}`));
+      logger.info(`[DEBUG] semanticResult: ${semanticResult}`);
+      logger.info(`[DEBUG] cleanedSemantic: ${cleanedSemantic}`);
+      logger.info(`[DEBUG] humanResult: ${humanResult}`);
+
+      let bestResult = selectBestOcrResult(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
+      logger.info(`[DEBUG] selectBestOcrResult output: ${bestResult}`);
+
+      let lines = bestResult.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      logger.info(`[DEBUG] lines after split: ${JSON.stringify(lines)}`);
+
+      // 1. Фильтрация по словарю мусора
+      lines = await filterGarbage(lines);
+      logger.info(`[DEBUG] lines after filterGarbage: ${JSON.stringify(lines)}`);
+
+      // 2. Фильтрация коротких и странных строк (loopback)
+      const importantWords = ['активируйте', 'скачайте', 'приложение', 'магазин', 'сервис', 'эво', 'касовые', 'подробнее', 'адрес', 'телефон', 'инн'];
+      let garbageCandidates = [];
+      const filtered = lines.filter(line => {
+        const clean = line.trim();
+        if (clean.length < 5) {
+          garbageCandidates.push(line);
+          return false;
+        }
+        if ((clean.match(/[А-Яа-яЁё]/g) || []).length < 3 && !importantWords.some(w => clean.toLowerCase().includes(w))) {
+          garbageCandidates.push(line);
+          return false;
+        }
+        return true;
+      });
+      logger.info(`[DEBUG] filtered lines after importantWords: ${JSON.stringify(filtered)}`);
+
+      // 3. Loopback: пополняем словарь мусора
+      await addGarbage(garbageCandidates);
+      logger.info(`[DEBUG] garbageCandidates: ${JSON.stringify(garbageCandidates)}`);
+
+      // 4. Финальный текст
+      const finalText = filtered.join('\n');
+      logger.info(`[DEBUG] finalText: ${finalText}`);
+
+      await ctx.replyWithHTML(
+        `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(finalText)}</pre>`
+      );
+      logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
+      // 5. Предложение ввести оригинал текста для сравнения
+      userStates[ctx.from.id] = 'awaiting_original';
+      userLastOcr[ctx.from.id] = finalText;
+      await ctx.reply('Если у вас есть оригинальный текст, отправьте его сюда для сравнения и улучшения качества распознавания.');
+    }
+
+    sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemantic, humanResult);
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
