@@ -435,22 +435,24 @@ const ocrTemplatesKeyboard = [[{ text: 'Распознать всеми шабл
 // При получении фото сохраняем путь и предлагаем кнопку
 bot.on(["photo"], async (ctx) => {
   const userId = ctx.from.id;
-  if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
-    userStates[userId] = "chatting_ai";
-    const photo = ctx.message.photo.pop();
-    const fileId = photo.file_id;
-    const fileLink = await ctx.telegram.getFileLink(fileId);
-    const filePath = path.join(tempPath, `${userId}_${Date.now()}.jpg`);
-    await fs.ensureDir(tempPath);
-    const res = await fetch(fileLink.href);
-    const buffer = await res.arrayBuffer();
-    await fs.writeFile(filePath, Buffer.from(buffer));
-    // Сохраняем путь к фото в сессию
-    if (!ctx.session) ctx.session = {};
-    ctx.session.lastPhotoPath = filePath;
-    // Генерируем клавиатуру из 1 кнопки
-    await ctx.reply("Выберите способ обработки OCR:", Markup.inlineKeyboard(ocrTemplatesKeyboard));
+  // Сброс состояния сравнения оригинала, если оно было
+  if (userStates[userId] === 'awaiting_original') {
+    userStates[userId] = undefined;
+    userLastOcr[userId] = undefined;
   }
+  const photo = ctx.message.photo.pop();
+  const fileId = photo.file_id;
+  const fileLink = await ctx.telegram.getFileLink(fileId);
+  const filePath = path.join(tempPath, `${userId}_${Date.now()}.jpg`);
+  await fs.ensureDir(tempPath);
+  const res = await fetch(fileLink.href);
+  const buffer = await res.arrayBuffer();
+  await fs.writeFile(filePath, Buffer.from(buffer));
+  // Сохраняем путь к фото в сессию
+  if (!ctx.session) ctx.session = {};
+  ctx.session.lastPhotoPath = filePath;
+  // Генерируем клавиатуру из 1 кнопки
+  await ctx.reply("Выберите способ обработки OCR:", Markup.inlineKeyboard(ocrTemplatesKeyboard));
 });
 
 // Обработка кнопки "Распознать всеми шаблонами"
