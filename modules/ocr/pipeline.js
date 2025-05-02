@@ -65,16 +65,39 @@ async function processOcrPipeline(ctx, allResults, semanticResult, cleanedSemant
   userLastOcr[ctx.from.id] = finalText;
   await ctx.reply('Если у вас есть оригинальный текст, отправьте его сюда для сравнения и улучшения качества распознавания.');
 
-  // --- Новый этап: очистка текста языковой моделью ---
+  // --- Новый этап: прогресс-бар и нейронная обработка ---
   try {
-    // Получаем gpt4allModel из bot.js через глобальную область (если экспортируется) или через require
+    // 1. Сообщение о нейронной обработке
+    await ctx.reply('🤖 Идет нейронная обработка текста. Пожалуйста, подождите...');
+
+    // 2. Прогресс-бар на 30 секунд (обновляется каждые 5 секунд)
+    const totalSeconds = 30;
+    const step = 5;
+    let sentMsg = null;
+    for (let elapsed = 0; elapsed < totalSeconds; elapsed += step) {
+      const percent = Math.round(((elapsed + step) / totalSeconds) * 100);
+      const barLength = 20;
+      const filled = Math.round((percent / 100) * barLength);
+      const bar = '█'.repeat(filled) + '░'.repeat(barLength - filled);
+      const progressText = `Прогресс: [${bar}] ${percent}%`;
+      if (sentMsg) {
+        try { await ctx.telegram.editMessageText(ctx.chat.id, sentMsg.message_id, undefined, progressText); } catch {}
+      } else {
+        sentMsg = await ctx.reply(progressText);
+      }
+      await new Promise(res => setTimeout(res, step * 1000));
+    }
+    // Удаляем прогресс-бар после завершения
+    if (sentMsg) {
+      try { await ctx.telegram.deleteMessage(ctx.chat.id, sentMsg.message_id); } catch {}
+    }
+
+    // 3. Очистка текста языковой моделью
     let gpt4allModel;
     try {
-      // Попытка получить модель из bot.js (если она экспортируется)
       gpt4allModel = require('../../bot').gpt4allModel;
       if (!gpt4allModel) throw new Error();
     } catch {
-      // Если не экспортируется, пробуем инициализировать здесь (может быть дольше)
       const gpt4all = require("gpt4all");
       const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
       gpt4allModel = await gpt4all.loadModel(modelName);
