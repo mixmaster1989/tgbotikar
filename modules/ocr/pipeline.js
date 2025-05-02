@@ -5,6 +5,30 @@ const { selectBestOcrResult } = require('./scoring');
 const { filterGarbage, addGarbage } = require('./garbage');
 
 /**
+ * Очистка текста от мусора с помощью языковой модели GPT4All.
+ * @param {string} text - исходный текст для очистки
+ * @param {object} gpt4allModel - инициализированная модель GPT4All
+ * @returns {Promise<string>} - очищенный текст
+ */
+async function cleanTextWithGpt4all(text, gpt4allModel) {
+  if (!gpt4allModel) throw new Error("Модель GPT4All не инициализирована");
+  const prompt = `Очисти от мусора, выведи очищенный вариант:\n${text}`;
+  const options = {
+    maxTokens: 200,
+    temp: 0.3,
+    topK: 20,
+    topP: 0.7,
+  };
+  // Если у модели есть generate(prompt, options), используем его
+  if (typeof gpt4allModel.generate === "function") {
+    // В некоторых реализациях generate возвращает { text }, в некоторых — строку
+    const result = await gpt4allModel.generate(prompt, options);
+    return typeof result === "string" ? result : (result.text || "");
+  }
+  throw new Error("Модель GPT4All не поддерживает generate");
+}
+
+/**
  * Основная функция обработки OCR, вызывается из bot.js
  * @param {Object} ctx - Telegraf context
  * @param {Array} allResults - массив результатов по шаблонам [{tplName, text}]
@@ -40,8 +64,29 @@ async function processOcrPipeline(ctx, allResults, semanticResult, cleanedSemant
   userStates[ctx.from.id] = 'awaiting_original';
   userLastOcr[ctx.from.id] = finalText;
   await ctx.reply('Если у вас есть оригинальный текст, отправьте его сюда для сравнения и улучшения качества распознавания.');
+
+  // --- Новый этап: очистка текста языковой моделью ---
+  try {
+    // Получаем gpt4allModel из bot.js через глобальную область (если экспортируется) или через require
+    let gpt4allModel;
+    try {
+      // Попытка получить модель из bot.js (если она экспортируется)
+      gpt4allModel = require('../../bot').gpt4allModel;
+      if (!gpt4allModel) throw new Error();
+    } catch {
+      // Если не экспортируется, пробуем инициализировать здесь (может быть дольше)
+      const gpt4all = require("gpt4all");
+      const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
+      gpt4allModel = await gpt4all.loadModel(modelName);
+    }
+    const cleaned = await cleanTextWithGpt4all(finalText, gpt4allModel);
+    await ctx.replyWithHTML(`<b>🧹 Очищенный вариант:</b>\n\n<pre>${cleaned.trim()}</pre>`);
+  } catch (err) {
+    await ctx.reply('❗ Не удалось получить очищенный вариант через языковую модель.');
+  }
 }
 
 module.exports = {
-  processOcrPipeline
+  processOcrPipeline,
+  cleanTextWithGpt4all // экспортируем для тестов/других модулей
 };

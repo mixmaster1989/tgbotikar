@@ -717,5 +717,6 @@ module.exports = {
     parseDocxToText,
     splitTextByLength,
     saveToCacheAndSync,
-    fuzzyFindInYandexDisk
+    fuzzyFindInYandexDisk,
+    gpt4allModel // <-- экспортируем для доступа из pipeline.js
   };
