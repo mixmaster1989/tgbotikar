@@ -7,7 +7,6 @@ const sqlite3 = require("sqlite3").verbose();
 const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
 const fuzzysort = require('fuzzysort'); // Добавлено
-const languageToolApi = require('languagetool-api');
 
 // --- Логирование ошибок при require ---
 function safeRequire(modulePath) {
