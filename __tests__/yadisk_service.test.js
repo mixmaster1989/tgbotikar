@@ -87,7 +87,7 @@ describe("Yandex Disk Service", () => {
 
   beforeEach(() => {
     yadisk = new YaDiskService(materialsPath);
-    jest.spyOn(yadisk, "log").mockImplementation(() => {}); // Мокаем метод log
+    jest.spyOn(yadisk, "log").mockImplementation(() => {});
     jest.clearAllMocks();
   });
 

@@ -41,14 +41,20 @@ class YaDiskService {
         try {
             const localPath = path.join(this.materialsPath, localFileName);
             this.log("info", "download", `Начало скачивания ${remotePath} → ${localPath}`);
-            // Эмуляция успешного скачивания
             const response = await axios.get(remotePath, { responseType: "stream" });
+
+            if (!response.data) {
+                throw new Error("Нет данных для скачивания");
+            }
+
             const writer = fs.createWriteStream(localPath);
             response.data.pipe(writer);
+
             await new Promise((resolve, reject) => {
                 writer.on("finish", resolve);
                 writer.on("error", reject);
             });
+
             this.log("success", "download", `Файл ${remotePath} успешно скачан в ${localPath}`);
             return localPath;
         } catch (error) {
