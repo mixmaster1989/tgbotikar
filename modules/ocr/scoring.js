@@ -75,7 +75,9 @@ function mergeOcrResultsNoDuplicates(allResults) {
       }
     }
   }
-  return merged.join('\n');
+  const finalText = merged.join('\n');
+  logger.info(`[BOT] mergeOcrResultsNoDuplicates итоговый текст:\n${finalText}`);
+  return finalText;
 }
 
 module.exports = {
