@@ -1,5 +1,6 @@
 // Оценка качества OCR, выбор лучшего результата, scoring-функции
 const logger = require('../logger');
+const stringSimilarity = require('string-similarity'); // Добавить в начало файла
 
 /**
  * Оценивает качество текста (примерная формула)
@@ -58,44 +59,42 @@ function selectBestOcrResult(allResults, semanticResult, cleanedSemantic, humanR
 }
 
 /**
- * Объединяет строки из всех результатов шаблонов, убирает дубликаты, сохраняет порядок.
+ * Объединяет строки из всех результатов шаблонов, убирает дубликаты (в том числе fuzzy), сохраняет порядок.
  * @param {Array<{tplName: string, text: string}>} allResults
  * @returns {string} - итоговый текст
  */
 function mergeOcrResultsNoDuplicates(allResults) {
-  // Считаем, что блоки считаются дубликатами, если их строки (без мусора и знаков) совпадают по множеству
-  const normalizeLine = (line) =>
-    line.toLowerCase().replace(/[^а-яa-z0-9]/gi, '').replace(/\s+/g, '');
-  const normalizeBlock = (text) => {
-    // Множество нормализованных строк блока, отсортированное и склеенное
-    return Array.from(
-      new Set(
-        text
-          .split(/\r?\n/)
-          .map(l => l.trim())
-          .filter(Boolean)
-          .map(normalizeLine)
-      )
-    )
-      .sort()
-      .join('|');
-  };
-
-  const seenBlocks = new Set();
+  const seenBlocks = [];
   const seenLines = new Set();
   const merged = [];
+  const SIMILARITY_THRESHOLD = 0.85; // Можно варьировать
 
   for (const result of allResults) {
-    const blockNorm = normalizeBlock(result.text);
-    if (blockNorm && !seenBlocks.has(blockNorm)) {
-      seenBlocks.add(blockNorm);
-      const lines = result.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      for (const line of lines) {
-        const norm = normalizeLine(line);
-        if (norm && !seenLines.has(norm)) {
-          seenLines.add(norm);
-          merged.push(line);
-        }
+    const blockText = result.text.trim();
+    if (!blockText) continue;
+
+    // Fuzzy сравнение с уже добавленными блоками
+    let isDuplicate = false;
+    for (const prev of seenBlocks) {
+      const similarity = stringSimilarity.compareTwoStrings(
+        blockText.replace(/\s+/g, ' ').toLowerCase(),
+        prev.replace(/\s+/g, ' ').toLowerCase()
+      );
+      if (similarity >= SIMILARITY_THRESHOLD) {
+        isDuplicate = true;
+        break;
+      }
+    }
+    if (isDuplicate) continue;
+    seenBlocks.push(blockText);
+
+    // Добавляем уникальные строки блока
+    const lines = blockText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      const norm = line.toLowerCase().replace(/[^а-яa-z0-9]/gi, '').trim();
+      if (norm && !seenLines.has(norm)) {
+        seenLines.add(norm);
+        merged.push(line);
       }
     }
   }
