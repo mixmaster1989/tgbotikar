@@ -29,6 +29,7 @@ const { loadGarbage, addGarbage, filterGarbage } = require('./modules/ocr_garbag
 const { getTemplates } = require('./modules/ocr/templates');
 const { processOcrPipeline } = require('./modules/ocr/pipeline');
 const { semanticOcrAssemble, humanReadableAssemble } = require('./modules/ocr/postprocess');
+const { mergeOcrResultsNoDuplicates } = require('./modules/ocr/scoring'); // добавлено
 
 require("dotenv").config();
 
@@ -489,8 +490,12 @@ bot.action('ocr_all_templates', async (ctx) => {
         logger.error(`[BOT] Ошибка отправки ответа по шаблону ${i+1}: ${tpl.name}: ${err.message}`);
       }
     }
-    // --- Удалено: семантическая сборка, LanguageTool, финальная сборка, отправка результата, postprocess ---
-    // После 10-го шаблона бот ничего не делает, ждет новое фото или вопрос.
+    // --- Новая простая постобработка ---
+    const mergedText = mergeOcrResultsNoDuplicates(allResults);
+    await ctx.replyWithHTML(
+      `<b>📋 Итоговый текст (без дублей, без потерь):</b>\n\n<pre>${mergedText}</pre>`
+    );
+    // ...далее можно вернуть userStates и userLastOcr если нужно...
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);

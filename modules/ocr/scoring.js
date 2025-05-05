@@ -57,7 +57,29 @@ function selectBestOcrResult(allResults, semanticResult, cleanedSemantic, humanR
   return candidates[0].text;
 }
 
+/**
+ * Объединяет строки из всех результатов шаблонов, убирает дубликаты, сохраняет порядок.
+ * @param {Array<{tplName: string, text: string}>} allResults
+ * @returns {string} - итоговый текст
+ */
+function mergeOcrResultsNoDuplicates(allResults) {
+  const seen = new Set();
+  const merged = [];
+  for (const result of allResults) {
+    const lines = result.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      const norm = line.toLowerCase().replace(/[^а-яa-z0-9]/gi, '').trim();
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        merged.push(line);
+      }
+    }
+  }
+  return merged.join('\n');
+}
+
 module.exports = {
   evalHumanReadableScore,
-  selectBestOcrResult
+  selectBestOcrResult,
+  mergeOcrResultsNoDuplicates
 };
