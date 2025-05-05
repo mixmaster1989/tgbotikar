@@ -6,54 +6,41 @@ const os = require("os");
 const sqlite3 = require("sqlite3").verbose();
 const mammoth = require("mammoth");
 const gpt4all = require("gpt4all");
-const fuzzysort = require('fuzzysort'); // Добавлено
+const fuzzysort = require('fuzzysort');
 
-// --- Логирование ошибок при require ---
 function safeRequire(modulePath) {
-  try {
-    return require(modulePath);
-  } catch (e) {
-    console.error(`[FATAL] Ошибка при require('${modulePath}'):`, e);
-    throw e;
-  }
+  try { return require(modulePath); } catch (e) { console.error(`[FATAL] require('${modulePath}')`, e); throw e; }
 }
 
-// Универсальная функция экранирования HTML
 function escapeHTML(str) {
   if (!str) return '';
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+// Модули и сервисы
 const { exportCacheToJsonFile, uploadCacheJsonToYadisk } = safeRequire("./modules/cache_export");
-const ui = safeRequire("./modules/ui_messages"); // Новый модуль UI-сообщений
-const logger = safeRequire("./modules/logger"); // <-- добавлен winston logger
-const { recognizeText } = safeRequire("./modules/ocr"); // OCR-модуль
+const ui = safeRequire("./modules/ui_messages");
+const logger = safeRequire("./modules/logger");
+const { recognizeText } = safeRequire("./modules/ocr");
 const { convertDocxToPdf } = safeRequire("./modules/docx2pdf");
 const { saveToCacheHistory, getAllCacheQuestions, fuzzyFindInCache } = safeRequire("./modules/cache");
-const { postprocessLanguageTool, levenshtein } = require('./modules/ocr'); // Импорт локальной постобработки LanguageTool
+const { postprocessLanguageTool, levenshtein } = require('./modules/ocr');
 const { loadGarbage, addGarbage, filterGarbage } = require('./modules/ocr_garbage_manager');
 const { getTemplates } = require('./modules/ocr/templates');
 const { processOcrPipeline } = require('./modules/ocr/pipeline');
 const { semanticOcrAssemble, humanReadableAssemble } = require('./modules/ocr/postprocess');
-const { mergeOcrResultsNoDuplicates } = require('./modules/ocr/scoring'); // добавлено
+const { mergeOcrResultsNoDuplicates } = require('./modules/ocr/scoring');
 
 require("dotenv").config();
-
 const YaDiskService = require("./services/yadisk_service");
 
-// --- Гарантируем инициализацию yadisk до любого использования ---
+// Инициализация Яндекс.Диск сервиса
 const YADISK_TOKEN = process.env.YADISK_TOKEN;
-if (!YADISK_TOKEN) {
-  throw new Error("Не найден YADISK_TOKEN в .env");
-}
+if (!YADISK_TOKEN) throw new Error("Не найден YADISK_TOKEN в .env");
 const yadisk = new YaDiskService(YADISK_TOKEN);
-// --- конец добавления ---
 
+// Пути и основные переменные
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
@@ -63,28 +50,23 @@ const cachePath = path.join(__dirname, "cache");
 const tempPath = path.join(__dirname, "temp");
 const gpt4allPath = path.join(modelDir, modelName);
 const gpt4allCachePath = path.join(gpt4allPath, "cache");
+
+// Инициализация бота и Express
 const bot = new Telegraf(BOT_TOKEN);
 bot.use(session());
 const app = express();
 app.use("/static", express.static(path.join(__dirname, "static")));
-
-// Убедитесь, что папка cache существует
 fs.ensureDirSync(cachePath);
 
-// Улучшенная обработка ошибок при инициализации базы данных
+// SQLite база данных для кэша
 const db = new sqlite3.Database("database.sqlite", (err) => {
   if (err) {
     logger.error("DB Error: " + err.message);
-    process.exit(1); // Завершаем процесс, если база данных не инициализируется
+    process.exit(1);
   } else {
-    try {
-      initDatabase();
-    } catch (error) {
-      logger.error("Ошибка при инициализации базы данных: " + error.message);
-    }
+    try { initDatabase(); } catch (error) { logger.error("Ошибка инициализации БД: " + error.message); }
   }
 });
-
 function initDatabase() {
   db.run(`CREATE TABLE IF NOT EXISTS gpt_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,45 +76,33 @@ function initDatabase() {
   )`);
 }
 
+// GPT4All модель (ленивая инициализация)
 let gpt4allModel = null;
 async function initGPT4AllModel() {
   const model = await gpt4all.loadModel(modelName);
   return {
     generate: async (prompt) => {
-      const options = {
-        maxTokens: 32,
-        temp: 1.5,
-        topK: 1,
-        topP: 0.1,
-        repeatPenalty: 1.0,
-        batchSize: 1,
-      };
+      const options = { maxTokens: 32, temp: 1.5, topK: 1, topP: 0.1, repeatPenalty: 1.0, batchSize: 1 };
       return (await model.generate(prompt, options)).text;
     },
   };
 }
 
-// Асинхронная очередь задач для генерации кэша
+// Очередь задач на генерацию кэша
 const cacheQueue = [];
 let isCacheProcessing = false;
 
-// Fuzzy поиск по кэшу на Яндекс.Диске
+// Fuzzy-поиск по кэшу на Яндекс.Диске
 async function fuzzyFindInYandexDisk(question) {
   try {
-    // Скачиваем файл кэша с Я.Диска (например, cache/dataset.json)
     const remotePath = "/bot_cache/dataset.json";
     const localPath = path.join(cachePath, "dataset.json");
     await yadisk.downloadFileByPath(remotePath, localPath);
-
     if (!fs.existsSync(localPath)) return null;
     const data = JSON.parse(fs.readFileSync(localPath, "utf8"));
     if (!Array.isArray(data)) return null;
-
-    // data: [{ prompt, response }, ...]
     const results = fuzzysort.go(question, data, { key: 'prompt', threshold: -1000 });
-    if (results.length > 0 && results[0].score > -1000) {
-      return results[0].obj.response;
-    }
+    if (results.length > 0 && results[0].score > -1000) return results[0].obj.response;
     return null;
   } catch (err) {
     logger.error(`[YADISK CACHE] Ошибка поиска: ${err.message}`);
@@ -141,20 +111,20 @@ async function fuzzyFindInYandexDisk(question) {
   }
 }
 
-// Логирование ошибок и отчётов для администратора (через ADMIN_ID)
+// Уведомление администратора
 const ADMIN_ID = process.env.ADMIN_ID;
 function notifyAdmin(message) {
   if (ADMIN_ID) bot.telegram.sendMessage(ADMIN_ID, `[ADMIN LOG]\n${message}`);
   logger.info(`[ADMIN NOTIFY] ${message}`);
 }
 
-// Прогресс и статус
+// Сообщение о прогрессе пользователю и админу
 async function sendProgress(ctx, text) {
   try { await ctx.reply(text); } catch {}
   notifyAdmin(text);
 }
 
-// Обработка длинных материалов (разбивка на части)
+// Разбивка длинного текста на части
 function splitTextByLength(text, maxLength = 700) {
   const parts = [];
   let i = 0;
@@ -165,11 +135,10 @@ function splitTextByLength(text, maxLength = 700) {
   return parts;
 }
 
-// Новая функция генерации кэша с очередью и прогрессом
+// Генерация кэша по материалу с очередью и прогрессом
 async function processCacheQueue() {
   if (isCacheProcessing || cacheQueue.length === 0) return;
   isCacheProcessing = true;
-
   const { ctx } = cacheQueue.shift();
   try {
     await sendProgress(ctx, ui.processingFile);
@@ -179,13 +148,10 @@ async function processCacheQueue() {
       isCacheProcessing = false;
       return;
     }
-
     const random = files[Math.floor(Math.random() * files.length)];
     const filePath = path.join(materialsPath, random);
     await sendProgress(ctx, ui.processingFile + `\n📄 Используется файл: ${random}`);
     const content = await parseDocxToText(filePath);
-
-    // Разбиваем материал на части
     const parts = splitTextByLength(content, 700);
     let allSummaries = [];
     for (let idx = 0; idx < parts.length; idx++) {
@@ -199,39 +165,20 @@ ${parts[idx]}`;
       const summary = await gpt4allModel.generate(prompt);
       await sendProgress(ctx, ui.modelAnswerReceived);
       allSummaries.push(summary);
-
-      // Показываем тезисы пользователю сразу после обработки блока
       const thesisList = summary
-        .split(/\n+/)
-        .map(t => t.trim())
-        .filter(Boolean)
-        .map((t, i) => `📌 <b>${i + 1}.</b> ${escapeHTML(t)}`)
-        .join('\n\n');
-      await ctx.replyWithHTML(
-        `✅ <b>Тезисы по части ${idx + 1}:</b>\n\n${thesisList}`
-      );
+        .split(/\n+/).map(t => t.trim()).filter(Boolean)
+        .map((t, i) => `📌 <b>${i + 1}.</b> ${escapeHTML(t)}`).join('\n\n');
+      await ctx.replyWithHTML(`✅ <b>Тезисы по части ${idx + 1}:</b>\n\n${thesisList}`);
     }
     const finalSummary = allSummaries.join("\n---\n");
-
-    // Сохраняем историю генераций (каждый запуск — новая запись)
     await sendProgress(ctx, ui.savingToCache);
     saveToCacheAndSync(random, finalSummary, ctx);
-
-    // Красиво оформляем тезисы для вывода в бот
     const thesisList = finalSummary
-      .split(/\n+/)
-      .map(t => t.trim())
-      .filter(Boolean)
-      .map((t, i) => `📌 <b>${i + 1}.</b> ${escapeHTML(t)}`)
-      .join('\n\n');
-
-    await ctx.replyWithHTML(
-      `✅ <b>Краткое изложение (тезисы):</b>\n\n${thesisList}`
-    );
-
+      .split(/\n+/).map(t => t.trim()).filter(Boolean)
+      .map((t, i) => `📌 <b>${i + 1}.</b> ${escapeHTML(t)}`).join('\n\n');
+    await ctx.replyWithHTML(`✅ <b>Краткое изложение (тезисы):</b>\n\n${thesisList}`);
     await sendProgress(ctx, ui.cacheSynced);
     notifyAdmin(`Кэш сгенерирован для файла: ${random}`);
-
   } catch (err) {
     await sendProgress(ctx, ui.error(err.message));
     notifyAdmin(`Ошибка генерации кэша: ${err.message}`);
@@ -242,7 +189,7 @@ ${parts[idx]}`;
   }
 }
 
-// Старый вариант: обычный асинхронный промпт-запрос без стриминга
+// Генерация ответа ИИ (без стриминга)
 async function streamAIResponse(prompt, ctx) {
   try {
     if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
@@ -254,7 +201,7 @@ async function streamAIResponse(prompt, ctx) {
   }
 }
 
-// Обработка ошибок при работе с файлами
+// Извлечение текста из docx
 async function parseDocxToText(filePath) {
   try {
     const result = await mammoth.extractRawText({ path: filePath });
@@ -265,14 +212,13 @@ async function parseDocxToText(filePath) {
   }
 }
 
-// Обработка ошибок при генерации вопросов
+// Генерация тестового вопроса по тексту
 async function generateAIQuestions(text) {
   try {
     const maxInputLength = 700;
     const truncatedText = text.length > maxInputLength ? text.substring(0, maxInputLength) + "..." : text;
     const prompt = `Сформулируй один короткий вопрос с 4 вариантами ответов по тексту ниже. Отметь правильный вариант.\nВОПРОС:\nА)\nБ)\nВ)\nГ)\nПРАВИЛЬНЫЙ:`;
     if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-
     return await gpt4allModel.generate(`${prompt}\n\n${truncatedText}`);
   } catch (error) {
     logger.error("Ошибка при генерации вопросов: " + error.message);
@@ -280,6 +226,7 @@ async function generateAIQuestions(text) {
   }
 }
 
+// Парсинг ответа теста
 function parseTestResponse(response) {
   const lines = response.split("\n");
   return {
@@ -294,14 +241,14 @@ function parseTestResponse(response) {
   };
 }
 
-// Логирование в консоль и в бот
+// Логирование и отправка сообщения в бот
 function logAndNotify(message, ctx = null) {
   const logMessage = `[${new Date().toISOString()}] ${message}`;
-  logger.info(logMessage); // Логируем в консоль
-  if (ctx) ctx.reply(message); // Отправляем в бот
+  logger.info(logMessage);
+  if (ctx) ctx.reply(message);
 }
 
-// Основное меню (inline)
+// Главное меню бота
 function mainMenuKeyboard() {
   return Markup.inlineKeyboard([
     [Markup.button.callback("📂 Материалы", "materials")],
@@ -312,24 +259,21 @@ function mainMenuKeyboard() {
   ]);
 }
 
-// Храним историю сообщений для каждого пользователя
+// Состояния пользователей и история сообщений
 const userStates = {};
-const userContexts = {}; // userId: [ {role: "user"/"assistant", content: "..."} ]
+const userContexts = {};
 
+// Стартовое сообщение
 bot.start((ctx) => ctx.reply("Добро пожаловать! Выберите раздел:", mainMenuKeyboard()));
 bot.action("reset", async (ctx) => ctx.reply("История сброшена.", mainMenuKeyboard()));
 
-// Кнопка "Материалы" — выводит список файлов
+// Список материалов
 bot.action("materials", async (ctx) => {
   try {
     const files = await fs.readdir(materialsPath);
     const docxFiles = files.filter(f => f.endsWith(".docx"));
-    if (!docxFiles.length) {
-      return ctx.reply("Нет доступных материалов.");
-    }
-    const buttons = docxFiles.map(f =>
-      [Markup.button.callback(f, `material_${encodeURIComponent(f)}`)]
-    );
+    if (!docxFiles.length) return ctx.reply("Нет доступных материалов.");
+    const buttons = docxFiles.map(f => [Markup.button.callback(f, `material_${encodeURIComponent(f)}`)]);
     await ctx.reply("Выберите материал:", Markup.inlineKeyboard(buttons));
   } catch (err) {
     logger.error("Ошибка при получении списка материалов: " + err.message);
@@ -337,22 +281,18 @@ bot.action("materials", async (ctx) => {
   }
 });
 
-// Обработка нажатия на конкретный материал
+// Отправка PDF по выбранному материалу
 bot.action(/material_(.+)/, async (ctx) => {
   const fileName = decodeURIComponent(ctx.match[1]);
   const docxPath = path.join(materialsPath, fileName);
   const pdfName = fileName.replace(/\.docx$/i, ".pdf");
   const pdfPath = path.join(cachePath, pdfName);
-
   try {
-    await ctx.answerCbQuery(); // Подтверждаем получение callback
-    await ctx.editMessageReplyMarkup(null); // Удаляем клавиатуру
+    await ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup(null);
     await ctx.reply(ui.processingFile);
-    
     await convertDocxToPdf(docxPath, pdfPath);
     await ctx.replyWithDocument({ source: pdfPath, filename: pdfName });
-    
-    // Показываем главное меню после отправки файла
     await ctx.reply("Выберите действие:", mainMenuKeyboard());
   } catch (err) {
     logger.error("Ошибка при конвертации или отправке PDF: " + err.message);
@@ -361,25 +301,22 @@ bot.action(/material_(.+)/, async (ctx) => {
   }
 });
 
-// Кнопка "Задать вопрос ИИ"
+// Ввод вопроса для ИИ
 bot.action("ask_ai", async (ctx) => {
   userStates[ctx.from.id] = "awaiting_ai_prompt";
   if (!userContexts[ctx.from.id]) userContexts[ctx.from.id] = [];
   await ctx.reply("Введите ваш вопрос для ИИ:");
 });
 
-// Подробное логирование процесса сверки при отправке запроса в кэш и на Я.Диск
+// Обработка текстовых сообщений (поиск в кэше, Я.Диске, генерация)
 bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
   if (userStates[userId] === "awaiting_ai_prompt" || userStates[userId] === "chatting_ai") {
     userStates[userId] = "chatting_ai";
     if (!userContexts[userId]) userContexts[userId] = [];
     userContexts[userId].push({ role: "user", content: ctx.message.text });
-
     logger.info(`[AI Q] Пользователь ${userId} задал вопрос: "${ctx.message.text}"`);
     notifyAdmin(`[AI Q] Пользователь ${userId} задал вопрос: "${ctx.message.text}"`);
-
-    // 1. Fuzzy поиск в локальном кэше
     await ctx.reply(ui.searchingLocalCache);
     getAllCacheQuestions((err, rows) => {
       if (err) {
@@ -390,7 +327,6 @@ bot.on("text", async (ctx) => {
       }
       logger.info(`[CACHE] В кэше ${rows.length} записей. Начинаем fuzzy поиск...`);
       notifyAdmin(`[CACHE] В кэше ${rows.length} записей. Начинаем fuzzy поиск...`);
-
       const results = fuzzysort.go(ctx.message.text, rows, { key: 'prompt', threshold: -1000 });
       if (results.length > 0) {
         logger.info(`[CACHE] Лучший результат: "${results[0].obj.prompt}" (score: ${results[0].score})`);
@@ -399,15 +335,12 @@ bot.on("text", async (ctx) => {
         logger.info(`[CACHE] Совпадений не найдено.`);
         notifyAdmin(`[CACHE] Совпадений не найдено.`);
       }
-
       if (results.length > 0 && results[0].score > -1000) {
         ctx.reply("🔎 Ответ из кэша (поиск по похожести):\n" + results[0].obj.response);
         logger.info(`[CACHE] Ответ отправлен из кэша.`);
         notifyAdmin(`[CACHE] Ответ отправлен из кэша.`);
         return;
       }
-
-      // 2. Fuzzy поиск на Яндекс.Диске
       (async () => {
         await ctx.reply(ui.searchingYadisk);
         const yadiskAnswer = await fuzzyFindInYandexDisk(ctx.message.text);
@@ -417,24 +350,18 @@ bot.on("text", async (ctx) => {
           notifyAdmin(`[YADISK CACHE] Ответ отправлен из кэша на Я.Диске.`);
           return;
         }
-
-        // 3. Если нет ни в одном кэше — спрашиваем модель
         try {
           logger.info(`[AI] Ответа в кэше нет, обращаемся к модели...`);
           notifyAdmin(`[AI] Ответа в кэше нет, обращаемся к модели...`);
           if (!gpt4allModel) gpt4allModel = await initGPT4AllModel();
-
           const contextWindow = 10;
           const context = userContexts[userId].slice(-contextWindow);
           const prompt = context.map(m => (m.role === "user" ? `Пользователь: ${m.content}` : `ИИ: ${m.content}`)).join('\n') + "\nИИ:";
-
           await ctx.reply(ui.promptSent);
           const result = await gpt4allModel.generate(prompt);
           userContexts[userId].push({ role: "assistant", content: result });
-
           await ctx.reply(ui.answerSaved);
           saveToCacheAndSync(ctx.message.text, result, ctx);
-
           ctx.reply(result || "Пустой ответ от модели.");
           logger.info(`[AI] Ответ модели отправлен и сохранён в кэш.`);
           notifyAdmin(`[AI] Ответ модели отправлен и сохранён в кэш.`);
@@ -448,13 +375,12 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// --- OCR шаблоны: топ-10 лучших ---
+// Клавиатура для OCR шаблонов
 const ocrTemplatesKeyboard = [[{ text: 'Распознать всеми шаблонами', callback_data: 'ocr_all_templates' }]];
 
-// При получении фото сохраняем путь и предлагаем кнопку
+// Обработка фото для OCR
 bot.on(["photo"], async (ctx) => {
   const userId = ctx.from.id;
-  // Сброс состояния сравнения оригинала, если оно было
   if (userStates[userId] === 'awaiting_original') {
     userStates[userId] = undefined;
     userLastOcr[userId] = undefined;
@@ -467,14 +393,12 @@ bot.on(["photo"], async (ctx) => {
   const res = await fetch(fileLink.href);
   const buffer = await res.arrayBuffer();
   await fs.writeFile(filePath, Buffer.from(buffer));
-  // Сохраняем путь к фото в сессию
   if (!ctx.session) ctx.session = {};
   ctx.session.lastPhotoPath = filePath;
-  // Генерируем клавиатуру из 1 кнопки
   await ctx.reply("Выберите способ обработки OCR:", Markup.inlineKeyboard(ocrTemplatesKeyboard));
 });
 
-// Обработка кнопки "Распознать всеми шаблонами"
+// OCR всеми шаблонами
 bot.action('ocr_all_templates', async (ctx) => {
   try {
     const filePath = ctx.session && ctx.session.lastPhotoPath;
@@ -483,7 +407,6 @@ bot.action('ocr_all_templates', async (ctx) => {
       return;
     }
     await ctx.reply('Начинаю распознавание всеми шаблонами...');
-    // Получаем шаблоны
     const templates = getTemplates();
     const allResults = [];
     for (let i = 0; i < templates.length; ++i) {
@@ -509,19 +432,17 @@ bot.action('ocr_all_templates', async (ctx) => {
         logger.error(`[BOT] Ошибка отправки ответа по шаблону ${i+1}: ${tpl.name}: ${err.message}`);
       }
     }
-    // --- Новая простая постобработка ---
     const mergedText = mergeOcrResultsNoDuplicates(allResults);
     await ctx.replyWithHTML(
       `<b>📋 Итоговый текст (без дублей, без потерь):</b>\n\n<pre>${escapeHTML(mergedText)}</pre>`
     );
-    // ...далее можно вернуть userStates и userLastOcr если нужно...
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
   }
 });
 
-// Генерация теста по случайному материалу (или просто "Скажи привет")
+// Генерация теста (пример)
 bot.action("generate_test", async (ctx) => {
   try {
     await streamAIResponse("Скажи привет", ctx);
@@ -531,7 +452,7 @@ bot.action("generate_test", async (ctx) => {
   }
 });
 
-// Кнопка "Генерация Кэша" — ставит задачу в очередь
+// Кнопка "Генерация Кэша"
 bot.action("generate_cache", async (ctx) => {
   cacheQueue.push({ ctx });
   await ctx.answerCbQuery("⏳ Задача поставлена в очередь.");
@@ -539,7 +460,7 @@ bot.action("generate_cache", async (ctx) => {
   processCacheQueue();
 });
 
-// Обработка ошибок при загрузке на Яндекс.Диск
+// Загрузка файла на Яндекс.Диск
 async function uploadToYandexDisk(localFilePath, remoteFilePath, ctx) {
   try {
     await yadisk.uploadFile(localFilePath, remoteFilePath);
@@ -551,9 +472,9 @@ async function uploadToYandexDisk(localFilePath, remoteFilePath, ctx) {
   }
 }
 
+// Сохранение в кэш и синхронизация с Яндекс.Диском
 function saveToCacheAndSync(question, answer, ctx = null) {
   saveToCacheHistory(question, answer);
-
   const localPath = path.join(cachePath, "dataset.json");
   const remotePath = "/bot_cache/dataset.json";
   exportCacheToJsonFile(localPath, async (err) => {
@@ -576,7 +497,7 @@ function saveToCacheAndSync(question, answer, ctx = null) {
   });
 }
 
-// --- УТИЛИТА: Скачивание файла Telegram в temp ---
+// Скачивание файла Telegram во временную папку
 async function downloadFile(file, userId) {
   const tempPath = path.join(__dirname, 'temp');
   await fs.ensureDir(tempPath);
@@ -584,10 +505,8 @@ async function downloadFile(file, userId) {
   const fileName = `${userId}_${Date.now()}${ext}`;
   const dest = path.join(tempPath, fileName);
   const fileLink = await bot.telegram.getFileLink(file.file_id);
-
   const res = await fetch(fileLink.href);
   if (!res.ok) throw new Error(`Ошибка загрузки файла: ${res.statusText}`);
-  // Для node >=18 используем arrayBuffer, для node-fetch@2 — buffer
   let buffer;
   if (typeof res.arrayBuffer === 'function') {
     buffer = Buffer.from(await res.arrayBuffer());
@@ -598,7 +517,7 @@ async function downloadFile(file, userId) {
   return dest;
 }
 
-// --- Улучшенная оценка человекочитаемости и полезности OCR-результата ---
+// Оценка качества OCR-результата
 function evalHumanReadableScoreV2(text) {
   if (!text || typeof text !== 'string') return 0;
   const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
@@ -607,19 +526,16 @@ function evalHumanReadableScoreV2(text) {
   const ruChars = (text.match(/[А-Яа-яЁё]/g) || []).length;
   const ruRatio = ruChars / (totalChars || 1);
   const uniqLines = new Set(lines).size;
-  // Ключевые слова и бизнес-термины
   const bonusWords = [
     "АКТИВИРУЙТЕ", "СКАЧАЙТЕ", "ПРИЛОЖЕНИЕ", "МАГАЗИН", "СЕРВИСЫ", "ЭВОТОР",
     "ИНН", "ОГРН", "АДРЕС", "КОНТАКТ", "ТЕЛЕФОН", "EMAIL", "E-MAIL",
     "КЛЮЧ", "ЕГАИС", "ТОРГОВЛИ", "БУХГАЛТЕРИЯ", "ФИО", "ООО", "ИП", "ОАО"
   ];
-  let bonus = 0;
-  let phoneCount = 0, emailCount = 0, innCount = 0, addressCount = 0;
+  let bonus = 0, phoneCount = 0, emailCount = 0, innCount = 0, addressCount = 0;
   const phoneRegex = /\+?\d[\d\s\-()]{7,}/g;
   const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
   const innRegex = /\b\d{10,12}\b/;
   const addressRegex = /(г\.|ул\.|просп\.|пер\.|д\.|офис|корпус|кв\.|пл\.|обл\.|район|р-н|поселок|микрорайон)/i;
-  // Анализ строк
   lines.forEach(line => {
     if (phoneRegex.test(line)) phoneCount++;
     if (emailRegex.test(line)) emailCount++;
@@ -627,11 +543,8 @@ function evalHumanReadableScoreV2(text) {
     if (addressRegex.test(line)) addressCount++;
     for (const w of bonusWords) if (line.toUpperCase().includes(w)) bonus += 0.1;
   });
-  // Мусорные строки
   const noisyLines = lines.filter(l => l.length < 5 || (l.replace(/[А-Яа-яЁё0-9]/gi, '').length / l.length) > 0.5).length;
-  // Бонус за разнообразие и полезную структуру
   const diversityBonus = uniqLines >= 3 ? 0.5 : 0;
-  // Итоговая формула
   let score = (
     ruRatio * 2 +
     Math.min(lines.length / 10, 1) +
@@ -644,12 +557,11 @@ function evalHumanReadableScoreV2(text) {
     addressCount * 0.5 -
     noisyLines * 0.2
   );
-  // Штраф если только одна строка и она короткая
   if (lines.length === 1 && lines[0].length < 10) score -= 0.5;
   return score;
 }
 
-// --- Подробный лог выбора результата ---
+// Выбор лучшего OCR-результата
 function selectBestOcrResultV2(allResults, semanticResult, cleanedSemantic, humanResult) {
   const candidates = [];
   allResults.forEach((r, i) => candidates.push({
@@ -670,13 +582,11 @@ function selectBestOcrResultV2(allResults, semanticResult, cleanedSemantic, huma
   return candidates[0].text;
 }
 
-// --- В месте, где отправляется результат ---
+// Отправка лучшего OCR-результата пользователю
 async function sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemantic, humanResult) {
   let bestResult = selectBestOcrResultV2(allResults.map(r => r.text), semanticResult, cleanedSemantic, humanResult);
   let lines = bestResult.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  // 1. Фильтрация по словарю мусора
   lines = await filterGarbage(lines);
-  // 2. Фильтрация коротких и странных строк (loopback)
   const importantWords = ['активируйте', 'скачайте', 'приложение', 'магазин', 'сервис', 'эво', 'касовые', 'подробнее', 'адрес', 'телефон', 'инн'];
   let garbageCandidates = [];
   const filtered = lines.filter(line => {
@@ -691,34 +601,28 @@ async function sendBestOcrResult(ctx, allResults, semanticResult, cleanedSemanti
     }
     return true;
   });
-  // 3. Loopback: пополняем словарь мусора
   await addGarbage(garbageCandidates);
-  // 4. Финальный текст
   const finalText = filtered.join('\n');
   await ctx.replyWithHTML(
     `<b>📋 Итоговый текст с фото (максимально близко к оригиналу)</b>\n\n<pre>${escapeHTML(finalText)}</pre>`
   );
   logger.info(`[BOT] Все шаблоны завершены. Итоговая сборка для пользователя завершена.`);
-  // 5. Предложение ввести оригинал текста для сравнения
   userStates[ctx.from.id] = 'awaiting_original';
   userLastOcr[ctx.from.id] = finalText;
   await ctx.reply('Если у вас есть оригинальный текст, отправьте его сюда для сравнения и улучшения качества распознавания.');
 }
 
-// --- Сравнение с оригиналом от пользователя ---
+// Сравнение OCR-результата с оригиналом пользователя
 const userLastOcr = {};
 bot.on('text', async ctx => {
   const userId = ctx.from.id;
   if (userStates[userId] === 'awaiting_original' && userLastOcr[userId]) {
     const ocrText = userLastOcr[userId];
     const origText = ctx.message.text;
-    // Сравнение (Levenshtein)
     const lev = levenshtein(ocrText.replace(/\s+/g, ''), origText.replace(/\s+/g, ''));
     const maxLen = Math.max(ocrText.length, origText.length);
     const similarity = maxLen > 0 ? (1 - lev / maxLen) : 0;
     await ctx.reply(`Сравнение завершено! Совпадение: ${(similarity * 100).toFixed(1)}%. Спасибо, ваш пример поможет улучшить распознавание.`);
-    // (Опционально) Можно добавить строки-расхождения в словарь мусора
-    // ...
     userStates[userId] = undefined;
     userLastOcr[userId] = undefined;
     return;
@@ -727,12 +631,12 @@ bot.on('text', async ctx => {
 });
 
 module.exports = {
-    app,
-    bot,
-    mainMenuKeyboard,
-    parseDocxToText,
-    splitTextByLength,
-    saveToCacheAndSync,
-    fuzzyFindInYandexDisk,
-    gpt4allModel // <-- экспортируем для доступа из pipeline.js
-  };
+  app,
+  bot,
+  mainMenuKeyboard,
+  parseDocxToText,
+  splitTextByLength,
+  saveToCacheAndSync,
+  fuzzyFindInYandexDisk,
+  gpt4allModel
+};
