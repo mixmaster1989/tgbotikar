@@ -46,6 +46,14 @@ require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
 
+// --- Добавлено: инициализация yadisk ---
+const YADISK_TOKEN = process.env.YADISK_TOKEN;
+if (!YADISK_TOKEN) {
+  throw new Error("Не найден YADISK_TOKEN в .env");
+}
+const yadisk = new YaDiskService(YADISK_TOKEN);
+// --- конец добавления ---
+
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const modelName = "Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf";
