@@ -63,17 +63,35 @@ function selectBestOcrResult(allResults, semanticResult, cleanedSemantic, humanR
  * @returns {string} - итоговый текст
  */
 function mergeOcrResultsNoDuplicates(allResults) {
-  const seenLines = new Set();
+  // Считаем, что блоки считаются дубликатами, если их строки (без мусора и знаков) совпадают по множеству
+  const normalizeLine = (line) =>
+    line.toLowerCase().replace(/[^а-яa-z0-9]/gi, '').replace(/\s+/g, '');
+  const normalizeBlock = (text) => {
+    // Множество нормализованных строк блока, отсортированное и склеенное
+    return Array.from(
+      new Set(
+        text
+          .split(/\r?\n/)
+          .map(l => l.trim())
+          .filter(Boolean)
+          .map(normalizeLine)
+      )
+    )
+      .sort()
+      .join('|');
+  };
+
   const seenBlocks = new Set();
+  const seenLines = new Set();
   const merged = [];
+
   for (const result of allResults) {
-    // Грубая нормализация всего блока (всего результата шаблона)
-    const blockNorm = result.text.replace(/\s+/g, '').replace(/[^а-яa-z0-9]/gi, '').toLowerCase();
+    const blockNorm = normalizeBlock(result.text);
     if (blockNorm && !seenBlocks.has(blockNorm)) {
       seenBlocks.add(blockNorm);
       const lines = result.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
       for (const line of lines) {
-        const norm = line.toLowerCase().replace(/[^а-яa-z0-9]/gi, '').trim();
+        const norm = normalizeLine(line);
         if (norm && !seenLines.has(norm)) {
           seenLines.add(norm);
           merged.push(line);
