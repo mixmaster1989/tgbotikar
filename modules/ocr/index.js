@@ -1,6 +1,7 @@
 // Импортируем модули для работы с файлами и путями
 const fs = require("fs-extra");
 const path = require("path");
+const tesseract = require("tesseract.js");
 
 // Импортируем Markup для создания кнопок в Telegraf
 const { Markup } = require("telegraf");
@@ -93,5 +94,22 @@ function registerOcrHandlers(bot) {
   });
 }
 
+async function recognizeTextWithTemplateTesseract(imagePath, preProcessing, postProcessing) {
+    try {
+        const imageBuffer = await fs.readFile(imagePath);
+        const { data: { text } } = await tesseract.recognize(imageBuffer, "eng", {
+            preProcessing,
+            postProcessing
+        });
+        return text;
+    } catch (error) {
+        console.error("Ошибка при распознавании текста:", error);
+        throw error;
+    }
+}
+
 // Экспортируем функцию для регистрации обработчиков
-module.exports = { registerOcrHandlers };
+module.exports = { 
+  registerOcrHandlers,
+  recognizeTextWithTemplateTesseract
+};
