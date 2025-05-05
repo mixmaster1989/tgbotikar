@@ -1,6 +1,28 @@
 // Семантическая сборка и финальная сборка для Telegram (выделено из bot.js)
 const fuzzysort = require('fuzzysort');
 
+function smartJoinAndCorrect(text) {
+  // Исправляем простые опечатки и склеиваем строки
+  const lines = text.split(/[\n\r\f\v\u2028\u2029\u0085]+/).filter(Boolean);
+  const corrected = lines.map(line => {
+    // Исправляем типичные опечатки
+    let correctedLine = line
+      .replace(/РЫЬА/g, 'Рыба')
+      .replace(/[Ьb]/g, 'ь')
+      .replace(/[Ъъ]/g, 'ъ');
+    
+    // Нормализуем регистр (первая буква заглавная, остальные строчные)
+    if (correctedLine.length > 0) {
+      correctedLine = correctedLine.charAt(0).toUpperCase() + 
+                     correctedLine.slice(1).toLowerCase();
+    }
+    
+    return correctedLine;
+  });
+  
+  return corrected.join(' ');
+}
+
 function semanticOcrAssemble(results) {
   function splitToBlocks(text) {
     return text
@@ -96,6 +118,7 @@ function humanReadableAssemble(text) {
 }
 
 module.exports = {
+  smartJoinAndCorrect,
   semanticOcrAssemble,
   humanReadableAssemble
 };

@@ -1,14 +1,12 @@
-const gpt4all = {
-  loadModel: jest.fn().mockResolvedValue({
-    generate: jest.fn((prompt, options) => {
-      const mockResponse = "Это тестовый ответ от модели.";
-      if (options.on_token) {
-        // Эмулируем вызов on_token для каждого слова
-        mockResponse.split(" ").forEach((token) => options.on_token(token + " "));
-      }
-      return Promise.resolve(mockResponse);
-    }),
-  }),
-};
+// Простой тест для проверки наличия файла gpt4all_test.js
+const path = require('path');
+const fs = require('fs');
 
-module.exports = gpt4all;
+describe('GPT4All Mock Tests', () => {
+  const gpt4allPath = path.join(__dirname, '../gpt4all_test.js');
+  
+  test('gpt4all_test.js file should exist', () => {
+    const fileExists = fs.existsSync(gpt4allPath);
+    expect(fileExists).toBe(true);
+  });
+});

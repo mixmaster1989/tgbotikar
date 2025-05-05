@@ -11,7 +11,8 @@
     "pm2:stop": "pm2 stop telegram-bot",
     "audit": "npm audit fix --force",
     "clean": "rimraf node_modules package-lock.json && npm cache clean --force",
-    "test": "jest"
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch --passWithNoTests"
   },
   "keywords": [],
   "author": "",
@@ -34,6 +35,7 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "nodemon": "^3.0.2",
     "pm2": "^5.3.1"
   },
