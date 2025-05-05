@@ -59,7 +59,7 @@ function selectBestOcrResult(allResults, semanticResult, cleanedSemantic, humanR
 }
 
 /**
- * Объединяет строки из всех результатов шаблонов, убирает дубликаты (в том числе fuzzy), сохраняет порядок.
+ * Объединяет строки из всех результатов шаблонов, убирает дубликаты (fuzzy), сохраняет порядок.
  * @param {Array<{tplName: string, text: string}>} allResults
  * @returns {string} - итоговый текст
  */
@@ -67,19 +67,26 @@ function mergeOcrResultsNoDuplicates(allResults) {
   const seenBlocks = [];
   const seenLines = new Set();
   const merged = [];
-  const SIMILARITY_THRESHOLD = 0.85; // Можно варьировать
+  const SIMILARITY_THRESHOLD = 0.85;
+
+  // Более агрессивная нормализация для fuzzy сравнения блоков
+  function normalizeBlock(text) {
+    return text
+      .replace(/[\s\r\n]+/g, ' ') // все пробелы и переносы в один пробел
+      .replace(/[^а-яa-z0-9]/gi, '') // только буквы и цифры
+      .toLowerCase()
+      .trim();
+  }
 
   for (const result of allResults) {
     const blockText = result.text.trim();
     if (!blockText) continue;
 
-    // Fuzzy сравнение с уже добавленными блоками
+    const blockNorm = normalizeBlock(blockText);
     let isDuplicate = false;
     for (const prev of seenBlocks) {
-      const similarity = stringSimilarity.compareTwoStrings(
-        blockText.replace(/\s+/g, ' ').toLowerCase(),
-        prev.replace(/\s+/g, ' ').toLowerCase()
-      );
+      const prevNorm = normalizeBlock(prev);
+      const similarity = stringSimilarity.compareTwoStrings(blockNorm, prevNorm);
       if (similarity >= SIMILARITY_THRESHOLD) {
         isDuplicate = true;
         break;
