@@ -128,6 +128,7 @@ class YaDiskService {
             throw error;
         }
     }
+
     async uploadFile(localPath, remotePath) {
         try {
             this.log('info', 'upload', `Запрос ссылки для загрузки файла на Я.Диск: ${remotePath}`);
@@ -260,8 +261,4 @@ class YaDiskService {
     }
 }
 
-module.exports = {
-    YaDiskService,
-    uploadFile: YaDiskService.prototype.uploadFile,
-    downloadFile: YaDiskService.prototype.downloadFile
-};
+module.exports = YaDiskService;
