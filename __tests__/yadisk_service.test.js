@@ -82,31 +82,31 @@ describe("services/yadisk_service.js", () => {
 });
 
 describe("Yandex Disk Service", () => {
-  const token = "mock-token";
+  const materialsPath = "/mock/materials";
   let yadisk;
 
   beforeEach(() => {
-    yadisk = new YaDiskService(token);
+    yadisk = new YaDiskService(materialsPath);
     jest.spyOn(yadisk, "log").mockImplementation(() => {}); // Мокаем метод log
     jest.clearAllMocks();
   });
 
   test("uploadFile успешно логирует загрузку файла", async () => {
-    fs.createReadStream.mockReturnValue("mockStream");
     const result = await yadisk.uploadFile("local/path", "remote/path");
     expect(result).toBe(true);
-    expect(yadisk.log).toHaveBeenCalledWith("info", "upload", expect.stringContaining("успешно загружен"));
+    expect(yadisk.log).toHaveBeenCalledWith("info", "upload", expect.stringContaining("Начало загрузки файла"));
+    expect(yadisk.log).toHaveBeenCalledWith("success", "upload", expect.stringContaining("Файл успешно загружен"));
   });
 
   test("downloadFileByPath успешно скачивает файл", async () => {
-    fs.createWriteStream.mockReturnValue("mockStream");
-    const result = await yadisk.downloadFile("remote/path", "local/path");
+    const result = await yadisk.downloadFile("remote/path", "test.txt");
     expect(result).toBe(true);
-    expect(yadisk.log).toHaveBeenCalledWith("info", "download", expect.stringContaining("успешно скачан"));
+    expect(yadisk.log).toHaveBeenCalledWith("info", "download", expect.stringContaining("Начало скачивания"));
+    expect(yadisk.log).toHaveBeenCalledWith("success", "download", expect.stringContaining("Файл успешно скачан"));
   });
 
   test("should handle errors during upload", async () => {
-    fs.createReadStream.mockImplementation(() => {
+    jest.spyOn(yadisk, "uploadFile").mockImplementation(() => {
       throw new Error("Mock error");
     });
     await expect(yadisk.uploadFile("local/path", "remote/path")).rejects.toThrow("Mock error");
@@ -114,10 +114,10 @@ describe("Yandex Disk Service", () => {
   });
 
   test("should handle errors during download", async () => {
-    fs.createWriteStream.mockImplementation(() => {
+    jest.spyOn(yadisk, "downloadFile").mockImplementation(() => {
       throw new Error("Mock error");
     });
-    await expect(yadisk.downloadFile("remote/path", "local/path")).rejects.toThrow("Mock error");
+    await expect(yadisk.downloadFile("remote/path", "test.txt")).rejects.toThrow("Mock error");
     expect(yadisk.log).toHaveBeenCalledWith("error", "download", expect.stringContaining("Ошибка при скачивании"));
   });
 });
