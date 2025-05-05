@@ -489,16 +489,8 @@ bot.action('ocr_all_templates', async (ctx) => {
         logger.error(`[BOT] Ошибка отправки ответа по шаблону ${i+1}: ${tpl.name}: ${err.message}`);
       }
     }
-    // Семантическая сборка и постобработка
-    const semanticResult = semanticOcrAssemble(allResults);
-    logger.info(`[BOT] Итоговый результат семантической сборки: ${semanticResult}`);
-    const { postprocessLanguageTool } = require('./modules/ocr');
-    const cleanedSemantic = await postprocessLanguageTool(semanticResult);
-    logger.info(`[BOT] Итоговый результат после LanguageTool: ${cleanedSemantic}`);
-    const humanResult = humanReadableAssemble(cleanedSemantic);
-    logger.info(`[BOT] Итоговый результат для Telegram: ${humanResult}`);
-    // userStates и userLastOcr доступны глобально
-    await processOcrPipeline(ctx, allResults, semanticResult, cleanedSemantic, humanResult, userStates, userLastOcr);
+    // --- Удалено: семантическая сборка, LanguageTool, финальная сборка, отправка результата, postprocess ---
+    // После 10-го шаблона бот ничего не делает, ждет новое фото или вопрос.
   } catch (e) {
     logger.error(`[BOT] Глобальная ошибка в ocr_all_templates: ${e.message}`);
     await ctx.reply('Ошибка при распознавании: ' + e.message);
