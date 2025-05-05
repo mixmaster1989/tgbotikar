@@ -97,28 +97,29 @@ describe("Yandex Disk Service", () => {
     expect(result).toBe(true);
     expect(yadisk.log).toHaveBeenCalledWith("info", "upload", expect.stringContaining("Начало загрузки файла"));
     expect(yadisk.log).toHaveBeenCalledWith("success", "upload", expect.stringContaining("Файл успешно загружен"));
+    expect(axios.put).toHaveBeenCalledWith("/remote/test.txt", expect.anything());
   });
 
   test("downloadFileByPath успешно скачивает файл", async () => {
-    fs.createWriteStream.mockReturnValue("mockWriter");
+    const mockWriter = { on: jest.fn((event, callback) => callback()) };
+    fs.createWriteStream.mockReturnValue(mockWriter);
+    axios.get.mockResolvedValue({ data: { pipe: jest.fn() } });
+
     const result = await yadisk.downloadFileByPath("/remote/test.txt", "local.txt");
-    expect(result).toBe(true);
+    expect(result).toBe("/mock/materials/local.txt");
     expect(yadisk.log).toHaveBeenCalledWith("info", "download", expect.stringContaining("Начало скачивания"));
     expect(yadisk.log).toHaveBeenCalledWith("success", "download", expect.stringContaining("Файл успешно скачан"));
+    expect(fs.createWriteStream).toHaveBeenCalledWith("/mock/materials/local.txt");
   });
 
   test("should handle errors during upload", async () => {
-    jest.spyOn(yadisk, "uploadFile").mockImplementation(() => {
-      throw new Error("Mock error");
-    });
+    axios.put.mockRejectedValue(new Error("Mock error"));
     await expect(yadisk.uploadFile("local/path", "remote/path")).rejects.toThrow("Mock error");
     expect(yadisk.log).toHaveBeenCalledWith("error", "upload", expect.stringContaining("Ошибка при загрузке"));
   });
 
   test("should handle errors during download", async () => {
-    jest.spyOn(yadisk, "downloadFileByPath").mockImplementation(() => {
-      throw new Error("Mock error");
-    });
+    axios.get.mockRejectedValue(new Error("Mock error"));
     await expect(yadisk.downloadFileByPath("remote/path", "test.txt")).rejects.toThrow("Mock error");
     expect(yadisk.log).toHaveBeenCalledWith("error", "download", expect.stringContaining("Ошибка при скачивании"));
   });

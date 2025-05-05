@@ -14,7 +14,8 @@ class YaDiskService {
     async uploadFile(localPath, remotePath) {
         try {
             this.log("info", "upload", `Начало загрузки файла ${localPath} → ${remotePath}`);
-            // Эмуляция успешной загрузки
+            // Эмуляция успешного запроса к API
+            await axios.put(remotePath, fs.createReadStream(localPath));
             this.log("success", "upload", `Файл успешно загружен: ${remotePath}`);
             return true;
         } catch (error) {
@@ -41,8 +42,15 @@ class YaDiskService {
             const localPath = path.join(this.materialsPath, localFileName);
             this.log("info", "download", `Начало скачивания ${remotePath} → ${localPath}`);
             // Эмуляция успешного скачивания
+            const response = await axios.get(remotePath, { responseType: "stream" });
+            const writer = fs.createWriteStream(localPath);
+            response.data.pipe(writer);
+            await new Promise((resolve, reject) => {
+                writer.on("finish", resolve);
+                writer.on("error", reject);
+            });
             this.log("success", "download", `Файл ${remotePath} успешно скачан в ${localPath}`);
-            return true;
+            return localPath;
         } catch (error) {
             this.log("error", "download", `Ошибка при скачивании ${remotePath}`, error);
             throw error;
