@@ -260,4 +260,8 @@ class YaDiskService {
     }
 }
 
-module.exports = YaDiskService;
+module.exports = {
+    YaDiskService,
+    uploadFile: YaDiskService.prototype.uploadFile,
+    downloadFile: YaDiskService.prototype.downloadFile
+};
