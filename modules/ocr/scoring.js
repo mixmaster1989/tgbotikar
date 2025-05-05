@@ -63,15 +63,21 @@ function selectBestOcrResult(allResults, semanticResult, cleanedSemantic, humanR
  * @returns {string} - итоговый текст
  */
 function mergeOcrResultsNoDuplicates(allResults) {
-  const seen = new Set();
+  const seenLines = new Set();
+  const seenBlocks = new Set();
   const merged = [];
   for (const result of allResults) {
-    const lines = result.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      const norm = line.toLowerCase().replace(/[^а-яa-z0-9]/gi, '').trim();
-      if (norm && !seen.has(norm)) {
-        seen.add(norm);
-        merged.push(line);
+    // Грубая нормализация всего блока (всего результата шаблона)
+    const blockNorm = result.text.replace(/\s+/g, '').replace(/[^а-яa-z0-9]/gi, '').toLowerCase();
+    if (blockNorm && !seenBlocks.has(blockNorm)) {
+      seenBlocks.add(blockNorm);
+      const lines = result.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        const norm = line.toLowerCase().replace(/[^а-яa-z0-9]/gi, '').trim();
+        if (norm && !seenLines.has(norm)) {
+          seenLines.add(norm);
+          merged.push(line);
+        }
       }
     }
   }
