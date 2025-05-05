@@ -19,3 +19,20 @@ describe("UI messages module", () => {
     expect(ui.error("Ошибка")).toBe("❌ Ошибка: Ошибка");
   });
 });
+
+describe("UI Messages", () => {
+  test("should return a processing message", () => {
+    const message = ui.processingFile;
+    expect(message).toBe("Обрабатываю файл...");
+  });
+
+  test("should return an error message", () => {
+    const errorMessage = ui.error("Test error");
+    expect(errorMessage).toBe("❌ Ошибка: Test error");
+  });
+
+  test("should return a success message", () => {
+    const successMessage = ui.success("Test success");
+    expect(successMessage).toBe("✅ Успешно: Test success");
+  });
+});

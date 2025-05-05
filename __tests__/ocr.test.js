@@ -2,6 +2,9 @@ const path = require("path");
 const fs = require("fs-extra");
 const { recognizeText } = require("../modules/ocr");
 const { semanticOcrAssemble, humanReadableAssemble } = require("../modules/ocr/postprocess");
+const { recognizeTextWithTemplateTesseract } = require("../modules/ocr/pipeline");
+
+jest.mock("fs-extra"); // Мокаем файловую систему
 
 describe("modules/ocr.js", () => {
   const testImg = path.join(__dirname, "..", "materials", "test-ocr.png");
@@ -32,5 +35,31 @@ describe("modules/ocr.js", () => {
     const out = humanReadableAssemble(input);
     expect(out).toContain('строка1');
     expect(out).toContain('строка2');
+  });
+});
+
+describe("OCR Pipeline", () => {
+  const mockImagePath = "/path/to/image.jpg";
+  const mockTemplate = { pre: "pre-config", post: "post-config" };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("should recognize text using a template", async () => {
+    const mockResult = "Recognized text";
+    jest.spyOn(fs, "readFile").mockResolvedValue(Buffer.from("mockImageData"));
+
+    const result = await recognizeTextWithTemplateTesseract(mockImagePath, mockTemplate.pre, mockTemplate.post);
+    expect(result).toBe(mockResult);
+    expect(fs.readFile).toHaveBeenCalledWith(mockImagePath);
+  });
+
+  test("should handle errors during OCR", async () => {
+    jest.spyOn(fs, "readFile").mockImplementation(() => {
+      throw new Error("Mock error");
+    });
+
+    await expect(recognizeTextWithTemplateTesseract(mockImagePath, mockTemplate.pre, mockTemplate.post)).rejects.toThrow("Mock error");
   });
 });

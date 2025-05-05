@@ -11,6 +11,7 @@ const mockApi = {
 axios.create = jest.fn(() => mockApi);
 
 const YaDiskService = require("../services/yadisk_service");
+const { uploadFile, downloadFile } = require("../services/yadisk_service");
 
 jest.mock("fs-extra");
 
@@ -77,5 +78,42 @@ describe("services/yadisk_service.js", () => {
     yadisk.getAllDocxFiles = jest.fn().mockResolvedValue([{ type: "file", name: "a.docx" }]);
     const files = await yadisk.getAllDocxFiles("/");
     expect(Array.isArray(files)).toBe(true);
+  });
+});
+
+describe("Yandex Disk Service", () => {
+  const mockFilePath = path.join(__dirname, "mockFile.txt");
+  const mockRemotePath = "/remote/mockFile.txt";
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("should upload a file to Yandex Disk", async () => {
+    fs.createReadStream.mockReturnValue("mockStream");
+    const result = await uploadFile(mockFilePath, mockRemotePath);
+    expect(result).toBe(true); // Проверяем успешность загрузки
+    expect(fs.createReadStream).toHaveBeenCalledWith(mockFilePath);
+  });
+
+  test("should download a file from Yandex Disk", async () => {
+    fs.createWriteStream.mockReturnValue("mockStream");
+    const result = await downloadFile(mockRemotePath, mockFilePath);
+    expect(result).toBe(true); // Проверяем успешность скачивания
+    expect(fs.createWriteStream).toHaveBeenCalledWith(mockFilePath);
+  });
+
+  test("should handle errors during upload", async () => {
+    fs.createReadStream.mockImplementation(() => {
+      throw new Error("Mock error");
+    });
+    await expect(uploadFile(mockFilePath, mockRemotePath)).rejects.toThrow("Mock error");
+  });
+
+  test("should handle errors during download", async () => {
+    fs.createWriteStream.mockImplementation(() => {
+      throw new Error("Mock error");
+    });
+    await expect(downloadFile(mockRemotePath, mockFilePath)).rejects.toThrow("Mock error");
   });
 });
