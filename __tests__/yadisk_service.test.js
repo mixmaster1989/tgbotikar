@@ -123,4 +123,10 @@ describe("Yandex Disk Service", () => {
     await expect(yadisk.downloadFileByPath("remote/path", "test.txt")).rejects.toThrow("Mock error");
     expect(yadisk.log).toHaveBeenCalledWith("error", "download", expect.stringContaining("Ошибка при скачивании"));
   });
+
+  test("should throw error if response data is missing", async () => {
+    axios.get.mockResolvedValue({});
+    await expect(yadisk.downloadFileByPath("remote/path", "test.txt")).rejects.toThrow("Нет данных для скачивания");
+    expect(yadisk.log).toHaveBeenCalledWith("error", "download", expect.stringContaining("Ошибка при скачивании"));
+  });
 });

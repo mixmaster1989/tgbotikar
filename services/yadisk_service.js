@@ -43,7 +43,7 @@ class YaDiskService {
             this.log("info", "download", `Начало скачивания ${remotePath} → ${localPath}`);
             const response = await axios.get(remotePath, { responseType: "stream" });
 
-            if (!response.data) {
+            if (!response || !response.data) {
                 throw new Error("Нет данных для скачивания");
             }
 
