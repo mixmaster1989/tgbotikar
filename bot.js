@@ -18,6 +18,17 @@ function safeRequire(modulePath) {
   }
 }
 
+// Универсальная функция экранирования HTML
+function escapeHTML(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const { exportCacheToJsonFile, uploadCacheJsonToYadisk } = safeRequire("./modules/cache_export");
 const ui = safeRequire("./modules/ui_messages"); // Новый модуль UI-сообщений
 const logger = safeRequire("./modules/logger"); // <-- добавлен winston logger
@@ -186,7 +197,7 @@ ${parts[idx]}`;
         .split(/\n+/)
         .map(t => t.trim())
         .filter(Boolean)
-        .map((t, i) => `📌 <b>${i + 1}.</b> ${t}`)
+        .map((t, i) => `📌 <b>${i + 1}.</b> ${escapeHTML(t)}`)
         .join('\n\n');
       await ctx.replyWithHTML(
         `✅ <b>Тезисы по части ${idx + 1}:</b>\n\n${thesisList}`
@@ -203,7 +214,7 @@ ${parts[idx]}`;
       .split(/\n+/)
       .map(t => t.trim())
       .filter(Boolean)
-      .map((t, i) => `📌 <b>${i + 1}.</b> ${t}`)
+      .map((t, i) => `📌 <b>${i + 1}.</b> ${escapeHTML(t)}`)
       .join('\n\n');
 
     await ctx.replyWithHTML(
@@ -483,7 +494,7 @@ bot.action('ocr_all_templates', async (ctx) => {
       allResults.push({ tplName: tpl.name, text: tesseractText });
       try {
         await ctx.replyWithHTML(
-          `<b>Шаблон ${i+1}: ${tpl.name}</b>\n\n<b>Tesseract:</b>\n<pre>${tesseractText}</pre>`
+          `<b>Шаблон ${i+1}: ${escapeHTML(tpl.name)}</b>\n\n<b>Tesseract:</b>\n<pre>${escapeHTML(tesseractText)}</pre>`
         );
         logger.info(`[BOT] Ответ отправлен по шаблону ${i+1}: ${tpl.name}`);
       } catch (err) {
@@ -493,7 +504,7 @@ bot.action('ocr_all_templates', async (ctx) => {
     // --- Новая простая постобработка ---
     const mergedText = mergeOcrResultsNoDuplicates(allResults);
     await ctx.replyWithHTML(
-      `<b>📋 Итоговый текст (без дублей, без потерь):</b>\n\n<pre>${mergedText}</pre>`
+      `<b>📋 Итоговый текст (без дублей, без потерь):</b>\n\n<pre>${escapeHTML(mergedText)}</pre>`
     );
     // ...далее можно вернуть userStates и userLastOcr если нужно...
   } catch (e) {
