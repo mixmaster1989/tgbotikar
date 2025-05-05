@@ -12,7 +12,8 @@
     "audit": "npm audit fix --force",
     "clean": "rimraf node_modules package-lock.json && npm cache clean --force",
     "test": "jest --passWithNoTests",
-    "test:watch": "jest --watch --passWithNoTests"
+    "test:watch": "jest --watch --passWithNoTests",
+    "test:safe": "jest --testPathIgnorePatterns=ocr_preprocess.test.js --testPathIgnorePatterns=gpt4all_test.test.js --testPathIgnorePatterns=bot.test.js"
   },
   "keywords": [],
   "author": "",

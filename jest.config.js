@@ -10,7 +10,13 @@ module.exports = {
   coverageDirectory: 'coverage',
   
   // Игнорируем определенные директории
-  testPathIgnorePatterns: ['/node_modules/'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    'ocr_templates.test.js',
+    'materials.test.js',
+    'misc.test.js',
+    'gpt.test.js'
+  ],
   
   // Настройка моков
   setupFilesAfterEnv: ['./__tests__/setup.js'],
@@ -23,12 +29,4 @@ module.exports = {
   
   // Вывод информации о тестах
   verbose: true,
-  
-  // Игнорируем тесты, которые требуют отсутствующие модули
-  modulePathIgnorePatterns: [
-    'ocr_templates.test.js',
-    'materials.test.js',
-    'misc.test.js',
-    'gpt.test.js'
-  ]
 };
