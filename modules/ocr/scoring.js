@@ -64,41 +64,61 @@ function selectBestOcrResult(allResults, semanticResult, cleanedSemantic, humanR
  * @returns {string} - итоговый текст
  */
 function mergeOcrResultsNoDuplicates(allResults) {
-  const seenBlocks = [];
+  // Новый подход: сравниваем не только блоки, но и множество нормализованных строк (set-based fuzzy)
+  const seenBlockSets = [];
   const seenLines = new Set();
   const merged = [];
-  const SIMILARITY_THRESHOLD = 0.85;
+  const SIMILARITY_THRESHOLD = 0.93; // чуть выше, чтобы не слипались разные блоки
 
-  // Более агрессивная нормализация для fuzzy сравнения блоков
-  function normalizeBlock(text) {
-    return text
-      .replace(/[\s\r\n]+/g, ' ') // все пробелы и переносы в один пробел
-      .replace(/[^а-яa-z0-9]/gi, '') // только буквы и цифры
+  // Нормализация строки для сравнения
+  function normalizeLine(line) {
+    return line
+      .replace(/[\s\r\n]+/g, ' ')
+      .replace(/[^а-яa-z0-9]/gi, '')
       .toLowerCase()
       .trim();
   }
 
-  for (const result of allResults) {
-    const blockText = result.text.trim();
-    if (!blockText) continue;
+  // Получить отсортированный массив нормализованных строк блока
+  function getBlockSet(text) {
+    return Array.from(
+      new Set(
+        text
+          .split(/\r?\n/)
+          .map(l => normalizeLine(l))
+          .filter(Boolean)
+      )
+    ).sort();
+  }
 
-    const blockNorm = normalizeBlock(blockText);
+  // Сравнить два блока по множеству строк (Jaccard similarity)
+  function jaccardSimilarity(setA, setB) {
+    const set1 = new Set(setA);
+    const set2 = new Set(setB);
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+    return union.size === 0 ? 0 : intersection.size / union.size;
+  }
+
+  for (const result of allResults) {
+    const blockLines = getBlockSet(result.text);
+    if (!blockLines.length) continue;
+
     let isDuplicate = false;
-    for (const prev of seenBlocks) {
-      const prevNorm = normalizeBlock(prev);
-      const similarity = stringSimilarity.compareTwoStrings(blockNorm, prevNorm);
-      if (similarity >= SIMILARITY_THRESHOLD) {
+    for (const prevBlock of seenBlockSets) {
+      const sim = jaccardSimilarity(blockLines, prevBlock);
+      if (sim >= SIMILARITY_THRESHOLD) {
         isDuplicate = true;
         break;
       }
     }
     if (isDuplicate) continue;
-    seenBlocks.push(blockText);
+    seenBlockSets.push(blockLines);
 
     // Добавляем уникальные строки блока
-    const lines = blockText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const lines = result.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     for (const line of lines) {
-      const norm = line.toLowerCase().replace(/[^а-яa-z0-9]/gi, '').trim();
+      const norm = normalizeLine(line);
       if (norm && !seenLines.has(norm)) {
         seenLines.add(norm);
         merged.push(line);
