@@ -46,7 +46,7 @@ require("dotenv").config();
 
 const YaDiskService = require("./services/yadisk_service");
 
-// --- Добавлено: инициализация yadisk ---
+// --- Гарантируем инициализацию yadisk до любого использования ---
 const YADISK_TOKEN = process.env.YADISK_TOKEN;
 if (!YADISK_TOKEN) {
   throw new Error("Не найден YADISK_TOKEN в .env");
