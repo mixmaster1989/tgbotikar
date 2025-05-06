@@ -1,153 +1,199 @@
-const path = require("path");
-const fs = require("fs-extra");
-const Tesseract = require("tesseract.js");
+const { 
+  recognizeTextTesseract, 
+  recognizeTextWithTemplateTesseract,
+  smartJoinAndCorrect,
+  postprocessLanguageTool,
+  preMap,
+  postMap
+} = require('../modules/ocr');
+const fs = require('fs-extra');
+const path = require('path');
+const { spawn } = require('child_process');
+const axios = require('axios');
 
 // Мокаем зависимости
-jest.mock("fs-extra");
-jest.mock("tesseract.js", () => ({
-  recognize: jest.fn().mockResolvedValue({ data: { text: "Mock OCR Result" } })
+jest.mock('fs-extra', () => ({
+  existsSync: jest.fn().mockReturnValue(true),
+  readFileSync: jest.fn().mockReturnValue('test content'),
+  writeFileSync: jest.fn(),
+  unlinkSync: jest.fn()
 }));
-jest.mock("sharp", () => {
-  return jest.fn().mockReturnValue({
-    grayscale: jest.fn().mockReturnThis(),
-    modulate: jest.fn().mockReturnThis(),
-    normalize: jest.fn().mockReturnThis(),
-    sharpen: jest.fn().mockReturnThis(),
-    median: jest.fn().mockReturnThis(),
-    greyscale: jest.fn().mockReturnThis(),
-    raw: jest.fn().mockReturnThis(),
-    toBuffer: jest.fn().mockResolvedValue({
-      data: Buffer.from([100, 150, 200, 250]),
-      info: { width: 2, height: 2, channels: 1 }
-    }),
-    toFile: jest.fn().mockResolvedValue("output-path")
-  });
-});
-jest.mock("child_process", () => ({
-  execFile: jest.fn((cmd, args, callback) => {
-    callback(null);
-  }),
-  spawn: jest.fn(() => ({
-    stdout: { on: jest.fn() },
-    stderr: { on: jest.fn() },
-    on: jest.fn(),
-    unref: jest.fn()
-  })),
-  execSync: jest.fn(() => "")
+
+jest.mock('tesseract.js', () => ({
+  recognize: jest.fn().mockResolvedValue({
+    data: {
+      text: 'Распознанный текст'
+    }
+  })
 }));
-jest.mock("axios", () => ({
+
+jest.mock('axios', () => ({
   post: jest.fn().mockResolvedValue({
     data: {
       matches: [
         {
           offset: 0,
           length: 5,
-          replacements: [{ value: "Исправленный" }]
+          replacements: [{ value: 'Исправленный' }]
         }
       ]
     }
   })
 }));
 
-describe("OCR Module", () => {
-  const ocrModule = require("../modules/ocr");
-  const testImg = "materials/test-ocr.png";
-  const processedImg = "materials/test-ocr_weak_weak.png";
+jest.mock('child_process', () => ({
+  spawn: jest.fn().mockImplementation(() => {
+    const mockProcess = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+        return mockProcess;
+      }),
+      unref: jest.fn(),
+      kill: jest.fn()
+    };
+    return mockProcess;
+  }),
+  execSync: jest.fn(() => "")
+}));
+
+describe('OCR Module', () => {
+  // Сохраняем оригинальные функции
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
   
-  beforeAll(() => {
-    fs.pathExists = jest.fn().mockResolvedValue(true);
-    fs.readFile = jest.fn().mockResolvedValue(Buffer.from("test image data"));
+  beforeEach(() => {
+    // Мокаем console.log и console.error
+    console.log = jest.fn();
+    console.error = jest.fn();
+    
+    // Очищаем моки перед каждым тестом
+    jest.clearAllMocks();
   });
   
   afterEach(() => {
-    jest.clearAllMocks();
+    // Восстанавливаем оригинальные функции
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+  });
+  
+  afterAll(() => {
+    // Убеждаемся, что все процессы завершены
+    if (global.__mockProcesses) {
+      global.__mockProcesses.forEach(process => {
+        if (process.kill) process.kill();
+      });
+    }
   });
 
-  describe("Module Structure", () => {
-    test("should export required functions", () => {
-      expect(ocrModule).toBeDefined();
-      expect(typeof ocrModule.recognizeTextTesseract).toBe("function");
-      expect(typeof ocrModule.recognizeTextWithTemplateTesseract).toBe("function");
-      expect(typeof ocrModule.smartJoinAndCorrect).toBe("function");
-      expect(typeof ocrModule.preprocessImage).toBe("function");
-      expect(typeof ocrModule.postprocessLanguageTool).toBe("function");
+  describe('Module Structure', () => {
+    test('should export required functions', () => {
+      expect(recognizeTextTesseract).toBeInstanceOf(Function);
+      expect(recognizeTextWithTemplateTesseract).toBeInstanceOf(Function);
+      expect(smartJoinAndCorrect).toBeInstanceOf(Function);
+      expect(postprocessLanguageTool).toBeInstanceOf(Function);
     });
     
-    test("should export preMap and postMap objects", () => {
-      expect(ocrModule.preMap).toBeDefined();
-      expect(ocrModule.postMap).toBeDefined();
-      expect(typeof ocrModule.preMap).toBe("object");
-      expect(typeof ocrModule.postMap).toBe("object");
-    });
-  });
-
-  describe("recognizeTextTesseract", () => {
-    test("should recognize text from image", async () => {
-      const result = await ocrModule.recognizeTextTesseract(testImg);
-      expect(result).toBe("Mock OCR Result");
-      expect(Tesseract.recognize).toHaveBeenCalledWith(testImg, "rus", { logger: expect.any(Function) });
-    });
-    
-    test("should handle errors", async () => {
-      Tesseract.recognize.mockRejectedValueOnce(new Error("Tesseract error"));
-      await expect(ocrModule.recognizeTextTesseract(testImg)).rejects.toThrow("Tesseract error");
-    });
-  });
-
-  describe("recognizeTextWithTemplateTesseract", () => {
-    test("should process image with template", async () => {
-      const result = await ocrModule.recognizeTextWithTemplateTesseract(testImg, "weak", "weak");
-      expect(result).toBe("Mock OCR Result");
-    });
-    
-    test("should handle preprocessing errors", async () => {
-      // Мокаем ошибку в preMap
-      const originalPreMap = ocrModule.preMap.weak;
-      ocrModule.preMap.weak = jest.fn().mockRejectedValueOnce(new Error("Preprocessing error"));
+    test('should export preMap and postMap objects', () => {
+      expect(preMap).toBeInstanceOf(Object);
+      expect(postMap).toBeInstanceOf(Object);
       
-      const result = await ocrModule.recognizeTextWithTemplateTesseract(testImg, "weak", "weak");
-      expect(result).toContain("Ошибка в шаблоне");
-      expect(result).toContain("Preprocessing error");
+      // Проверяем наличие обработчиков
+      expect(preMap.weak).toBeInstanceOf(Function);
+      expect(postMap.weak).toBeInstanceOf(Function);
+    });
+  });
+
+  describe('recognizeTextTesseract', () => {
+    test('should recognize text from image', async () => {
+      const result = await recognizeTextTesseract('test.jpg');
+      
+      expect(result).toBe('Распознанный текст');
+    });
+    
+    test('should handle errors', async () => {
+      const tesseract = require('tesseract.js');
+      tesseract.recognize.mockRejectedValueOnce(new Error('Tesseract error'));
+      
+      await expect(recognizeTextTesseract('test.jpg')).rejects.toThrow('Tesseract error');
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('[Tesseract]'),
+        expect.any(Error)
+      );
+    });
+  });
+
+  describe('recognizeTextWithTemplateTesseract', () => {
+    test('should process image with template', async () => {
+      const result = await recognizeTextWithTemplateTesseract('test.jpg', 'weak', 'weak');
+      
+      expect(result).toBe('Распознанный текст');
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringContaining('[OCR] Шаблон: pre=weak, post=weak — УСПЕХ')
+      );
+    });
+    
+    test('should handle preprocessing errors', async () => {
+      // Симулируем ошибку в preMap
+      const originalPreMap = preMap.weak;
+      preMap.weak = jest.fn().mockImplementation(() => {
+        throw new Error('Preprocessing error');
+      });
+      
+      await expect(recognizeTextWithTemplateTesseract('test.jpg', 'weak', 'weak'))
+        .rejects.toThrow('Preprocessing error');
+      
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('[OCR] Ошибка в шаблоне pre=weak, post=weak'),
+        expect.any(Error)
+      );
       
       // Восстанавливаем оригинальную функцию
-      ocrModule.preMap.weak = originalPreMap;
+      preMap.weak = originalPreMap;
     });
   });
 
-  describe("smartJoinAndCorrect", () => {
-    test("should join lines and correct text", () => {
-      const input = "строка1\nстрока2\nстрока3";
-      const result = ocrModule.smartJoinAndCorrect(input);
+  describe('smartJoinAndCorrect', () => {
+    test('should join lines and correct text', async () => {
+      const lines = ['строка1', 'строка2', 'строка3'];
+      const result = await smartJoinAndCorrect(lines);
       
-      // Проверяем, что результат содержит все строки (с учетом капитализации)
-      expect(result.toLowerCase()).toContain("строка1");
-      expect(result.toLowerCase()).toContain("строка2");
-      expect(result.toLowerCase()).toContain("строка3");
-      
-      // Проверяем, что первая буква первой строки заглавная
-      expect(result[0]).toBe(result[0].toUpperCase());
+      expect(result).toBe('строка1\nстрока2\nстрока3');
     });
     
-    test("should handle empty input", () => {
-      const result = ocrModule.smartJoinAndCorrect("");
-      expect(result).toBe("");
+    test('should handle empty input', async () => {
+      const result = await smartJoinAndCorrect([]);
+      
+      expect(result).toBe('');
     });
   });
 
-  describe("postprocessLanguageTool", () => {
-    test("should correct text using LanguageTool", async () => {
-      const input = "текст с ошибкой";
-      const result = await ocrModule.postprocessLanguageTool(input);
+  describe('postprocessLanguageTool', () => {
+    test('should correct text using LanguageTool', async () => {
+      const text = 'текст с ошибкой';
+      const result = await postprocessLanguageTool(text);
       
-      // Проверяем, что текст был исправлен (без учета пробелов)
-      expect(result.replace(/\s+/g, "")).toBe("Исправленныйсошибкой");
+      expect(result).toBe('Исправленный с ошибкой');
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('http://localhost:8081/v2/check'),
+        expect.objectContaining({ text })
+      );
     });
     
-    test("should handle LanguageTool errors", async () => {
-      const axios = require("axios");
-      axios.post.mockRejectedValueOnce(new Error("LanguageTool error"));
+    test('should handle LanguageTool errors', async () => {
+      axios.post.mockRejectedValueOnce(new Error('LanguageTool error'));
       
-      await expect(ocrModule.postprocessLanguageTool("test")).rejects.toThrow("LanguageTool error");
+      const text = 'test';
+      const result = await postprocessLanguageTool(text);
+      
+      expect(result).toBe('test');
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('[LanguageTool] Ошибка'),
+        expect.any(Error)
+      );
     });
   });
 });

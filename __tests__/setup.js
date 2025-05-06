@@ -25,13 +25,66 @@ jest.mock('../modules/cache', () => {
   };
 });
 
+// Мокаем child_process для предотвращения запуска реальных процессов
+jest.mock('child_process', () => {
+  const originalModule = jest.requireActual('child_process');
+  return {
+    ...originalModule,
+    spawn: jest.fn((command, args, options) => {
+      // Создаем мок для процесса
+      const mockProcess = {
+        stdout: { on: jest.fn() },
+        stderr: { on: jest.fn() },
+        on: jest.fn(),
+        unref: jest.fn(),
+        kill: jest.fn()
+      };
+      
+      // Сохраняем процесс в глобальной переменной для последующего завершения
+      if (!global.__mockProcesses) {
+        global.__mockProcesses = [];
+      }
+      global.__mockProcesses.push(mockProcess);
+      
+      return mockProcess;
+    }),
+    execSync: jest.fn(() => "")
+  };
+});
+
 // Глобальные настройки для всех тестов
 beforeAll(() => {
-  // Подавляем вывод консоли во время тестов, если нужно
-  // jest.spyOn(console, 'log').mockImplementation(() => {});
+  // Инициализируем массив для хранения мок-процессов
+  global.__mockProcesses = [];
+  
+  // Мокаем setTimeout для предотвращения утечек таймеров
+  const originalSetTimeout = global.setTimeout;
+  global.__originalSetTimeout = originalSetTimeout;
+  global.setTimeout = jest.fn((callback, delay) => {
+    if (delay > 1000) {
+      // Для длительных таймаутов вызываем колбэк сразу
+      callback();
+      return 999;
+    }
+    // Для коротких таймаутов используем оригинальный setTimeout
+    return originalSetTimeout(callback, delay);
+  });
 });
 
 afterAll(() => {
-  // Восстанавливаем консоль, если нужно
-  // console.log.mockRestore();
+  // Завершаем все мок-процессы
+  if (global.__mockProcesses) {
+    global.__mockProcesses.forEach(process => {
+      if (process.kill) process.kill();
+    });
+    global.__mockProcesses = [];
+  }
+  
+  // Восстанавливаем оригинальный setTimeout
+  if (global.__originalSetTimeout) {
+    global.setTimeout = global.__originalSetTimeout;
+  }
+  
+  // Очищаем все таймеры
+  jest.useRealTimers();
 });
