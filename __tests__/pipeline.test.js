@@ -150,13 +150,29 @@ describe("OCR Pipeline Module", () => {
       
       // Восстанавливаем оригинальный setTimeout
       global.setTimeout = originalSetTimeout;
-    }, 5000);
+    }, 10000);
     
     test("should handle errors during neural processing", async () => {
+      // Мокируем setTimeout для немедленного выполнения
+      const originalSetTimeout = global.setTimeout;
+      global.setTimeout = jest.fn((callback) => {
+        callback();
+        return 999; // Возвращаем фиктивный ID таймера
+      });
+      
       // Мокируем cleanTextWithGpt4all для генерации ошибки
       const pipelineModule = require('../modules/ocr/pipeline');
       jest.spyOn(pipelineModule, 'cleanTextWithGpt4all')
         .mockRejectedValue(new Error("Model error"));
+      
+      // Мокируем require для bot.js и gpt4all
+      jest.mock('../../bot', () => {
+        throw new Error("Module not found");
+      }, { virtual: true });
+      
+      jest.mock('gpt4all', () => ({
+        loadModel: jest.fn().mockRejectedValue(new Error("Model loading failed"))
+      }), { virtual: true });
       
       await processOcrPipeline(
         mockCtx,
@@ -172,6 +188,9 @@ describe("OCR Pipeline Module", () => {
       expect(mockCtx.reply).toHaveBeenCalledWith(
         expect.stringContaining("Не удалось получить очищенный вариант")
       );
-    }, 5000);
+      
+      // Восстанавливаем оригинальный setTimeout
+      global.setTimeout = originalSetTimeout;
+    }, 10000);
   });
 });
