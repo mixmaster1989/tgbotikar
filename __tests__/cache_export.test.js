@@ -17,32 +17,40 @@ jest.mock("fs-extra", () => ({
   })
 }));
 
-jest.mock("../modules/cache", () => ({
-  getAllCacheQuestions: jest.fn((callback) => {
-    const mockData = [
-      { id: 1, prompt: "Тестовый вопрос", response: "Тестовый ответ" }
-    ];
-    
-    // Добавляем тестовые данные динамически
-    if (global.testQuestion && global.testAnswer) {
-      mockData.push({ 
-        id: 2, 
-        prompt: global.testQuestion, 
-        response: global.testAnswer 
-      });
-    }
-    
-    callback(null, mockData);
-  }),
-  saveToCacheHistory: jest.fn(),
-  fuzzyFindInCache: jest.fn((question, callback) => {
-    if (question === global.testQuestion) {
-      callback(null, global.testAnswer);
-    } else {
-      callback(null, null);
-    }
-  })
-}));
+jest.mock("../modules/cache", () => {
+  const originalModule = jest.requireActual("../modules/cache");
+  return {
+    getAllCacheQuestions: jest.fn((callback) => {
+      // Проверяем флаг для симуляции ошибки
+      if (global.simulateGetAllCacheQuestionsError) {
+        return callback(new Error("Test error"));
+      }
+      
+      const mockData = [
+        { id: 1, prompt: "Тестовый вопрос", response: "Тестовый ответ" }
+      ];
+      
+      // Добавляем тестовые данные динамически
+      if (global.testQuestion && global.testAnswer) {
+        mockData.push({ 
+          id: 2, 
+          prompt: global.testQuestion, 
+          response: global.testAnswer 
+        });
+      }
+      
+      callback(null, mockData);
+    }),
+    saveToCacheHistory: jest.fn(),
+    fuzzyFindInCache: jest.fn((question, callback) => {
+      if (question === global.testQuestion) {
+        callback(null, global.testAnswer);
+      } else {
+        callback(null, null);
+      }
+    })
+  };
+});
 
 describe("Cache Export Module", () => {
   const localPath = path.join(__dirname, "..", "cache", "dataset.test.json");
@@ -52,16 +60,19 @@ describe("Cache Export Module", () => {
   beforeAll(() => {
     global.testQuestion = testQuestion;
     global.testAnswer = testAnswer;
+    global.simulateGetAllCacheQuestionsError = false;
   });
   
   afterAll(() => {
     delete global.testQuestion;
     delete global.testAnswer;
+    delete global.simulateGetAllCacheQuestionsError;
     jest.restoreAllMocks();
   });
   
   afterEach(() => {
     jest.clearAllMocks();
+    global.simulateGetAllCacheQuestionsError = false;
   });
 
   describe("exportCacheToJsonFile", () => {
@@ -89,18 +100,12 @@ describe("Cache Export Module", () => {
     });
     
     test("should handle errors when getting cache", (done) => {
-      // Временно переопределяем getAllCacheQuestions для этого теста
-      const originalGetAllCacheQuestions = cache.getAllCacheQuestions;
-      cache.getAllCacheQuestions = jest.fn((callback) => {
-        callback(new Error("Test error"));
-      });
+      // Устанавливаем флаг для симуляции ошибки
+      global.simulateGetAllCacheQuestionsError = true;
       
       cacheExport.exportCacheToJsonFile(localPath, (err) => {
         expect(err).toBeTruthy();
         expect(err.message).toBe("Test error");
-        
-        // Восстанавливаем оригинальную функцию
-        cache.getAllCacheQuestions = originalGetAllCacheQuestions;
         done();
       });
     });
