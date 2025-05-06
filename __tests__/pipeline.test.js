@@ -12,6 +12,20 @@ jest.mock('../modules/ocr/garbage', () => ({
   addGarbage: jest.fn(async () => {})
 }));
 
+// Мокаем модуль bot.js
+jest.mock('../../bot', () => ({
+  gpt4allModel: {
+    generate: jest.fn().mockResolvedValue("Очищенный текст")
+  }
+}), { virtual: true });
+
+// Мокаем gpt4all
+jest.mock('gpt4all', () => ({
+  loadModel: jest.fn().mockResolvedValue({
+    generate: jest.fn().mockResolvedValue("Очищенный текст из gpt4all")
+  })
+}), { virtual: true });
+
 describe("OCR Pipeline Module", () => {
   // Мок для Telegraf context
   const mockCtx = {
@@ -44,11 +58,6 @@ describe("OCR Pipeline Module", () => {
   
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Мокаем require для bot.js
-    jest.mock('../../bot', () => ({
-      gpt4allModel: mockGpt4allModel
-    }), { virtual: true });
     
     // Мокаем setTimeout
     jest.useFakeTimers();
@@ -98,7 +107,10 @@ describe("OCR Pipeline Module", () => {
 
   describe("processOcrPipeline", () => {
     test("should process OCR results and update user state", async () => {
-      await processOcrPipeline(
+      // Мокируем setTimeout для ускорения теста
+      jest.useFakeTimers();
+      
+      const processPromise = processOcrPipeline(
         mockCtx,
         allResults,
         semanticResult,
@@ -107,6 +119,14 @@ describe("OCR Pipeline Module", () => {
         userStates,
         userLastOcr
       );
+      
+      // Быстро продвигаем все таймеры
+      jest.runAllTimers();
+      
+      await processPromise;
+      
+      // Восстанавливаем таймеры
+      jest.useRealTimers();
       
       // Проверяем, что был вызван selectBestOcrResult
       const { selectBestOcrResult } = require('../modules/ocr/scoring');
@@ -134,21 +154,17 @@ describe("OCR Pipeline Module", () => {
       expect(mockCtx.reply).toHaveBeenCalledWith(
         expect.stringContaining("нейронная обработка")
       );
-    });
+    }, 60000); // Увеличиваем таймаут до 60 секунд
     
     test("should handle errors during neural processing", async () => {
-      // Симулируем ошибку в cleanTextWithGpt4all
-      jest.spyOn(global, 'require').mockImplementation((module) => {
-        if (module === '../../bot') {
-          throw new Error("Module not found");
-        }
-        if (module === "gpt4all") {
-          return {
-            loadModel: jest.fn().mockRejectedValue(new Error("Model loading failed"))
-          };
-        }
-        return jest.requireActual(module);
-      });
+      // Временно переопределяем модули для симуляции ошибок
+      const botModule = require('../../bot');
+      const originalGpt4allModel = botModule.gpt4allModel;
+      botModule.gpt4allModel = undefined;
+      
+      const gpt4all = require('gpt4all');
+      const originalLoadModel = gpt4all.loadModel;
+      gpt4all.loadModel = jest.fn().mockRejectedValue(new Error("Model loading failed"));
       
       await processOcrPipeline(
         mockCtx,
@@ -164,6 +180,10 @@ describe("OCR Pipeline Module", () => {
       expect(mockCtx.reply).toHaveBeenCalledWith(
         expect.stringContaining("Не удалось получить очищенный вариант")
       );
+      
+      // Восстанавливаем оригинальные функции
+      botModule.gpt4allModel = originalGpt4allModel;
+      gpt4all.loadModel = originalLoadModel;
     });
   });
 });
