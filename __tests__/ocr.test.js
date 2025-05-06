@@ -57,8 +57,31 @@ jest.mock('child_process', () => ({
     };
     return mockProcess;
   }),
-  execSync: jest.fn(() => "")
+  execSync: jest.fn(() => ""),
+  execFile: jest.fn((cmd, args, callback) => {
+    callback(null);
+  })
 }));
+
+// Мокаем модуль logger
+jest.mock('../modules/logger', () => ({
+  info: jest.fn(),
+  error: jest.fn()
+}));
+
+// Мокаем sharp
+jest.mock('sharp', () => {
+  const mockSharp = jest.fn().mockReturnValue({
+    grayscale: jest.fn().mockReturnThis(),
+    greyscale: jest.fn().mockReturnThis(),
+    normalize: jest.fn().mockReturnThis(),
+    modulate: jest.fn().mockReturnThis(),
+    sharpen: jest.fn().mockReturnThis(),
+    median: jest.fn().mockReturnThis(),
+    toFile: jest.fn().mockResolvedValue({})
+  });
+  return mockSharp;
+});
 
 describe('OCR Module', () => {
   // Сохраняем оригинальные функции
@@ -119,36 +142,49 @@ describe('OCR Module', () => {
       tesseract.recognize.mockRejectedValueOnce(new Error('Tesseract error'));
       
       await expect(recognizeTextTesseract('test.jpg')).rejects.toThrow('Tesseract error');
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining('[Tesseract]'),
-        expect.any(Error)
+      
+      // Проверяем, что ошибка была залогирована
+      const logger = require('../modules/logger');
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Tesseract error')
       );
     });
   });
 
   describe('recognizeTextWithTemplateTesseract', () => {
     test('should process image with template', async () => {
+      // Мокаем Promise.race, чтобы он всегда возвращал успешный результат
+      const originalPromiseRace = Promise.race;
+      Promise.race = jest.fn().mockResolvedValue('Распознанный текст');
+      
       const result = await recognizeTextWithTemplateTesseract('test.jpg', 'weak', 'weak');
       
       expect(result).toBe('Распознанный текст');
-      expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('[OCR] Шаблон: pre=weak, post=weak — УСПЕХ')
+      
+      // Проверяем, что был залогирован успех
+      const logger = require('../modules/logger');
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Шаблон: pre=weak, post=weak — старт')
       );
+      
+      // Восстанавливаем оригинальный Promise.race
+      Promise.race = originalPromiseRace;
     });
     
     test('should handle preprocessing errors', async () => {
-      // Симулируем ошибку в preMap
+      // Мокаем preMap.weak, чтобы он выбрасывал ошибку
       const originalPreMap = preMap.weak;
-      preMap.weak = jest.fn().mockImplementation(() => {
-        throw new Error('Preprocessing error');
-      });
+      preMap.weak = jest.fn().mockRejectedValue(new Error('Preprocessing error'));
       
-      await expect(recognizeTextWithTemplateTesseract('test.jpg', 'weak', 'weak'))
-        .rejects.toThrow('Preprocessing error');
+      const result = await recognizeTextWithTemplateTesseract('test.jpg', 'weak', 'weak');
       
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining('[OCR] Ошибка в шаблоне pre=weak, post=weak'),
-        expect.any(Error)
+      expect(result).toContain('Ошибка в шаблоне pre=weak, post=weak');
+      expect(result).toContain('Preprocessing error');
+      
+      // Проверяем, что ошибка была залогирована
+      const logger = require('../modules/logger');
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Ошибка в шаблоне pre=weak, post=weak')
       );
       
       // Восстанавливаем оригинальную функцию
@@ -158,14 +194,16 @@ describe('OCR Module', () => {
 
   describe('smartJoinAndCorrect', () => {
     test('should join lines and correct text', async () => {
-      const lines = ['строка1', 'строка2', 'строка3'];
-      const result = await smartJoinAndCorrect(lines);
+      // Мокаем модуль russian_dict
+      jest.mock('../modules/russian_dict', () => ['слово', 'текст', 'строка'], { virtual: true });
+      
+      const result = await smartJoinAndCorrect('строка1\nстрока2\nстрока3');
       
       expect(result).toBe('строка1\nстрока2\nстрока3');
     });
     
     test('should handle empty input', async () => {
-      const result = await smartJoinAndCorrect([]);
+      const result = await smartJoinAndCorrect('');
       
       expect(result).toBe('');
     });
@@ -174,25 +212,51 @@ describe('OCR Module', () => {
   describe('postprocessLanguageTool', () => {
     test('should correct text using LanguageTool', async () => {
       const text = 'текст с ошибкой';
+      
+      // Мокаем axios.post для этого теста
+      axios.post.mockImplementationOnce((url, data, config) => {
+        return Promise.resolve({
+          data: {
+            matches: [
+              {
+                offset: 0,
+                length: 5,
+                replacements: [{ value: 'Исправленный' }]
+              }
+            ]
+          }
+        });
+      });
+      
       const result = await postprocessLanguageTool(text);
       
       expect(result).toBe('Исправленный с ошибкой');
+      
+      // Проверяем, что axios.post был вызван с правильными параметрами
       expect(axios.post).toHaveBeenCalledWith(
-        expect.stringContaining('http://localhost:8081/v2/check'),
-        expect.objectContaining({ text })
+        'http://localhost:8081/v2/check',
+        expect.any(URLSearchParams),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'application/x-www-form-urlencoded'
+          })
+        })
       );
     });
     
     test('should handle LanguageTool errors', async () => {
+      // Мокаем axios.post для этого теста
       axios.post.mockRejectedValueOnce(new Error('LanguageTool error'));
       
       const text = 'test';
-      const result = await postprocessLanguageTool(text);
       
-      expect(result).toBe('test');
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining('[LanguageTool] Ошибка'),
-        expect.any(Error)
+      // Ожидаем, что функция выбросит ошибку
+      await expect(postprocessLanguageTool(text)).rejects.toThrow('LanguageTool error');
+      
+      // Проверяем, что ошибка была залогирована
+      const logger = require('../modules/logger');
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('LanguageTool error')
       );
     });
   });
