@@ -1,34 +1,84 @@
 const fs = require("fs-extra");
 const path = require("path");
-const { convertDocxToPdf,  } = require("../modules/docx2pdf");
+const libre = require('libreoffice-convert');
 
+// Мокаем зависимости
+jest.mock("fs-extra");
+jest.mock("libreoffice-convert");
 
-
-describe("modules/docx2pdf.js", () => {
+describe("DOCX to PDF Conversion Module", () => {
+  // Импортируем модуль после моков
+  const { convertDocxToPdf } = require("../modules/docx2pdf");
+  
   const docxPath = path.join(__dirname, "..", "materials", "test.docx");
   const pdfPath = path.join(__dirname, "..", "cache", "test.pdf");
-  const thumbPath = path.join(__dirname, "..", "cache", "test.png");
-
-  beforeAll(async () => {
-    // Убедитесь, что тестовый DOCX существует
-    if (!(await fs.pathExists(docxPath))) {
-      // Можно создать простой DOCX или бросить ошибку
-      throw new Error("Для теста нужен файл materials/test.docx");
-    }
-  });
-
-  afterAll(async () => {
-    // Удаляем тестовые файлы после теста
-    await fs.remove(pdfPath);
-    await fs.remove(thumbPath);
-  });
-
-  it("convertDocxToPdf конвертирует DOCX в PDF", async () => {
-    await convertDocxToPdf(docxPath, pdfPath);
-    expect(await fs.pathExists(pdfPath)).toBe(true);
-    const stats = await fs.stat(pdfPath);
-    expect(stats.size).toBeGreaterThan(100); // PDF не пустой
-  }, 20000);
-
   
+  beforeEach(() => {
+    // Настраиваем моки для каждого теста
+    fs.readFile = jest.fn().mockResolvedValue(Buffer.from("mock docx content"));
+    fs.outputFile = jest.fn().mockResolvedValue(undefined);
+    libre.convert = jest.fn((docxBuf, format, options, callback) => {
+      callback(null, Buffer.from("mock pdf content"));
+    });
+  });
+  
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe("convertDocxToPdf", () => {
+    test("should be a function", () => {
+      expect(typeof convertDocxToPdf).toBe("function");
+    });
+    
+    test("should convert DOCX to PDF successfully", async () => {
+      await convertDocxToPdf(docxPath, pdfPath);
+      
+      // Проверяем, что файл был прочитан
+      expect(fs.readFile).toHaveBeenCalledWith(docxPath);
+      
+      // Проверяем, что libre.convert был вызван с правильными параметрами
+      expect(libre.convert).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        '.pdf',
+        undefined,
+        expect.any(Function)
+      );
+      
+      // Проверяем, что результат был записан
+      expect(fs.outputFile).toHaveBeenCalledWith(pdfPath, expect.any(Buffer));
+    });
+    
+    test("should handle file read errors", async () => {
+      // Симулируем ошибку чтения файла
+      fs.readFile = jest.fn().mockRejectedValue(new Error("File not found"));
+      
+      await expect(convertDocxToPdf(docxPath, pdfPath)).rejects.toThrow("File not found");
+      expect(fs.readFile).toHaveBeenCalledWith(docxPath);
+      expect(libre.convert).not.toHaveBeenCalled();
+      expect(fs.outputFile).not.toHaveBeenCalled();
+    });
+    
+    test("should handle conversion errors", async () => {
+      // Симулируем ошибку конвертации
+      libre.convert = jest.fn((docxBuf, format, options, callback) => {
+        callback(new Error("Conversion failed"), null);
+      });
+      
+      await expect(convertDocxToPdf(docxPath, pdfPath)).rejects.toThrow("Conversion failed");
+      expect(fs.readFile).toHaveBeenCalledWith(docxPath);
+      expect(libre.convert).toHaveBeenCalled();
+      expect(fs.outputFile).not.toHaveBeenCalled();
+    });
+    
+    test("should handle file write errors", async () => {
+      // Симулируем ошибку записи файла
+      fs.outputFile = jest.fn().mockRejectedValue(new Error("Write error"));
+      
+      await expect(convertDocxToPdf(docxPath, pdfPath)).rejects.toThrow("Write error");
+      expect(fs.readFile).toHaveBeenCalledWith(docxPath);
+      expect(libre.convert).toHaveBeenCalled();
+      expect(fs.outputFile).toHaveBeenCalled();
+    });
+  });
 });
