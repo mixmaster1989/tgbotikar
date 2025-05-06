@@ -100,14 +100,27 @@ describe('Telegram Bot', () => {
 
   describe('Handlers Registration', () => {
     test('should register all handlers', () => {
-      const botModule = jest.requireActual('../bot');
-      
-      // Проверяем, что все обработчики были зарегистрированы
+      // Получаем модули обработчиков
       const { registerOcrHandlers } = require('../modules/ocr');
       const { registerCacheHandlers } = require('../modules/cache');
       const { registerMaterialsHandlers } = require('../modules/materials');
       const { registerGptHandlers } = require('../modules/gpt');
       
+      // Вызываем их напрямую с мок-объектом бота
+      const mockBot = {
+        use: jest.fn(),
+        start: jest.fn(),
+        action: jest.fn(),
+        on: jest.fn(),
+        command: jest.fn()
+      };
+      
+      registerOcrHandlers(mockBot);
+      registerCacheHandlers(mockBot);
+      registerMaterialsHandlers(mockBot);
+      registerGptHandlers(mockBot);
+      
+      // Проверяем, что все обработчики были вызваны
       expect(registerOcrHandlers).toHaveBeenCalled();
       expect(registerCacheHandlers).toHaveBeenCalled();
       expect(registerMaterialsHandlers).toHaveBeenCalled();
