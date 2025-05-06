@@ -48,7 +48,15 @@ jest.mock('child_process', () => {
       
       return mockProcess;
     }),
-    execSync: jest.fn(() => "")
+    execSync: jest.fn(() => ""),
+    execFile: jest.fn((cmd, args, callback) => {
+      if (callback) callback(null);
+      return {
+        on: jest.fn(),
+        stdout: { on: jest.fn() },
+        stderr: { on: jest.fn() }
+      };
+    })
   };
 });
 
@@ -56,19 +64,6 @@ jest.mock('child_process', () => {
 beforeAll(() => {
   // Инициализируем массив для хранения мок-процессов
   global.__mockProcesses = [];
-  
-  // Мокаем setTimeout для предотвращения утечек таймеров
-  const originalSetTimeout = global.setTimeout;
-  global.__originalSetTimeout = originalSetTimeout;
-  global.setTimeout = jest.fn((callback, delay) => {
-    if (delay > 1000) {
-      // Для длительных таймаутов вызываем колбэк сразу
-      callback();
-      return 999;
-    }
-    // Для коротких таймаутов используем оригинальный setTimeout
-    return originalSetTimeout(callback, delay);
-  });
 });
 
 afterAll(() => {
@@ -79,12 +74,4 @@ afterAll(() => {
     });
     global.__mockProcesses = [];
   }
-  
-  // Восстанавливаем оригинальный setTimeout
-  if (global.__originalSetTimeout) {
-    global.setTimeout = global.__originalSetTimeout;
-  }
-  
-  // Очищаем все таймеры
-  jest.useRealTimers();
 });
