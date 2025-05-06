@@ -72,9 +72,10 @@ describe('YandexDiskService', () => {
       
       expect(fs.createReadStream).toHaveBeenCalledWith(localPath);
       expect(axios.put).toHaveBeenCalledWith(remotePath, 'mock-stream');
+      
+      // Проверяем, что был вызван console.log с успешным сообщением
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('[SUCCESS]'),
-        expect.stringContaining('успешно загружен'),
+        expect.stringMatching(/\[SUCCESS\].*успешно загружен/),
         ''
       );
     });
@@ -85,9 +86,9 @@ describe('YandexDiskService', () => {
       
       await expect(service.uploadFile(localPath, remotePath)).rejects.toThrow('Upload failed');
       
+      // Проверяем, что был вызван console.log с сообщением об ошибке
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('[ERROR]'),
-        expect.stringContaining('Ошибка при загрузке файла'),
+        expect.stringMatching(/\[ERROR\].*Ошибка при загрузке файла/),
         expect.any(Error)
       );
     });
@@ -100,9 +101,9 @@ describe('YandexDiskService', () => {
     test('should download file successfully', async () => {
       await expect(service.downloadFile(remotePath, localFileName)).resolves.toBe(true);
       
+      // Проверяем, что был вызван console.log с успешным сообщением
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('[SUCCESS]'),
-        expect.stringContaining('успешно скачан'),
+        expect.stringMatching(/\[SUCCESS\].*успешно скачан/),
         ''
       );
     });
@@ -118,9 +119,10 @@ describe('YandexDiskService', () => {
       
       expect(axios.get).toHaveBeenCalledWith(remotePath, { responseType: 'stream' });
       expect(fs.createWriteStream).toHaveBeenCalledWith(localPath);
+      
+      // Проверяем, что был вызван console.log с успешным сообщением
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('[SUCCESS]'),
-        expect.stringContaining('успешно скачан'),
+        expect.stringMatching(/\[SUCCESS\].*успешно скачан/),
         ''
       );
     });
@@ -131,9 +133,9 @@ describe('YandexDiskService', () => {
       
       await expect(service.downloadFileByPath(remotePath, localFileName)).rejects.toThrow('Download failed');
       
+      // Проверяем, что был вызван console.log с сообщением об ошибке
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('[ERROR]'),
-        expect.stringContaining('Ошибка при скачивании'),
+        expect.stringMatching(/\[ERROR\].*Ошибка при скачивании/),
         expect.any(Error)
       );
     });
