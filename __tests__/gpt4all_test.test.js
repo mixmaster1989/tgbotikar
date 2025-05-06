@@ -30,6 +30,9 @@ describe('GPT4All Test Module', () => {
     
     // Очищаем кэш модуля перед каждым тестом
     jest.resetModules();
+    
+    // Мокируем setTimeout для теста таймаута
+    jest.useFakeTimers();
   });
   
   afterEach(() => {
@@ -37,6 +40,9 @@ describe('GPT4All Test Module', () => {
     console.log = originalLog;
     console.error = originalError;
     process.stdout.write = originalStdoutWrite;
+    
+    // Восстанавливаем таймеры
+    jest.useRealTimers();
   });
 
   test('should load GPT4All model', async () => {
@@ -88,19 +94,11 @@ describe('GPT4All Test Module', () => {
   });
   
   test('should handle timeout during generation', async () => {
-    // Мокаем Promise.race для симуляции таймаута
+    // Мокируем Promise.race для симуляции таймаута
     const originalPromiseRace = Promise.race;
-    Promise.race = jest.fn().mockRejectedValue(
-      new Error("Генерация превысила лимит времени (1 минута)")
-    );
-    
-    // Временно переопределяем loadModel для этого теста
-    const gpt4all = require('gpt4all');
-    gpt4all.loadModel.mockResolvedValueOnce({
-      generate: jest.fn().mockImplementation(() => {
-        // Возвращаем промис, который никогда не разрешается
-        return new Promise(() => {});
-      })
+    Promise.race = jest.fn().mockImplementation((promises) => {
+      // Симулируем, что второй промис (таймаут) завершился первым
+      return Promise.reject(new Error("Генерация превысила лимит времени (1 минута)"));
     });
     
     // Импортируем функцию для тестирования
@@ -117,5 +115,5 @@ describe('GPT4All Test Module', () => {
     
     // Восстанавливаем оригинальный Promise.race
     Promise.race = originalPromiseRace;
-  }, 5000); // Устанавливаем разумный таймаут
+  });
 });
