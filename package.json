@@ -4,31 +4,39 @@
   "description": "Telegram Bot with AI functionality",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js",
+    "start": "node start.js",
     "dev": "nodemon bot.js",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:restart": "pm2 restart telegram-bot",
     "pm2:stop": "pm2 stop telegram-bot",
     "audit": "npm audit fix --force",
-    "clean": "rimraf node_modules package-lock.json && npm cache clean --force"
+    "clean": "rimraf node_modules package-lock.json && npm cache clean --force",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch --passWithNoTests",
+    "test:safe": "jest --testPathIgnorePatterns=ocr_preprocess.test.js --testPathIgnorePatterns=gpt4all_test.test.js --testPathIgnorePatterns=bot.test.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "axios": "^1.6.7",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "gpt4all": "4.0.0",
-    "telegraf": "^4.15.3",
-    "winston": "^3.11.0",
-    "axios": "^1.6.7",
+    "fs-extra": "^11.2.0",
+    "fuzzysort": "^2.0.4",
     "glob": "^10.3.10",
-    "rimraf": "^5.0.5",
+    "gpt4all": "4.0.0",
+    "libreoffice-convert": "^1.6.1",
     "mammoth": "^1.6.0",
+    "rimraf": "^5.0.5",
+    "sharp": "^0.33.4",
     "sqlite3": "^5.1.7",
-    "fs-extra": "^11.2.0"
+    "telegraf": "^4.15.3",
+    "tesseract.js": "^4.1.1",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "nodemon": "^3.0.2",
     "pm2": "^5.3.1"
   },

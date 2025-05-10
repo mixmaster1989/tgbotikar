@@ -1,7 +1,7 @@
 module.exports = {
     apps: [{
         name: "telegram-bot",
-        script: "./bot.js",
+        script: "./start.js", // Указываем start.js как точку входа
         watch: true,
         ignore_watch: ["node_modules", "logs"],
         env: {
